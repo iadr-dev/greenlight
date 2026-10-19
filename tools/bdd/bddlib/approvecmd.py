@@ -5,8 +5,9 @@
     bdd approve FEAT-007 rules --self-reported --reject --reason "..."
     bdd approve FEAT-007 --verify                   check pending approvals against the transcript
 
-Approvals typed by the person in a session with hooks are recorded by the hook, not by this
-command; ``--self-reported`` refuses to run in a session where hooks are active.
+Approvals typed by the person in a session with hooks are recorded by the UserPromptSubmit hook
+(``bdd approve --from-hook``, input on stdin), not by the other forms; ``--self-reported`` is
+refused once hooks have run in the project.
 """
 from __future__ import annotations
 
@@ -57,6 +58,9 @@ def do_record(root, feature_dir, args: argparse.Namespace) -> int:
 
 
 def run(argv: list[str]) -> int:
+    if argv == ["--from-hook"]:                     # UserPromptSubmit: cheap for every other prompt
+        from . import approvehook
+        return approvehook.main()
     args = build_parser().parse_args(argv)
     try:
         root = project_root()

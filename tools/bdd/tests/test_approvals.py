@@ -132,6 +132,13 @@ class VerifyTest(ProjectCase):
         self.assertEqual(approvals.verify_origins(self.feature_dir), 0)
         self.assertEqual(self.origin(), "pending")
 
+    def test_tool_results_that_share_the_prompt_id_are_not_prompts(self):
+        result = {"type": "user", "promptId": "p-1", "sourceToolAssistantUUID": "a-1",
+                  "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t-1", "content": "ok"}]}}
+        self.hook_approval(entries=[typed("p-1"), result, result])
+        approvals.verify_origins(self.feature_dir)
+        self.assertEqual(self.origin(), "human")
+
     def test_a_non_meta_system_prompt_is_invalid(self):
         self.hook_approval(entries=[{**injected("p-1"), "isMeta": False}])
         approvals.verify_origins(self.feature_dir)
