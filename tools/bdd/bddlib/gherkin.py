@@ -38,6 +38,12 @@ class Step:
     table: list[list[str]] | None = None
     docstring: str | None = None
     docstring_type: str | None = None
+    comments: list[str] = field(default_factory=list)   # comment lines directly above the step
+
+    @property
+    def proposed(self) -> bool:
+        """True if marked ``# proposed-step``: a step the author wants added to the vocabulary."""
+        return any(c.lower().startswith("proposed-step") for c in self.comments)
 
 
 @dataclass
@@ -182,6 +188,7 @@ class _Parser:
         self.last_step: Step | None = None
         self.examples: Examples | None = None
         self.desc_target: Feature | Rule | Scenario | None = None
+        self.pending_comments: list[str] = []
 
     def err(self, msg: str, line: int | None = None) -> ParseError:
         return ParseError(msg, line if line is not None else self.i + 1, self.path)
@@ -216,7 +223,10 @@ class _Parser:
 
     def consume_line(self) -> None:
         s = self.lines[self.i].strip()
-        if not s or s.startswith("#"):
+        if not s:
+            return
+        if s.startswith("#"):
+            self.pending_comments.append(s.lstrip("#").strip())
             return
         if s.startswith("@"):
             self.pending_tags += _TAG.findall(s)
@@ -245,6 +255,7 @@ class _Parser:
     def start_block(self, role: str, title: str) -> None:
         line = self.i + 1
         self.last_step = self.last_kind = None
+        self.pending_comments = []
         if role == "feature":
             self.start_feature(title, line)
             return
@@ -310,7 +321,8 @@ class _Parser:
             kind = self.last_kind
         else:
             raise self.err(f"step {keyword!r} has no preceding Given/When/Then to continue")
-        step = Step(keyword, kind, text, self.i + 1)
+        step = Step(keyword, kind, text, self.i + 1, comments=self.pending_comments)
+        self.pending_comments = []
         self.container.steps.append(step)
         self.last_step, self.last_kind, self.desc_target = step, kind, None
 

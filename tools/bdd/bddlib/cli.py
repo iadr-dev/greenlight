@@ -27,5 +27,8 @@ def main(argv: list[str]) -> int:
     if argv and argv[0] == "doctor":
         from . import doctor
         return doctor.main(argv[1:])
-    print("usage: bdd <command> [options]   (commands: doctor, --version)", file=sys.stderr)
+    if argv and argv[0] == "lint":
+        from . import lint
+        return lint.run(argv[1:])
+    print("usage: bdd <command> [options]   (commands: doctor, lint, --version)", file=sys.stderr)
     return 2

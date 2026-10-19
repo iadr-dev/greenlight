@@ -16,6 +16,8 @@ versions follow [SemVer](https://semver.org/).
 
 - Core step vocabulary (`vocabulary/core.json`): 28 instructions in five profiles (`base`, `api`, `ui`, `cli`, `lib`) with English patterns and Traditional Chinese alternates, and `bddlib/vocabulary.py` to compile typed patterns (`{amount:int}`, `{state:enum(on,off)}`, `{duration}`), load a project's `vocabulary.toml` of domain steps that compose core instructions, and resolve step text to the instruction(s) it matches. Ambiguity is reported, never hidden.
 
+- `bdd lint [paths]`: checks `.feature` files against the step vocabulary and reports `L001` parse errors, `L002` unresolved steps (with the closest pattern as a hint), `L003` ambiguous steps, `L007` instructions from a disabled profile, `L008` wrong table/doc-string shape, `L009` Scenario Outline parameter mismatches and `L011` `# proposed-step` warnings. Reads `.bdd/config.toml` and `.bdd/vocabulary.toml` when present; `--json` for tools; exit code 1 on errors, 2 on usage problems.
+
 ### Added (tooling)
 - `evals/platform-probe/probe.py`: re-verifies the Claude Code behaviours the design depends on (hook shell, agent naming, approval-hook behaviour, transcript origin markers, `/loop` scheduling) against the installed CLI.
 

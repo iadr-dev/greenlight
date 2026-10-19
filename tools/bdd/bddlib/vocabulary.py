@@ -201,7 +201,7 @@ def load_project(path: Path | str, core_ids: set[str] | None = None) -> list[Ent
             if unknown:
                 raise VocabularyError(f"{where}: composes unknown core instruction(s) {', '.join(unknown)}")
         entries.append(Entry(raw["id"], raw["kind"], "project", {"*": _patterns(texts, where)},
-                             requires=raw.get("requires", "none"), composes=composes,
+                             requires=raw.get("requires", "table_or_docstring_optional"), composes=composes,
                              description=raw.get("description", ""), justification=raw.get("justification", ""),
                              owner=raw.get("owner", ""), maps_to=dict(raw.get("maps_to", {}))))
     return entries

@@ -1,0 +1,308 @@
+import contextlib
+import io
+import json
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from bddlib import config, lint, vocabulary
+
+DOMAIN = '''
+version = 1
+
+[[steps]]
+id = "D.CART.WORTH"
+kind = "given"
+pattern = "{actor} has a cart worth {amount:int}"
+composes = ["C.ACTOR.AUTH"]
+
+[[steps]]
+id = "D.DUP.A"
+kind = "when"
+pattern = "the shopper pays"
+
+[[steps]]
+id = "D.DUP.B"
+kind = "when"
+pattern = "the shopper {verb}"
+'''
+
+
+def feature(body: str, header: str = "Feature: F") -> str:
+    return textwrap.dedent(header).strip() + "\n" + textwrap.indent(textwrap.dedent(body).strip("\n"), "  ") + "\n"
+
+
+class LintBase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.tmp.cleanup)
+        vocab_file = Path(cls.tmp.name) / "vocabulary.toml"
+        vocab_file.write_text(DOMAIN, encoding="utf-8")
+        cls.vocab = vocabulary.load(vocab_file)
+
+    def issues(self, text: str, profiles=config.ALL_PROFILES):
+        return lint.Linter(self.vocab, profiles).lint_text(text, "f.feature")
+
+    def codes(self, text: str, **kw) -> list[str]:
+        return [f"{i.code}:{i.line}" for i in self.issues(text, **kw)]
+
+
+class StepResolutionTest(LintBase):
+    def test_clean_feature_has_no_issues(self):
+        text = feature('''
+            Scenario: Checkout
+              Given Alice has a cart worth 999
+              And the following products exist:
+                | sku |
+                | A1  |
+              When Alice calls quote.create with:
+                | qty |
+                | 1   |
+              Then the request succeeds
+        ''')
+        self.assertEqual(self.issues(text), [])
+
+    def test_unresolved_step_is_an_error_with_the_closest_pattern(self):
+        (issue,) = self.issues(feature('''
+            Scenario: S
+              Then the request is rejected
+        '''))
+        self.assertEqual((issue.code, issue.severity, issue.line), ("L002", "error", 3))
+        self.assertIn('Closest: C.API.STATUS "the request is rejected with {error}"', issue.message)
+
+    def test_unrelated_text_gets_no_misleading_suggestion(self):
+        (issue,) = self.issues(feature("Scenario: S\n  Given the moon is full\n"))
+        self.assertEqual(issue.code, "L002")
+        self.assertNotIn("Closest", issue.message)
+
+    def test_proposed_step_is_only_a_warning(self):
+        issues = self.issues(feature('''
+            Scenario: S
+              # proposed-step
+              Given the moon is full
+        '''))
+        self.assertEqual([(i.code, i.severity) for i in issues], [("L011", "warning")])
+
+    def test_a_comment_that_is_not_the_marker_does_not_excuse_a_step(self):
+        issues = self.issues(feature("Scenario: S\n  # TODO later\n  Given the moon is full\n"))
+        self.assertEqual([i.code for i in issues], ["L002"])
+
+    def test_ambiguous_steps_name_every_candidate(self):
+        (issue,) = self.issues(feature("Scenario: S\n  When the shopper pays\n"))
+        self.assertEqual(issue.code, "L003")
+        self.assertIn("D.DUP.A", issue.message)
+        self.assertIn("D.DUP.B", issue.message)
+
+    def test_kind_is_inherited_by_and_but(self):
+        text = feature("Scenario: S\n  Given Alice has a cart worth 5\n  And Bob has a cart worth 6\n  When the shopper pays\n")
+        self.assertEqual(self.codes(text), ["L003:5"])  # only the ambiguous step
+
+    def test_background_and_rule_background_steps_are_checked(self):
+        text = feature('''
+            Background:
+              Given the moon is full
+
+            Rule: R
+              Background:
+                Given the sun is hot
+
+              Scenario: S
+                Given Alice has a cart worth 1
+        ''')
+        self.assertEqual(self.codes(text), ["L002:3", "L002:7"])
+
+    def test_parse_errors_become_L001_with_the_line(self):
+        (issue,) = self.issues("Feature: F\nScenario: S\n  And x\n")
+        self.assertEqual((issue.code, issue.line), ("L001", 3))
+
+    def test_localized_features_resolve_core_and_english_steps(self):
+        text = "# language: zh-TW\n功能: 折扣\n  場景: S\n    假設 以下商品已存在:\n      | sku |\n      | A1 |\n    而且 the current time is 2026-01-01\n"
+        self.assertEqual(self.issues(text), [])
+
+
+class ProfileAndShapeTest(LintBase):
+    def test_instruction_from_a_disabled_profile(self):
+        text = feature("Scenario: S\n  When Alice opens the Home page\n")
+        self.assertEqual(self.codes(text), [])
+        (issue,) = self.issues(text, profiles=("base", "api"))
+        self.assertEqual(issue.code, "L007")
+        self.assertIn("C.UI.OPEN", issue.message)
+
+    def test_domain_steps_are_not_profile_checked(self):
+        text = feature("Scenario: S\n  Given Alice has a cart worth 5\n")
+        self.assertEqual(self.codes(text, profiles=("cli",)), [])
+
+    def test_table_and_doc_string_requirements(self):
+        cases = [
+            ("Given the following products exist:\n", "L008"),                                  # table required
+            ('Given the following products exist:\n  """\n  x\n  """\n', "L008"),               # doc string is not a table
+            ("Then the request succeeds\n  | a |\n", "L008"),                                  # takes no data
+            ("Given the input file in.txt contains:\n", "L008"),                                # table or doc string
+            ('Given the input file in.txt contains:\n  """\n  text\n  """\n', None),
+            ("Given the input file in.txt contains:\n  | a |\n", None),
+            ("When Alice calls quote.create\n", None),                                          # optional data
+            ("When Alice calls quote.create with:\n  | a |\n", None),
+            ('When Alice calls quote.create with:\n  """\n  {}\n  """\n', None),
+        ]
+        for step, code in cases:
+            with self.subTest(step=step.splitlines()[0], expect=code):
+                text = "Feature: F\nScenario: S\n" + textwrap.indent(step, "  ")
+                found = [i.code for i in self.issues(text)]
+                self.assertEqual(found, [code] if code else [])
+
+
+class OutlineTest(LintBase):
+    def test_parameters_must_exist_as_columns(self):
+        text = feature('''
+            Scenario Outline: O
+              Given Alice has a cart worth <amount>
+              Then the request is rejected with <error>
+
+              Examples:
+                | amount |
+                | 1      |
+        ''')
+        issues = self.issues(text)
+        self.assertEqual([(i.code, i.severity) for i in issues], [("L009", "error")])
+        self.assertIn("<error>", issues[0].message)
+
+    def test_unused_columns_warn(self):
+        text = feature('''
+            Scenario Outline: O
+              Given Alice has a cart worth <amount>
+
+              Examples:
+                | amount | spare |
+                | 1      | x     |
+        ''')
+        issues = self.issues(text)
+        self.assertEqual([(i.code, i.severity) for i in issues], [("L009", "warning")])
+        self.assertIn('"spare"', issues[0].message)
+
+    def test_parameters_inside_tables_and_doc_strings_count_as_used(self):
+        text = feature('''
+            Scenario Outline: O
+              Given the following products exist:
+                | sku   |
+                | <sku> |
+              When Alice calls quote.create with:
+                """
+                {"qty": <qty>}
+                """
+
+              Examples:
+                | sku | qty |
+                | A1  | 2   |
+        ''')
+        self.assertEqual(self.issues(text), [])
+
+    def test_outline_without_examples(self):
+        (issue,) = self.issues(feature("Scenario Outline: O\n  Given Alice has a cart worth 1\n"))
+        self.assertEqual((issue.code, issue.severity), ("L009", "error"))
+
+
+class CliTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name)
+        (self.root / ".bdd").mkdir()
+        (self.root / "features").mkdir()
+
+    def write(self, rel: str, text: str) -> Path:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def run_lint(self, *args: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        import os
+        cwd = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = lint.run(list(args))
+        finally:
+            os.chdir(cwd)
+        return code, out.getvalue(), err.getvalue()
+
+    GOOD = "Feature: F\n  Scenario: S\n    Then the request succeeds\n"
+    BAD = "Feature: F\n  Scenario: S\n    Then the request is rejected\n"
+
+    def test_exit_codes_and_text_output(self):
+        good = self.write("features/good.feature", self.GOOD)
+        bad = self.write("features/sub/bad.feature", self.BAD)
+        code, out, _ = self.run_lint(str(good))
+        self.assertEqual((code, out.strip()), (0, "1 file(s), 0 error(s), 0 warning(s)"))
+        code, out, _ = self.run_lint(str(self.root / "features"))     # directory, recursive
+        self.assertEqual(code, 1)
+        self.assertIn("bad.feature:3: error L002:", out)
+        self.assertIn("2 file(s), 1 error(s)", out)
+        self.assertEqual(self.run_lint(str(bad))[0], 1)
+
+    def test_warnings_alone_do_not_fail(self):
+        f = self.write("features/w.feature", "Feature: F\n  Scenario: S\n    # proposed-step\n    Then something new\n")
+        code, out, _ = self.run_lint(str(f))
+        self.assertEqual(code, 0)
+        self.assertIn("warning L011", out)
+
+    def test_json_output(self):
+        f = self.write("features/bad.feature", self.BAD)
+        code, out, _ = self.run_lint("--json", str(f))
+        data = json.loads(out)
+        self.assertEqual(code, 1)
+        self.assertEqual(data["summary"], {"files": 1, "errors": 1, "warnings": 0})
+        self.assertEqual(data["issues"][0]["code"], "L002")
+        self.assertEqual(data["issues"][0]["line"], 3)
+
+    def test_defaults_come_from_the_project_config(self):
+        self.write(".bdd/config.toml", 'profiles = ["base"]\n[[adapters]]\nname = "x"\nfeatures = "features"\n')
+        self.write("features/ui.feature", "Feature: F\n  Scenario: S\n    When Alice opens the Home page\n")
+        code, out, _ = self.run_lint()                        # no paths: uses the configured feature dir
+        self.assertEqual(code, 1)
+        self.assertIn("L007", out)
+        self.assertEqual(self.run_lint("--profiles", "base,ui")[0], 0)
+
+    def test_project_vocabulary_is_picked_up(self):
+        self.write(".bdd/vocabulary.toml", '[[steps]]\nid = "D.MOON"\nkind = "given"\npattern = "the moon is full"\n')
+        f = self.write("features/m.feature", "Feature: F\n  Scenario: S\n    Given the moon is full\n")
+        self.assertEqual(self.run_lint(str(f))[0], 0)
+
+    def test_hidden_and_node_modules_directories_are_skipped(self):
+        self.write("features/.cache/x.feature", self.BAD)
+        self.write("features/node_modules/y.feature", self.BAD)
+        self.write("features/ok.feature", self.GOOD)
+        code, out, _ = self.run_lint(str(self.root / "features"))
+        self.assertEqual((code, out.strip()), (0, "1 file(s), 0 error(s), 0 warning(s)"))
+
+    def test_usage_problems_exit_2(self):
+        self.assertEqual(self.run_lint()[0], 2)                                        # nothing to lint
+        self.assertEqual(self.run_lint("nope.feature")[0], 2)                          # missing path
+        self.assertEqual(self.run_lint("--profiles", "web", "x")[0], 2)                # unknown profile
+        self.write(".bdd/config.toml", 'profiles = ["web"]\n')
+        code, _, err = self.run_lint(str(self.write("features/g.feature", self.GOOD)))
+        self.assertEqual(code, 2)
+        self.assertIn("unknown profile", err)
+
+
+class ConfigTest(unittest.TestCase):
+    def test_find_root_walks_up(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            (root / ".bdd").mkdir()
+            deep = root / "a" / "b"
+            deep.mkdir(parents=True)
+            self.assertEqual(config.find_root(deep), root)
+
+    def test_defaults_without_a_project(self):
+        c = config.load(None)
+        self.assertEqual(c.profiles, config.ALL_PROFILES)
+        self.assertEqual(c.near_duplicate_similarity, 0.85)
+        self.assertIsNone(c.vocabulary_file)
+
+
+if __name__ == "__main__":
+    unittest.main()
