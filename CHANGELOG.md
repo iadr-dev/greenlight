@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Human approvals: `bdd approve FEAT-n rules|examples --self-reported|--auto [--reject --reason ...]` and `--verify`. An approval records who gave it (`hook`, `self-reported`, `auto`), a hash of what was approved and the enforcement context. Approvals typed by the person are recorded as `pending` and checked against the session transcript (`origin.kind`, `turnOrigin`, `promptSource`, `promptId`); system-injected and, unless `[approvals] allow_headless = true`, headless prompts are not accepted. `enforcement = auto|hard|soft` in `.bdd/config.toml`: `hard` refuses self-reported approvals, `auto` refuses them once hooks have run in the project or while building the feature (the guard leaves per-session markers and a permanent one), `soft` accepts them. Approving examples locks the spec; rejecting unlocks it. Machine gates now refuse to pass unless the human gates they depend on are validly approved and unchanged.
+
 - Repository skeleton, decisions record and verified platform notes.
 - `bdd` CLI package skeleton (`tools/bdd`) with `--version`, and CI running the stdlib unit tests on Linux, Windows and macOS with Python 3.11 and 3.14.
 - `tools/bdd/bdd` interpreter wrapper: tries `python3`, `python`, `py -3` by executing each (skips the Microsoft Store stub), caches the result in `${CLAUDE_PLUGIN_DATA}`, runs `python -I`; actionable message and exit 127 when no Python 3.11+. The cache lives in a private directory (never shared `/tmp`), is created with `umask 077`, and is trusted only if owned by the current user.

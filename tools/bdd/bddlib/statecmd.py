@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from . import config as cfg
-from . import lockfile, redrecord, state, store
+from . import enforcement, gates, lockfile, redrecord, state, store
 from .errors import StoreError, UsageError
 
 
@@ -55,24 +55,40 @@ def state_parser() -> argparse.ArgumentParser:
 
 def summary(root: Path, feature_dir: Path, data: dict) -> dict:
     locks = lockfile.read_lock(feature_dir, data["feature"])["scopes"]
-    return {**data, "locks": {scope: len(v["files"]) for scope, v in locks.items()}}
+    level, reasons = enforcement.classify(root, data)
+    return {**data, "locks": {scope: len(v["files"]) for scope, v in locks.items()},
+            "enforcement": {"level": level, "reasons": reasons}}
+
+
+def describe_approvals(approvals: list[dict]) -> str:
+    parts = []
+    for a in approvals:
+        what = f"{a['gate']} {a['decision']}d" if a["decision"] == "approve" else f"{a['gate']} rejected"
+        how = a["grade"] if a["grade"] != "hook" else f"typed, origin {a['origin']}"
+        parts.append(f"{what} ({how})")
+    return ", ".join(parts) or "none"
+
+
+def describe_red(red: dict | None) -> str:
+    if not red:
+        return "not recorded"
+    state_text = "uncommitted source changes" if red["dirty"] else "source matches the commit"
+    return f"commit {red['commit'][:8]} ({state_text})"
 
 
 def render(info: dict) -> str:
-    gates = ", ".join(f"{n} {g['result']}" for n, g in info["gates"].items()) or "none yet"
-    locks = ", ".join(f"{s}: {n} file(s)" for s, n in sorted(info["locks"].items())) or "none"
-    kinds = {}
-    for approval in info["approvals"]:
-        kinds[approval.get("grade", "?")] = kinds.get(approval.get("grade", "?"), 0) + 1
-    approvals = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())) or "none"
+    gate_text = ", ".join(f"{n} {g['result']}" for n, g in info["gates"].items()) or "none yet"
+    lock_text = ", ".join(f"{s}: {n} file(s)" for s, n in sorted(info["locks"].items())) or "none"
     tokens = sum(c["tokens"] for c in info["cost"].values())
     seconds = sum(c["seconds"] for c in info["cost"].values())
-    red = info["red"]
+    enforced = info["enforcement"]
+    level = enforced["level"] + ("" if enforced["level"] == "hard" else
+                                 " (violations are detected, not prevented: " + "; ".join(enforced["reasons"]) + ")")
     lines = [f"{info['feature']} {info['title']}",
              f"phase: {info['phase']}    autonomy: {info['autonomy']['level']}",
-             f"gates: {gates}", f"approvals: {approvals}", f"assumptions: {len(info['assumptions'])}",
-             f"locks: {locks}",
-             "red: " + (f"commit {red['commit'][:8]} ({'uncommitted source changes' if red['dirty'] else 'source matches the commit'})" if red else "not recorded"),
+             f"gates: {gate_text}", f"approvals: {describe_approvals(info['approvals'])}",
+             f"assumptions: {len(info['assumptions'])}", f"locks: {lock_text}",
+             f"red: {describe_red(info['red'])}", f"enforcement: {level}",
              f"cost: {tokens:,} tokens, {seconds:.1f} s"]
     return "\n".join(lines)
 
@@ -123,7 +139,7 @@ def do_gate(args: argparse.Namespace) -> int:
     if args.record_red and args.name != "bind":
         raise UsageError("--record-red belongs to the bind gate")
     red = redrecord.capture(root, cfg.load(root).test_dirs) if args.record_red else None
-    data = state.record_gate(root, feature_dir, args.name, args.result, parse_details(args.detail), red)
+    data = gates.record_gate(root, feature_dir, args.name, args.result, parse_details(args.detail), red)
     print(f"{args.feature}: {args.name} {args.result}; phase is now {data['phase']}")
     return 0
 

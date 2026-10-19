@@ -34,7 +34,7 @@ from pathlib import Path
 
 from . import claudepaths
 from . import config as cfg
-from . import lockfile, store
+from . import enforcement, lockfile, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -393,6 +393,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     if tool in INJECTION_TOOLS:
         return check_injection(tool_input)
     project = Project(root)
+    enforcement.touch(root, payload.get("session_id"))      # evidence that hooks ran in this session
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))

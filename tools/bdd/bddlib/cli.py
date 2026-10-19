@@ -16,6 +16,7 @@ COMMANDS = {
     "unlock": ("lockcmd", "run_unlock"),
     "state": ("statecmd", "run_state"),
     "gate": ("statecmd", "run_gate"),
+    "approve": ("approvecmd", "run"),
     "assume": ("statecmd", "run_assume"),
     "cost": ("statecmd", "run_cost"),
     "mode": ("statecmd", "run_mode"),

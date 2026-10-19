@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import lockcmd, state, statecmd, store
+from bddlib import approvals, lockcmd, state, statecmd, store
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 
@@ -92,12 +92,27 @@ class StateCommandTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("only the person can approve it", err)
 
+    def approve_through(self, *gates_to_pass: str) -> None:
+        """Pass the given machine gates and approve both human gates, in pipeline order, without hooks."""
+        feature_dir = store.find_feature_dir(self.root, "FEAT-007")
+        rules = feature_dir / "rules.md"
+        rules.write_text("# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n", encoding="utf-8", newline="\n")
+        self.gate("discover", "--result", "pass")
+        approvals.record(self.root, feature_dir, "rules", "approve", "self-reported")
+        self.gate("test-design", "--result", "pass")
+        approvals.record(self.root, feature_dir, "examples", "approve", "self-reported")
+        for name in gates_to_pass:
+            self.assertEqual(self.gate(name, "--result", "pass")[0], 0, name)
+
     def test_implement_gate_is_refused_until_locks_are_intact(self):
         self.init()
         code, _, err = self.gate("implement", "--result", "pass")
         self.assertEqual(code, 2)
         self.assertIn("cannot record implement=pass", err)
-        self.lock_both()
+        self.approve_through("system-map", "refine")
+        self.run_cmd(lockcmd.run_lock, "FEAT-007", "--scope", "bind", "steps")
+        self.gate("bind", "--result", "pass")
+        self.gate("tasks", "--result", "pass")
         self.step.write_text("def then_ok():\n    pass\n", encoding="utf-8", newline="\n")
         self.assertEqual(self.gate("implement", "--result", "pass")[0], 2)
         self.step.write_text("def then_ok():\n    assert True\n", encoding="utf-8", newline="\n")
@@ -122,6 +137,8 @@ class StateCommandTest(unittest.TestCase):
         subprocess.run([*git, "init", "-q"], check=True, capture_output=True)
         subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
         subprocess.run([*git, "commit", "-q", "-m", "init"], check=True, capture_output=True)
+        self.approve_through("system-map", "refine")
+        self.run_cmd(lockcmd.run_lock, "FEAT-007", "--scope", "bind", "steps")
         code, _, _ = self.gate("bind", "--result", "pass", "--record-red")
         self.assertEqual(code, 0)
         red = state.load(store.find_feature_dir(self.root, "FEAT-007"))["red"]

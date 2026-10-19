@@ -8,6 +8,7 @@ from pathlib import Path
 ALL_PROFILES = ("base", "api", "ui", "cli", "lib")
 DEFAULT_SIMILARITY = 0.85
 BDD_DIR = ".bdd"
+ENFORCEMENT_MODES = ("auto", "hard", "soft")
 
 
 class ConfigError(ValueError):
@@ -24,6 +25,8 @@ class Config:
     test_dirs: tuple[Path, ...] = ()         # features + steps + drivers: not "production source"
     autonomy: str = "standard"
     language: str = "auto"
+    allow_headless_approvals: bool = False   # accept approvals typed into `claude -p` (CI-driven flows)
+    enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -56,6 +59,9 @@ def load(root: Path | str | None) -> Config:
     if unknown:
         raise ConfigError(f"{path}: unknown profile(s) {', '.join(unknown)}; choose from {', '.join(ALL_PROFILES)}")
     gates = data.get("gates", {})
+    enforcement = data.get("enforcement", "auto")
+    if enforcement not in ENFORCEMENT_MODES:
+        raise ConfigError(f"{path}: enforcement must be one of {', '.join(ENFORCEMENT_MODES)}")
     return Config(
         root=root,
         profiles=profiles,
@@ -66,4 +72,6 @@ def load(root: Path | str | None) -> Config:
                         if key in a),
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
+        allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
+        enforcement=enforcement,
     )
