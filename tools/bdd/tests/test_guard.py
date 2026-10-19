@@ -109,7 +109,7 @@ class ManagedDataTest(GuardCase):
 
     def test_human_edited_files_inside_bdd_stay_editable(self):
         for rel in (".bdd/features/FEAT-001-a/rules.md", ".bdd/features/FEAT-001-a/brief.md", ".bdd/glossary.md",
-                    ".bdd/config.toml", ".bdd/vocabulary.toml"):
+                    ".bdd/vocabulary.toml"):
             with self.subTest(rel=rel):
                 self.assertIsNone(self.call("Write", file_path=str(self.root / rel)))
 
@@ -162,7 +162,7 @@ class FailClosedTest(GuardCase):
     def test_a_corrupt_lock_file_blocks_edits_instead_of_silently_allowing_them(self):
         (self.feature_dir / "lock.json").write_text("{corrupt", encoding="utf-8")
         reason = self.call("Write", file_path=str(self.root / "src" / "app.py"))
-        self.assertIn("cannot enforce locks", reason)
+        self.assertIn("cannot enforce the locks", reason)
         self.assertIn("cannot read lock file", reason)
 
     def test_a_lock_file_from_a_newer_greenlight_blocks_too(self):
@@ -280,7 +280,7 @@ class MainTest(GuardCase):
             with self.subTest(stdin=stdin):
                 code, err = self.run_main(stdin)
                 self.assertEqual(code, 0)
-                self.assertIn("could not evaluate this call", err)
+                self.assertIn("unreadable hook input", err)
         self.assertEqual(self.run_main(""), (0, ""))
         self.assertEqual(self.run_main("{}"), (0, ""))
 
@@ -295,6 +295,119 @@ class MainTest(GuardCase):
         self.assertIn("locked by FEAT-001", blocked.stderr)
         allowed = run(self.payload("Edit", file_path=str(self.root / "src" / "app.py")))
         self.assertEqual((allowed.returncode, allowed.stdout, allowed.stderr), (0, "", ""))
+
+
+class FailClosedInsideAProjectTest(GuardCase):
+    """A guard that can be switched off by corrupting a file is not a guard."""
+
+    def write_target(self) -> str | None:
+        return self.call("Write", file_path=str(self.root / "src" / "app.py"))
+
+    def test_a_broken_config_blocks_instead_of_disabling_enforcement(self):
+        for broken in ("profiles = [", 'profiles = ["web"]\n', "not = valid = toml"):
+            with self.subTest(config=broken):
+                self.write(".bdd/config.toml", broken)
+                reason = self.write_target()
+                self.assertIn("cannot enforce the locks", reason)
+
+    def test_an_unexpected_internal_error_blocks_too(self):
+        with mock.patch.object(guard, "evaluate_in_project", side_effect=RuntimeError("boom")):
+            reason = self.write_target()
+        self.assertIn("internal error (RuntimeError: boom)", reason)
+        with mock.patch.object(guard, "evaluate_in_project", side_effect=AttributeError("bug")):
+            self.assertIn("blocks this call", self.write_target())
+
+    def test_main_exits_2_for_an_internal_error_inside_a_project(self):
+        payload = json.dumps({"tool_name": "Write", "tool_input": {"file_path": str(self.root / "src" / "app.py")},
+                              "cwd": str(self.root)})
+        with mock.patch.object(guard, "evaluate_in_project", side_effect=RuntimeError("boom")), \
+                mock.patch("sys.stdin", io.StringIO(payload)), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(guard.main([]), 2)
+
+    def test_outside_a_project_nothing_is_ever_blocked_not_even_by_a_bug(self):
+        with tempfile.TemporaryDirectory() as elsewhere:
+            with mock.patch.object(guard, "evaluate_in_project", side_effect=RuntimeError("boom")):
+                self.assertIsNone(guard.evaluate({"tool_name": "Write", "cwd": elsewhere,
+                                                  "tool_input": {"file_path": "x.py"}}))
+
+    def test_input_that_is_not_an_object_is_ignored(self):
+        with mock.patch("sys.stdin", io.StringIO("[1, 2]")):
+            self.assertEqual(guard.main([]), 0)
+
+
+class ApprovalViaShellTest(GuardCase):
+    def test_a_shell_command_cannot_run_an_approval(self):
+        for command in ['claude -p "/greenlight:approve FEAT-001 rules"',
+                        "echo '/greenlight:approve FEAT-001 all' | claude",
+                        "claude -p '/GREENLIGHT:REJECT FEAT-001 examples'",
+                        "python -c \"import subprocess; subprocess.run(['claude','-p','/greenlight:approve FEAT-001 rules'])\""]:
+            with self.subTest(command=command):
+                self.assertIn("approvals can only be given by the person", self.call("Bash", command=command))
+
+    def test_ordinary_commands_that_mention_greenlight_are_fine(self):
+        for command in ["bdd lint features", "ls .claude-plugin", "git log --oneline -- skills/approve", "echo greenlight"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.call("Bash", command=command))
+
+
+class EnforcementFilesTest(GuardCase):
+    def test_bdd_config_is_managed_by_the_cli(self):
+        self.assertIn("managed by the bdd command line", self.call("Write", file_path=str(self.root / ".bdd" / "config.toml")))
+        self.assertIn("managed by the bdd command line",
+                      self.call("Bash", command="echo 'profiles = []' > .bdd/config.toml"))
+        self.assertIsNone(self.call("Bash", command="cat .bdd/config.toml"))
+
+    def test_other_config_toml_files_are_not_affected(self):
+        for rel in (".cargo/config.toml", "config.toml", "tools/config.toml"):
+            with self.subTest(rel=rel):
+                self.assertIsNone(self.call("Write", file_path=str(self.root / rel)))
+        self.assertIsNone(self.call("Bash", command="echo x > .cargo/config.toml"))
+
+    def test_hook_and_plugin_settings_cannot_be_edited(self):
+        settings = str(self.root / ".claude" / "settings.json")
+        local = str(self.root / ".claude" / "settings.local.json")
+        home_settings = str(self.root / "home" / ".claude" / "settings.json")
+        for tool, path, text in [
+            ("Write", settings, json.dumps({"disableAllHooks": True})),
+            ("Write", local, json.dumps({"enabledPlugins": {"greenlight@greenlight": False}})),
+            ("Write", home_settings, json.dumps({"hooks": {}})),
+        ]:
+            with self.subTest(path=path):
+                reason = self.call(tool, file_path=path, content=text)
+                self.assertIn("configures Claude Code hooks or plugins", reason)
+        edit = self.call("Edit", file_path=settings, old_string='"hooks": {"PreToolUse": []}', new_string="{}")
+        self.assertIn("configures Claude Code hooks or plugins", edit)          # removing hooks mentions them too
+
+    def test_unrelated_settings_changes_are_allowed(self):
+        settings = str(self.root / ".claude" / "settings.json")
+        self.assertIsNone(self.call("Write", file_path=settings, content=json.dumps({"permissions": {"allow": ["Bash(ls)"]}})))
+        self.assertIsNone(self.call("Write", file_path=str(self.root / "settings.json"), content='{"hooks": 1}'))   # not under .claude
+
+    def test_hook_scripts_directory_is_protected(self):
+        self.assertIn("is a Claude Code hook", self.call("Write", file_path=str(self.root / ".claude" / "hooks" / "x.sh")))
+
+    def test_the_plugins_own_files_are_protected(self):
+        plugin = self.root / "installed-plugin"
+        (plugin / "tools" / "bdd" / "bddlib").mkdir(parents=True)
+        target = plugin / "tools" / "bdd" / "bddlib" / "guard.py"
+        target.write_text("# guard\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {guard.PLUGIN_ROOT_ENV: str(plugin)}):
+            self.assertIn("is part of the greenlight plugin", self.call("Edit", file_path=str(target)))
+            self.assertIn("is part of the greenlight plugin", self.call("Write", file_path=str(plugin / "hooks" / "hooks.json")))
+            self.assertIsNotNone(self.call("Bash", command=f"sed -i 's/^/#/' {target}"))
+            self.assertIsNone(self.call("Bash", command=f"cat {target}"))
+            self.assertIsNone(self.call("Write", file_path=str(self.root / "src" / "ok.py")))
+
+    def test_shell_commands_cannot_rewrite_hook_settings(self):
+        for command in ["echo '{\"disableAllHooks\": true}' > .claude/settings.json",
+                        "sed -i 's/hooks/nothing/' .claude/settings.local.json",
+                        "rm -r .claude/hooks/ && touch .claude/settings.json  # plugin hooks"]:
+            with self.subTest(command=command):
+                self.assertIn("what enforces greenlight", self.call("Bash", command=command))
+        for command in ["cat .claude/settings.json", "jq .permissions .claude/settings.json",
+                        "echo '{\"permissions\": {}}' > .claude/settings.json"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.call("Bash", command=command))
 
 
 class PerformanceTest(unittest.TestCase):

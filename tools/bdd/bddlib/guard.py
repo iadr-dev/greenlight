@@ -7,14 +7,20 @@ blocks (exit 2, reason on stderr, which the model sees).
 What it blocks inside a greenlight project:
 
 * edits to files locked by a feature (approved specs, bound steps and drivers);
-* edits to the CLI-managed data files (``state.json``, ``lock.json``, enforcement markers);
+* edits to the CLI-managed data files (``state.json``, ``lock.json``, ``.bdd/config.toml``,
+  enforcement markers);
+* edits to what enforces all of this: the plugin's own files, and Claude Code settings or hooks
+  (``.claude/settings*.json``) when the change involves hooks or plugins;
 * writes outside what the calling agent is allowed to touch (see ``AGENT_WRITES``);
-* shell commands that write to either of the above (best effort: a shell can always do things
+* shell commands that write to any of the above (best effort: a shell can always do things
   a hook cannot foresee, which is why ``bdd lock --check`` remains the guarantee);
-* scheduling or sending prompts that contain an approval command, because such prompts reach the
+* scheduling, sending or running anything that contains an approval command, in a tool call or in
+  a shell command (for example a nested ``claude -p``), because such a prompt would reach the
   approval hook looking exactly like something the user typed.
 
-Outside a project (no ``.bdd`` directory) it does nothing.
+Outside a project (no ``.bdd`` directory) it does nothing. Inside one it fails closed: if the guard
+cannot work out whether a call is safe (unreadable lock data, broken configuration, an internal
+error) the call is blocked and the reason says how to fix it.
 """
 from __future__ import annotations
 
@@ -27,6 +33,7 @@ from pathlib import Path
 
 from . import config as cfg
 from . import lockfile, store
+from .config import ConfigError
 from .errors import StoreError
 
 WRITE_TOOLS = {"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
@@ -46,8 +53,13 @@ AGENT_WRITES = {
 }
 MANAGED_NAMES = {"state.json", "lock.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
+MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
+SETTINGS_NAMES = {"settings.json", "settings.local.json"}
+PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
 _APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b", re.IGNORECASE)
+_HOOKISH = re.compile(r"hook|plugin|greenlight", re.IGNORECASE)
+_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|/\.claude/hooks/", re.IGNORECASE)
 _NOISE = re.compile(r"\d?>\s*/dev/null|\d>&\d|&>\s*/dev/null|2>\s*nul\b", re.IGNORECASE)
 _SHELL_WRITES = re.compile(
     r"(?:^|[\s;&|(])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
@@ -103,7 +115,8 @@ class Project:
             return False
         inside = key[len(data_root) + 1:]
         name = inside.rsplit("/", 1)[-1]
-        return inside.startswith(".enforcement/") or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
+        return (inside.startswith(".enforcement/") or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
+                or inside == MANAGED_CONFIG)
 
     def category(self, path: Path) -> str:
         key = path_key(path)
@@ -123,8 +136,30 @@ def locked_message(project: Project, path: Path, lock: Locked) -> str:
 
 
 def managed_message(project: Project, path: Path) -> str:
-    return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals). "
-            "Use the bdd commands instead of editing it.")
+    return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals, "
+            "project configuration). Use the bdd commands instead of editing it; the person can edit it "
+            "themselves outside the agent.")
+
+
+def enforcement_message(path: Path, what: str) -> str:
+    return (f"greenlight: {path.as_posix()} {what}. Changing it could switch off the checks that keep the AI "
+            "from approving or weakening its own work, so it is not allowed from inside the agent. The person "
+            "can change it themselves outside the agent.")
+
+
+def check_enforcement_files(path: Path, tool_input: dict) -> str | None:
+    """Protect what enforces greenlight: the plugin's own files and Claude Code's hook settings."""
+    plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
+    key = path_key(path)
+    if plugin_root and key.startswith(path_key(plugin_root) + "/"):
+        return enforcement_message(path, "is part of the greenlight plugin")
+    if "/.claude/hooks/" in key:
+        return enforcement_message(path, "is a Claude Code hook")
+    in_claude_dir = ".claude" in [part.casefold() for part in path.parts[:-1]]
+    if in_claude_dir and path.name.casefold() in SETTINGS_NAMES and _HOOKISH.search(
+            json.dumps(tool_input, ensure_ascii=False)):
+        return enforcement_message(path, "configures Claude Code hooks or plugins")
+    return None
 
 
 def agent_name(payload: dict) -> str | None:
@@ -132,12 +167,15 @@ def agent_name(payload: dict) -> str | None:
     return agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else None
 
 
-def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
+def check_file_write(project: Project, path: Path, agent: str | None, tool_input: dict | None = None) -> str | None:
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
     if project.is_data(path):
         return managed_message(project, path)
+    protected = check_enforcement_files(path, tool_input or {})
+    if protected:
+        return protected
     allowed = AGENT_WRITES.get(agent) if agent else None
     category = project.category(path)
     if allowed is not None and category not in allowed:
@@ -162,16 +200,34 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
         name = match.group(0)
         lock = by_name.get(name)
         return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
+    if ".bdd/config.toml" in text:
+        return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
     if "/.enforcement/" in text:
         return project.root / cfg.BDD_DIR / ".enforcement", None
     return None
 
 
+def command_touches_enforcement(command: str) -> bool:
+    """Does a (write-like) shell command target Claude Code's hook settings or the plugin itself?"""
+    text = command.replace("\\", "/")
+    if _SETTINGS_TEXT.search(text) and _HOOKISH.search(text):
+        return True
+    plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
+    return bool(plugin_root) and path_key(plugin_root) in text.casefold().replace("\\", "/")
+
+
 def check_bash(project: Project, command: str) -> str | None:
-    """Best effort: block a command that both names a protected file and looks like it writes."""
+    """Best effort: block a command that runs an approval, or that both names a protected file and
+    looks like it writes."""
+    injection = check_injection({"command": command})
+    if injection:
+        return injection
     scrubbed = _NOISE.sub(" ", command)
     if not _SHELL_WRITES.search(scrubbed):
         return None
+    if command_touches_enforcement(scrubbed):
+        return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
+                                   "(Claude Code hook settings or the plugin itself)")
     hit = mentioned_protected(project, scrubbed)
     if hit is None:
         return None
@@ -183,40 +239,50 @@ def check_bash(project: Project, command: str) -> str | None:
 def check_injection(tool_input: dict) -> str | None:
     if _APPROVAL_TEXT.search(json.dumps(tool_input, ensure_ascii=False)):
         return ("greenlight: approvals can only be given by the person typing /greenlight:approve or "
-                "/greenlight:reject themselves. Scheduling, sending or invoking that command from a tool "
-                "would let the AI approve its own work, so it is not allowed. Ask the user to type it.")
+                "/greenlight:reject themselves. Scheduling, sending, running (for example in a nested `claude` "
+                "session) or invoking that command from a tool would let the AI approve its own work, so it is "
+                "not allowed. Ask the user to type it.")
     return None
 
 
-def evaluate(payload: dict) -> str | None:
-    """The reason to block this tool call, or None to allow it."""
+def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     tool, tool_input = payload.get("tool_name"), payload.get("tool_input") or {}
-    cwd = Path(payload.get("cwd") or os.getcwd())
-    root = cfg.find_root(cwd)
-    if root is None:
-        return None
     if tool in INJECTION_TOOLS:
         return check_injection(tool_input)
-    try:
-        project = Project(root)
-    except StoreError as exc:
-        return f"greenlight: cannot enforce locks because {exc}. Restore the file (for example with git) and retry."
+    project = Project(root)
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
-        return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
+        return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload), tool_input)
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"])
     return None
 
 
+def evaluate(payload: dict) -> str | None:
+    """The reason to block this tool call, or None to allow it.
+
+    Inside a project this fails closed: whatever stops the guard from reaching a verdict blocks
+    the call, because a guard that can be switched off by corrupting a file is not a guard."""
+    cwd = Path(payload.get("cwd") or os.getcwd())
+    root = cfg.find_root(cwd)
+    if root is None:
+        return None
+    try:
+        return evaluate_in_project(root, payload, cwd)
+    except (StoreError, ConfigError) as exc:
+        return f"greenlight: cannot enforce the locks because {exc}. Restore the file (for example with git) and retry."
+    except Exception as exc:    # deliberate: any failure inside a project blocks the call
+        return (f"greenlight: the guard hit an internal error ({type(exc).__name__}: {exc}) and blocks this call "
+                "to stay safe. Please report it; the person can disable the greenlight plugin to continue.")
+
+
 def main(argv: list[str]) -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
-        reason = evaluate(payload)
-    except (ValueError, OSError, KeyError, TypeError) as exc:    # a bug or a transient I/O problem: do not lock users out
-        print(f"greenlight guard: could not evaluate this call ({type(exc).__name__}: {exc}); allowing it",
-              file=sys.stderr)
+    except ValueError as exc:                    # nothing to evaluate, and no way to tell if this is a project
+        print(f"greenlight guard: unreadable hook input ({exc}); allowing the call", file=sys.stderr)
         return 0
+    reason = evaluate(payload) if isinstance(payload, dict) else None
     if reason:
         print(reason, file=sys.stderr)
         return 2
