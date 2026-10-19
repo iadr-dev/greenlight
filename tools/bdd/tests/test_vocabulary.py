@@ -6,7 +6,7 @@ from pathlib import Path
 
 from bddlib import vocabulary as v
 
-FULLWIDTH_COLON = chr(0xFF1A)
+FULLWIDTH_COLON = "："
 SAMPLES = {"int": "3", "decimal": "1.5", "string": '"abc"', "name": "Alice", "datetime": "2026-01-01",
            "duration": "5 minutes", "bool": "true"}
 PLACEHOLDER = re.compile(r"\{([A-Za-z_]\w*)(?::(enum\([^)]*\)|[A-Za-z]+))?\}")

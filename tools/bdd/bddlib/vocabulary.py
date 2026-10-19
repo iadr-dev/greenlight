@@ -22,7 +22,8 @@ REQUIRES = ("none", "table", "docstring", "table_or_docstring", "table_or_docstr
 
 # Full-width punctuation is normalised to ASCII on both the pattern and the step text, so a
 # zh-TW author may type either form of the colon or comma.
-_FULLWIDTH = {0xFF1A: ":", 0xFF0C: ",", 0xFF08: "(", 0xFF09: ")", 0xFF1B: ";", 0xFF01: "!", 0xFF1F: "?"}
+_FULLWIDTH = str.maketrans({"：": ":", "，": ",", "（": "(", "）": ")",
+                            "；": ";", "！": "!", "？": "?"})
 
 _OUTLINE_PARAM = r"<[^<>]+>"
 _TYPE_REGEX = {

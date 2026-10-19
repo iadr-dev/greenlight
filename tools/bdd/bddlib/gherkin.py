@@ -159,9 +159,9 @@ def split_cells(line: str, number: int, path: str) -> list[str]:
     cells, buf, i = [], [], 0
     while i < len(inner):
         ch = inner[i]
-        if ch == chr(92) and i + 1 < len(inner):
+        if ch == "\\" and i + 1 < len(inner):
             nxt = inner[i + 1]
-            buf.append({"|": "|", chr(92): chr(92), "n": chr(10)}.get(nxt, ch + nxt))
+            buf.append({"|": "|", "\\": "\\", "n": "\n"}.get(nxt, ch + nxt))
             i += 2
             continue
         if ch == "|":
@@ -176,7 +176,7 @@ def split_cells(line: str, number: int, path: str) -> list[str]:
 
 class _Parser:
     def __init__(self, text: str, path: str):
-        self.lines = text.lstrip(chr(0xFEFF)).splitlines()
+        self.lines = text.lstrip("\ufeff").splitlines()
         self.path = path
         self.i = 0
         self.kw: _Keywords | None = None

@@ -271,6 +271,28 @@ class CliTest(unittest.TestCase):
         f = self.write("features/m.feature", "Feature: F\n  Scenario: S\n    Given the moon is full\n")
         self.assertEqual(self.run_lint(str(f))[0], 0)
 
+    def test_lint_refuses_to_read_files_that_are_not_feature_files(self):
+        secret = self.write("secret.txt", "Feature: F\nTOP-SECRET-TOKEN-123\n")
+        code, out, err = self.run_lint(str(secret))
+        self.assertEqual(code, 2)
+        self.assertIn("not a .feature file", err)
+        self.assertNotIn("TOP-SECRET", out + err)      # nothing from the file is echoed back
+
+    def test_vocabulary_option_is_limited_to_toml_files_inside_the_project(self):
+        good = self.write("features/g.feature", self.GOOD)
+        outside = tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False, encoding="utf-8")
+        outside.write("TOP-SECRET-TOKEN-123 = oops\n")
+        outside.close()
+        self.addCleanup(lambda: Path(outside.name).unlink())
+        for arg in (outside.name, str(self.write("notes.txt", "x"))):
+            with self.subTest(arg=Path(arg).name):
+                code, out, err = self.run_lint("--vocabulary", arg, str(good))
+                self.assertEqual(code, 2)
+                self.assertIn("--vocabulary must be a .toml file inside", err)
+                self.assertNotIn("TOP-SECRET", out + err)
+        inside = self.write("custom.toml", '[[steps]]\nid = "D.X"\nkind = "given"\npattern = "x"\n')
+        self.assertEqual(self.run_lint("--vocabulary", str(inside), str(good))[0], 0)
+
     def test_hidden_and_node_modules_directories_are_skipped(self):
         self.write("features/.cache/x.feature", self.BAD)
         self.write("features/node_modules/y.feature", self.BAD)

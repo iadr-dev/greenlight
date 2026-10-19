@@ -5,8 +5,6 @@ import sys
 
 from . import __version__
 
-LF = chr(10)  # newline="\n" for reconfigure(): no translation, so Windows pipes get LF, not CRLF
-
 
 def configure_streams(*streams) -> None:
     """Make stdout/stderr UTF-8 with LF endings whatever the terminal or code page.
@@ -16,7 +14,8 @@ def configure_streams(*streams) -> None:
     """
     for stream in streams or (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace", newline=LF)
+            # newline="\n": no translation, so Windows pipes get LF rather than CRLF
+            stream.reconfigure(encoding="utf-8", errors="replace", newline="\n")
 
 
 def main(argv: list[str]) -> int:

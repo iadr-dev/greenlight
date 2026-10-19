@@ -98,24 +98,28 @@ class Linter:
             issues.append(Issue(path, step.line, ERROR, "L008", f"{entry.id}: {problem}"))
         return issues
 
+    @staticmethod
+    def outline_params_used(scenario: gherkin.Scenario) -> dict[str, int]:
+        """Every <parameter> a step refers to (in its text, table or doc string) -> first line."""
+        used: dict[str, int] = {}
+        for step in scenario.steps:
+            blobs = [step.text, step.docstring or "", *(cell for row in (step.table or []) for cell in row)]
+            for blob in blobs:
+                for name in _OUTLINE_PARAM.findall(blob):
+                    used.setdefault(name.strip(), step.line)
+        return used
+
     def check_outline(self, scenario: gherkin.Scenario, path: str) -> list[Issue]:
         if not scenario.outline:
             return []
         if not scenario.examples:
             return [Issue(path, scenario.line, ERROR, "L009", f'Scenario Outline "{scenario.name}" has no Examples')]
-        columns = {c for ex in scenario.examples for c in ex.header}
-        used: dict[str, int] = {}
-        for step in scenario.steps:
-            blobs = [step.text, step.docstring or "", *(c for row in (step.table or []) for c in row)]
-            for blob in blobs:
-                for name in _OUTLINE_PARAM.findall(blob):
-                    used.setdefault(name.strip(), step.line)
+        used = self.outline_params_used(scenario)
+        columns = {col for ex in scenario.examples for col in ex.header}
         issues = [Issue(path, line, ERROR, "L009", f"<{name}> is not a column of any Examples table")
                   for name, line in used.items() if name not in columns]
-        for ex in scenario.examples:
-            for col in ex.header:
-                if col not in used:
-                    issues.append(Issue(path, ex.line, WARNING, "L009", f'Examples column "{col}" is never used by a step'))
+        issues += [Issue(path, ex.line, WARNING, "L009", f'Examples column "{col}" is never used by a step')
+                   for ex in scenario.examples for col in ex.header if col not in used]
         return issues
 
     def check_feature(self, feature: gherkin.Feature, path: str) -> list[Issue]:
@@ -142,17 +146,37 @@ class Linter:
 
 
 # -- files and CLI -----------------------------------------------------------------------
+class UsageError(ValueError):
+    """The command line asked for something lint refuses to do."""
+
+
 def collect_files(paths: list[Path]) -> list[Path]:
+    """Expand directories to their .feature files. An explicit file must itself be a .feature:
+    lint is called by tools and agents, and parse errors quote the text they stumble on, so it
+    must not be usable to read arbitrary files."""
     files: list[Path] = []
     for p in paths:
         if p.is_dir():
             files += sorted(f for f in p.rglob("*.feature")
                             if not any(part.startswith(".") or part == "node_modules" for part in f.relative_to(p).parts))
-        elif p.is_file():
+        elif p.is_file() and p.suffix == ".feature":
             files.append(p)
+        elif p.is_file():
+            raise UsageError(f"{p} is not a .feature file")
         else:
             raise FileNotFoundError(str(p))
     return files
+
+
+def vocabulary_file(arg: Path | None, config: cfg.Config) -> Path | None:
+    """--vocabulary must be a .toml file inside the project (or the working directory)."""
+    if arg is None:
+        return config.vocabulary_file
+    base = (config.root or Path.cwd()).resolve()
+    resolved = arg.resolve()
+    if resolved.suffix != ".toml" or not resolved.is_relative_to(base):
+        raise UsageError(f"--vocabulary must be a .toml file inside {base}")
+    return resolved
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -164,32 +188,39 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def prepare(args: argparse.Namespace) -> tuple[Linter, list[Path]]:
+    """Resolve configuration, vocabulary and target files; raise UsageError for bad requests."""
+    config = cfg.load(cfg.find_root())
+    profiles = tuple(args.profiles.split(",")) if args.profiles else config.profiles
+    bad = [p for p in profiles if p not in cfg.ALL_PROFILES]
+    if bad:
+        raise UsageError(f"unknown profile(s): {', '.join(bad)}")
+    vocab = vocabulary.load(vocabulary_file(args.vocabulary, config))
+    targets = args.paths or list(config.feature_dirs)
+    if not targets:
+        raise UsageError("no paths given and no feature directories configured")
+    return Linter(vocab, profiles), collect_files(targets)
+
+
+def report(issues: list[Issue], file_count: int, as_json: bool) -> None:
+    errors = sum(i.severity == ERROR for i in issues)
+    warnings = len(issues) - errors
+    if as_json:
+        summary = {"files": file_count, "errors": errors, "warnings": warnings}
+        print(json.dumps({"summary": summary, "issues": [asdict(i) for i in issues]}, ensure_ascii=False, indent=2))
+        return
+    for issue in issues:
+        print(issue)
+    print(f"{file_count} file(s), {errors} error(s), {warnings} warning(s)")
+
+
 def run(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     try:
-        config = cfg.load(cfg.find_root())
-        profiles = tuple(args.profiles.split(",")) if args.profiles else config.profiles
-        bad = [p for p in profiles if p not in cfg.ALL_PROFILES]
-        if bad:
-            print(f"bdd lint: unknown profile(s): {', '.join(bad)}", file=sys.stderr)
-            return 2
-        vocab = vocabulary.load(args.vocabulary or config.vocabulary_file)
-        targets = args.paths or list(config.feature_dirs)
-        if not targets:
-            print("bdd lint: no paths given and no feature directories configured", file=sys.stderr)
-            return 2
-        files = collect_files(targets)
-    except (cfg.ConfigError, vocabulary.VocabularyError, FileNotFoundError) as exc:
+        linter, files = prepare(args)
+    except (cfg.ConfigError, vocabulary.VocabularyError, FileNotFoundError, UsageError) as exc:
         print(f"bdd lint: {exc}", file=sys.stderr)
         return 2
-    linter = Linter(vocab, profiles)
-    issues = [i for f in files for i in linter.lint_file(f)]
-    errors = sum(i.severity == ERROR for i in issues)
-    if args.json:
-        summary = {"files": len(files), "errors": errors, "warnings": len(issues) - errors}
-        print(json.dumps({"summary": summary, "issues": [asdict(i) for i in issues]}, ensure_ascii=False, indent=2))
-    else:
-        for issue in issues:
-            print(issue)
-        print(f"{len(files)} file(s), {errors} error(s), {len(issues) - errors} warning(s)")
-    return 1 if errors else 0
+    issues = [issue for f in files for issue in linter.lint_file(f)]
+    report(issues, len(files), args.json)
+    return 1 if any(i.severity == ERROR for i in issues) else 0
