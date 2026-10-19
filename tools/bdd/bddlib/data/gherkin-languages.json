@@ -1,0 +1,3899 @@
+{
+"af":{
+"name":"Afrikaans",
+"native":"Afrikaans",
+"feature":[
+"Funksie",
+"Besigheid Behoefte",
+"Vermoë"
+],
+"background":[
+"Agtergrond"
+],
+"scenario":[
+"Voorbeeld",
+"Situasie"
+],
+"scenarioOutline":[
+"Situasie Uiteensetting"
+],
+"examples":[
+"Voorbeelde"
+],
+"given":[
+"* ",
+"Gegewe "
+],
+"when":[
+"* ",
+"Wanneer "
+],
+"then":[
+"* ",
+"Dan "
+],
+"and":[
+"* ",
+"En "
+],
+"but":[
+"* ",
+"Maar "
+],
+"rule":[
+"Reël",
+"Reel"
+]
+},
+"am":{
+"name":"Armenian",
+"native":"հայերեն",
+"feature":[
+"Ֆունկցիոնալություն",
+"Հատկություն"
+],
+"background":[
+"Կոնտեքստ"
+],
+"scenario":[
+"Օրինակ",
+"Սցենար"
+],
+"scenarioOutline":[
+"Սցենարի կառուցվացքը"
+],
+"examples":[
+"Օրինակներ"
+],
+"given":[
+"* ",
+"Դիցուք "
+],
+"when":[
+"* ",
+"Եթե ",
+"Երբ "
+],
+"then":[
+"* ",
+"Ապա "
+],
+"and":[
+"* ",
+"Եվ "
+],
+"but":[
+"* ",
+"Բայց "
+],
+"rule":[
+"Rule"
+]
+},
+"amh":{
+"name":"Amharic",
+"native":"አማርኛ",
+"feature":[
+"ስራ",
+"የተፈለገው ስራ",
+"የሚፈለገው ድርጊት"
+],
+"background":[
+"ቅድመ ሁኔታ",
+"መነሻ",
+"መነሻ ሀሳብ"
+],
+"scenario":[
+"ምሳሌ",
+"ሁናቴ"
+],
+"scenarioOutline":[
+"ሁናቴ ዝርዝር",
+"ሁናቴ አብነት"
+],
+"examples":[
+"ምሳሌዎች",
+"ሁናቴዎች"
+],
+"given":[
+"* ",
+"የተሰጠ "
+],
+"when":[
+"* ",
+"መቼ "
+],
+"then":[
+"* ",
+"ከዚያ "
+],
+"and":[
+"* ",
+"እና "
+],
+"but":[
+"* ",
+"ግን "
+],
+"rule":[
+"ህግ"
+]
+},
+"an":{
+"name":"Aragonese",
+"native":"Aragonés",
+"feature":[
+"Caracteristica"
+],
+"background":[
+"Antecedents"
+],
+"scenario":[
+"Eixemplo",
+"Caso"
+],
+"scenarioOutline":[
+"Esquema del caso"
+],
+"examples":[
+"Eixemplos"
+],
+"given":[
+"* ",
+"Dau ",
+"Dada ",
+"Daus ",
+"Dadas "
+],
+"when":[
+"* ",
+"Cuan "
+],
+"then":[
+"* ",
+"Alavez ",
+"Allora ",
+"Antonces "
+],
+"and":[
+"* ",
+"Y ",
+"E "
+],
+"but":[
+"* ",
+"Pero "
+],
+"rule":[
+"Rule"
+]
+},
+"ar":{
+"name":"Arabic",
+"native":"العربية",
+"feature":[
+"خاصية"
+],
+"background":[
+"الخلفية"
+],
+"scenario":[
+"مثال",
+"سيناريو"
+],
+"scenarioOutline":[
+"سيناريو مخطط"
+],
+"examples":[
+"امثلة"
+],
+"given":[
+"* ",
+"بفرض "
+],
+"when":[
+"* ",
+"متى ",
+"عندما "
+],
+"then":[
+"* ",
+"اذاً ",
+"ثم "
+],
+"and":[
+"* ",
+"و "
+],
+"but":[
+"* ",
+"لكن "
+],
+"rule":[
+"Rule"
+]
+},
+"ast":{
+"name":"Asturian",
+"native":"asturianu",
+"feature":[
+"Carauterística"
+],
+"background":[
+"Antecedentes"
+],
+"scenario":[
+"Exemplo",
+"Casu"
+],
+"scenarioOutline":[
+"Esbozu del casu"
+],
+"examples":[
+"Exemplos"
+],
+"given":[
+"* ",
+"Dáu ",
+"Dada ",
+"Daos ",
+"Daes "
+],
+"when":[
+"* ",
+"Cuando "
+],
+"then":[
+"* ",
+"Entós "
+],
+"and":[
+"* ",
+"Y ",
+"Ya "
+],
+"but":[
+"* ",
+"Peru "
+],
+"rule":[
+"Rule"
+]
+},
+"az":{
+"name":"Azerbaijani",
+"native":"Azərbaycanca",
+"feature":[
+"Özəllik"
+],
+"background":[
+"Keçmiş",
+"Kontekst"
+],
+"scenario":[
+"Nümunə",
+"Ssenari"
+],
+"scenarioOutline":[
+"Ssenarinin strukturu"
+],
+"examples":[
+"Nümunələr"
+],
+"given":[
+"* ",
+"Tutaq ki ",
+"Verilir "
+],
+"when":[
+"* ",
+"Əgər ",
+"Nə vaxt ki "
+],
+"then":[
+"* ",
+"O halda "
+],
+"and":[
+"* ",
+"Və ",
+"Həm "
+],
+"but":[
+"* ",
+"Amma ",
+"Ancaq "
+],
+"rule":[
+"Rule"
+]
+},
+"be":{
+"name":"Belarusian",
+"native":"Беларуская",
+"feature":[
+"Функцыянальнасць",
+"Фіча"
+],
+"background":[
+"Кантэкст"
+],
+"scenario":[
+"Сцэнарый",
+"Cцэнар"
+],
+"scenarioOutline":[
+"Шаблон сцэнарыя",
+"Узор сцэнара"
+],
+"examples":[
+"Прыклады"
+],
+"given":[
+"* ",
+"Няхай ",
+"Дадзена "
+],
+"when":[
+"* ",
+"Калі "
+],
+"then":[
+"* ",
+"Тады "
+],
+"and":[
+"* ",
+"I ",
+"Ды ",
+"Таксама "
+],
+"but":[
+"* ",
+"Але ",
+"Інакш "
+],
+"rule":[
+"Правілы"
+]
+},
+"bg":{
+"name":"Bulgarian",
+"native":"български",
+"feature":[
+"Функционалност"
+],
+"background":[
+"Предистория"
+],
+"scenario":[
+"Пример",
+"Сценарий"
+],
+"scenarioOutline":[
+"Рамка на сценарий"
+],
+"examples":[
+"Примери"
+],
+"given":[
+"* ",
+"Дадено "
+],
+"when":[
+"* ",
+"Когато "
+],
+"then":[
+"* ",
+"То "
+],
+"and":[
+"* ",
+"И "
+],
+"but":[
+"* ",
+"Но "
+],
+"rule":[
+"Правило"
+]
+},
+"bm":{
+"name":"Malay",
+"native":"Bahasa Melayu",
+"feature":[
+"Fungsi"
+],
+"background":[
+"Latar Belakang"
+],
+"scenario":[
+"Senario",
+"Situasi",
+"Keadaan"
+],
+"scenarioOutline":[
+"Kerangka Senario",
+"Kerangka Situasi",
+"Kerangka Keadaan",
+"Garis Panduan Senario"
+],
+"examples":[
+"Contoh"
+],
+"given":[
+"* ",
+"Diberi ",
+"Bagi "
+],
+"when":[
+"* ",
+"Apabila "
+],
+"then":[
+"* ",
+"Maka ",
+"Kemudian "
+],
+"and":[
+"* ",
+"Dan "
+],
+"but":[
+"* ",
+"Tetapi ",
+"Tapi "
+],
+"rule":[
+"Rule"
+]
+},
+"bs":{
+"name":"Bosnian",
+"native":"Bosanski",
+"feature":[
+"Karakteristika"
+],
+"background":[
+"Pozadina"
+],
+"scenario":[
+"Primjer",
+"Scenariju",
+"Scenario"
+],
+"scenarioOutline":[
+"Scenariju-obris",
+"Scenario-outline"
+],
+"examples":[
+"Primjeri"
+],
+"given":[
+"* ",
+"Dato "
+],
+"when":[
+"* ",
+"Kada "
+],
+"then":[
+"* ",
+"Zatim "
+],
+"and":[
+"* ",
+"I ",
+"A "
+],
+"but":[
+"* ",
+"Ali "
+],
+"rule":[
+"Rule"
+]
+},
+"ca":{
+"name":"Catalan",
+"native":"català",
+"feature":[
+"Característica",
+"Funcionalitat"
+],
+"background":[
+"Rerefons",
+"Antecedents"
+],
+"scenario":[
+"Exemple",
+"Escenari"
+],
+"scenarioOutline":[
+"Esquema de l'escenari"
+],
+"examples":[
+"Exemples"
+],
+"given":[
+"* ",
+"Donat ",
+"Donada ",
+"Atès ",
+"Atesa "
+],
+"when":[
+"* ",
+"Quan "
+],
+"then":[
+"* ",
+"Aleshores ",
+"Cal "
+],
+"and":[
+"* ",
+"I "
+],
+"but":[
+"* ",
+"Però "
+],
+"rule":[
+"Rule"
+]
+},
+"cs":{
+"name":"Czech",
+"native":"Česky",
+"feature":[
+"Požadavek"
+],
+"background":[
+"Pozadí",
+"Kontext"
+],
+"scenario":[
+"Příklad",
+"Scénář"
+],
+"scenarioOutline":[
+"Náčrt Scénáře",
+"Osnova scénáře"
+],
+"examples":[
+"Příklady"
+],
+"given":[
+"* ",
+"Pokud ",
+"Za předpokladu "
+],
+"when":[
+"* ",
+"Když "
+],
+"then":[
+"* ",
+"Pak "
+],
+"and":[
+"* ",
+"A také ",
+"A "
+],
+"but":[
+"* ",
+"Ale "
+],
+"rule":[
+"Pravidlo"
+]
+},
+"cy-GB":{
+"name":"Welsh",
+"native":"Cymraeg",
+"feature":[
+"Arwedd"
+],
+"background":[
+"Cefndir"
+],
+"scenario":[
+"Enghraifft",
+"Scenario"
+],
+"scenarioOutline":[
+"Scenario Amlinellol"
+],
+"examples":[
+"Enghreifftiau"
+],
+"given":[
+"* ",
+"Anrhegedig a "
+],
+"when":[
+"* ",
+"Pryd "
+],
+"then":[
+"* ",
+"Yna "
+],
+"and":[
+"* ",
+"A "
+],
+"but":[
+"* ",
+"Ond "
+],
+"rule":[
+"Rule"
+]
+},
+"da":{
+"name":"Danish",
+"native":"dansk",
+"feature":[
+"Egenskab"
+],
+"background":[
+"Baggrund"
+],
+"scenario":[
+"Eksempel",
+"Scenarie"
+],
+"scenarioOutline":[
+"Abstrakt Scenario"
+],
+"examples":[
+"Eksempler"
+],
+"given":[
+"* ",
+"Givet "
+],
+"when":[
+"* ",
+"Når "
+],
+"then":[
+"* ",
+"Så "
+],
+"and":[
+"* ",
+"Og "
+],
+"but":[
+"* ",
+"Men "
+],
+"rule":[
+"Regel"
+]
+},
+"de":{
+"name":"German",
+"native":"Deutsch",
+"feature":[
+"Funktionalität",
+"Funktion"
+],
+"background":[
+"Grundlage",
+"Hintergrund",
+"Voraussetzungen",
+"Vorbedingungen"
+],
+"scenario":[
+"Beispiel",
+"Szenario"
+],
+"scenarioOutline":[
+"Szenariogrundriss",
+"Szenarien"
+],
+"examples":[
+"Beispiele"
+],
+"given":[
+"* ",
+"Angenommen ",
+"Gegeben sei ",
+"Gegeben seien "
+],
+"when":[
+"* ",
+"Wenn "
+],
+"then":[
+"* ",
+"Dann "
+],
+"and":[
+"* ",
+"Und "
+],
+"but":[
+"* ",
+"Aber "
+],
+"rule":[
+"Rule",
+"Regel"
+]
+},
+"el":{
+"name":"Greek",
+"native":"Ελληνικά",
+"feature":[
+"Δυνατότητα",
+"Λειτουργία"
+],
+"background":[
+"Υπόβαθρο"
+],
+"scenario":[
+"Παράδειγμα",
+"Σενάριο"
+],
+"scenarioOutline":[
+"Περιγραφή Σεναρίου",
+"Περίγραμμα Σεναρίου"
+],
+"examples":[
+"Παραδείγματα",
+"Σενάρια"
+],
+"given":[
+"* ",
+"Δεδομένου "
+],
+"when":[
+"* ",
+"Όταν "
+],
+"then":[
+"* ",
+"Τότε "
+],
+"and":[
+"* ",
+"Και "
+],
+"but":[
+"* ",
+"Αλλά "
+],
+"rule":[
+"Rule"
+]
+},
+"em":{
+"name":"Emoji",
+"native":"😀",
+"feature":[
+"📚"
+],
+"background":[
+"💤"
+],
+"scenario":[
+"🥒",
+"📕"
+],
+"scenarioOutline":[
+"📖"
+],
+"examples":[
+"📓"
+],
+"given":[
+"* ",
+"😐"
+],
+"when":[
+"* ",
+"🎬"
+],
+"then":[
+"* ",
+"🙏"
+],
+"and":[
+"* ",
+"😂"
+],
+"but":[
+"* ",
+"😔"
+],
+"rule":[
+"Rule"
+]
+},
+"en":{
+"name":"English",
+"native":"English",
+"feature":[
+"Feature",
+"Business Need",
+"Ability"
+],
+"background":[
+"Background"
+],
+"scenario":[
+"Example",
+"Scenario"
+],
+"scenarioOutline":[
+"Scenario Outline",
+"Scenario Template"
+],
+"examples":[
+"Examples",
+"Scenarios"
+],
+"given":[
+"* ",
+"Given "
+],
+"when":[
+"* ",
+"When "
+],
+"then":[
+"* ",
+"Then "
+],
+"and":[
+"* ",
+"And "
+],
+"but":[
+"* ",
+"But "
+],
+"rule":[
+"Rule"
+]
+},
+"en-Scouse":{
+"name":"Scouse",
+"native":"Scouse",
+"feature":[
+"Feature"
+],
+"background":[
+"Dis is what went down"
+],
+"scenario":[
+"The thing of it is"
+],
+"scenarioOutline":[
+"Wharrimean is"
+],
+"examples":[
+"Examples"
+],
+"given":[
+"* ",
+"Givun ",
+"Youse know when youse got "
+],
+"when":[
+"* ",
+"Wun ",
+"Youse know like when "
+],
+"then":[
+"* ",
+"Dun ",
+"Den youse gotta "
+],
+"and":[
+"* ",
+"An "
+],
+"but":[
+"* ",
+"Buh "
+],
+"rule":[
+"Rule"
+]
+},
+"en-au":{
+"name":"Australian",
+"native":"Australian",
+"feature":[
+"Pretty much"
+],
+"background":[
+"First off"
+],
+"scenario":[
+"Awww, look mate"
+],
+"scenarioOutline":[
+"Reckon it's like"
+],
+"examples":[
+"You'll wanna"
+],
+"given":[
+"* ",
+"Y'know "
+],
+"when":[
+"* ",
+"It's just unbelievable "
+],
+"then":[
+"* ",
+"But at the end of the day I reckon "
+],
+"and":[
+"* ",
+"Too right "
+],
+"but":[
+"* ",
+"Yeah nah "
+],
+"rule":[
+"Rule"
+]
+},
+"en-lol":{
+"name":"LOLCAT",
+"native":"LOLCAT",
+"feature":[
+"OH HAI"
+],
+"background":[
+"B4"
+],
+"scenario":[
+"MISHUN"
+],
+"scenarioOutline":[
+"MISHUN SRSLY"
+],
+"examples":[
+"EXAMPLZ"
+],
+"given":[
+"* ",
+"I CAN HAZ "
+],
+"when":[
+"* ",
+"WEN "
+],
+"then":[
+"* ",
+"DEN "
+],
+"and":[
+"* ",
+"AN "
+],
+"but":[
+"* ",
+"BUT "
+],
+"rule":[
+"Rule"
+]
+},
+"en-old":{
+"name":"Old English",
+"native":"Englisc",
+"feature":[
+"Hwaet",
+"Hwæt"
+],
+"background":[
+"Aer",
+"Ær"
+],
+"scenario":[
+"Swa"
+],
+"scenarioOutline":[
+"Swa hwaer swa",
+"Swa hwær swa"
+],
+"examples":[
+"Se the",
+"Se þe",
+"Se ðe"
+],
+"given":[
+"* ",
+"Thurh ",
+"Þurh ",
+"Ðurh "
+],
+"when":[
+"* ",
+"Bæþsealf ",
+"Bæþsealfa ",
+"Bæþsealfe ",
+"Ciricæw ",
+"Ciricæwe ",
+"Ciricæwa "
+],
+"then":[
+"* ",
+"Tha ",
+"Þa ",
+"Ða ",
+"Tha the ",
+"Þa þe ",
+"Ða ðe "
+],
+"and":[
+"* ",
+"Ond ",
+"7 "
+],
+"but":[
+"* ",
+"Ac "
+],
+"rule":[
+"Rule"
+]
+},
+"en-pirate":{
+"name":"Pirate",
+"native":"Pirate",
+"feature":[
+"Ahoy matey!"
+],
+"background":[
+"Yo-ho-ho"
+],
+"scenario":[
+"Heave to"
+],
+"scenarioOutline":[
+"Shiver me timbers"
+],
+"examples":[
+"Dead men tell no tales"
+],
+"given":[
+"* ",
+"Gangway! "
+],
+"when":[
+"* ",
+"Blimey! "
+],
+"then":[
+"* ",
+"Let go and haul "
+],
+"and":[
+"* ",
+"Aye "
+],
+"but":[
+"* ",
+"Avast! "
+],
+"rule":[
+"Rule"
+]
+},
+"en-tx":{
+"name":"Texas",
+"native":"Texas",
+"feature":[
+"This ain’t my first rodeo",
+"All gussied up"
+],
+"background":[
+"Lemme tell y'all a story"
+],
+"scenario":[
+"All hat and no cattle"
+],
+"scenarioOutline":[
+"Serious as a snake bite",
+"Busy as a hound in flea season"
+],
+"examples":[
+"Now that's a story longer than a cattle drive in July"
+],
+"given":[
+"Fixin' to ",
+"All git out "
+],
+"when":[
+"Quick out of the chute "
+],
+"then":[
+"There’s no tree but bears some fruit "
+],
+"and":[
+"Come hell or high water "
+],
+"but":[
+"Well now hold on, I'll you what "
+],
+"rule":[
+"Rule"
+]
+},
+"eo":{
+"name":"Esperanto",
+"native":"Esperanto",
+"feature":[
+"Trajto"
+],
+"background":[
+"Fono"
+],
+"scenario":[
+"Ekzemplo",
+"Scenaro",
+"Kazo"
+],
+"scenarioOutline":[
+"Konturo de la scenaro",
+"Skizo",
+"Kazo-skizo"
+],
+"examples":[
+"Ekzemploj"
+],
+"given":[
+"* ",
+"Donitaĵo ",
+"Komence "
+],
+"when":[
+"* ",
+"Se "
+],
+"then":[
+"* ",
+"Do "
+],
+"and":[
+"* ",
+"Kaj "
+],
+"but":[
+"* ",
+"Sed "
+],
+"rule":[
+"Regulo"
+]
+},
+"es":{
+"name":"Spanish",
+"native":"español",
+"feature":[
+"Característica",
+"Necesidad del negocio",
+"Requisito"
+],
+"background":[
+"Antecedentes"
+],
+"scenario":[
+"Ejemplo",
+"Escenario"
+],
+"scenarioOutline":[
+"Esquema del escenario"
+],
+"examples":[
+"Ejemplos"
+],
+"given":[
+"* ",
+"Dado ",
+"Dada ",
+"Dados ",
+"Dadas "
+],
+"when":[
+"* ",
+"Cuando "
+],
+"then":[
+"* ",
+"Entonces "
+],
+"and":[
+"* ",
+"Y ",
+"E "
+],
+"but":[
+"* ",
+"Pero "
+],
+"rule":[
+"Regla",
+"Regla de negocio"
+]
+},
+"et":{
+"name":"Estonian",
+"native":"eesti keel",
+"feature":[
+"Omadus"
+],
+"background":[
+"Taust"
+],
+"scenario":[
+"Juhtum",
+"Stsenaarium"
+],
+"scenarioOutline":[
+"Raamjuhtum",
+"Raamstsenaarium"
+],
+"examples":[
+"Juhtumid"
+],
+"given":[
+"* ",
+"Eeldades "
+],
+"when":[
+"* ",
+"Kui "
+],
+"then":[
+"* ",
+"Siis "
+],
+"and":[
+"* ",
+"Ja "
+],
+"but":[
+"* ",
+"Kuid "
+],
+"rule":[
+"Reegel"
+]
+},
+"fa":{
+"name":"Persian",
+"native":"فارسی",
+"feature":[
+"ویژگی",
+"قابلیت"
+],
+"background":[
+"زمینه",
+"پیش زمینه",
+"مقدمات"
+],
+"scenario":[
+"مثال",
+"سناریو"
+],
+"scenarioOutline":[
+"الگوی سناریو"
+],
+"examples":[
+"نمونه ها"
+],
+"given":[
+"* ",
+"با فرض ",
+"فرض کنید ",
+"با در نظر گرفتن "
+],
+"when":[
+"* ",
+"هنگامی ",
+"وقتی "
+],
+"then":[
+"* ",
+"آنگاه ",
+"سپس ",
+"انتظار می رود "
+],
+"and":[
+"* ",
+"و "
+],
+"but":[
+"* ",
+"اما "
+],
+"rule":[
+"قانون"
+]
+},
+"fi":{
+"name":"Finnish",
+"native":"suomi",
+"feature":[
+"Ominaisuus"
+],
+"background":[
+"Tausta"
+],
+"scenario":[
+"Tapaus"
+],
+"scenarioOutline":[
+"Tapausaihio"
+],
+"examples":[
+"Tapaukset"
+],
+"given":[
+"* ",
+"Oletetaan "
+],
+"when":[
+"* ",
+"Kun "
+],
+"then":[
+"* ",
+"Niin "
+],
+"and":[
+"* ",
+"Ja "
+],
+"but":[
+"* ",
+"Mutta "
+],
+"rule":[
+"Rule"
+]
+},
+"fr":{
+"name":"French",
+"native":"français",
+"feature":[
+"Fonctionnalité"
+],
+"background":[
+"Contexte"
+],
+"scenario":[
+"Exemple",
+"Scénario"
+],
+"scenarioOutline":[
+"Plan du scénario",
+"Plan du Scénario"
+],
+"examples":[
+"Exemples"
+],
+"given":[
+"* ",
+"Soit ",
+"Sachant que ",
+"Sachant qu'",
+"Sachant ",
+"Etant donné que ",
+"Etant donné qu'",
+"Etant donné ",
+"Etant donnée ",
+"Etant donnés ",
+"Etant données ",
+"Étant donné que ",
+"Étant donné qu'",
+"Étant donné ",
+"Étant donnée ",
+"Étant donnés ",
+"Étant données "
+],
+"when":[
+"* ",
+"Quand ",
+"Lorsque ",
+"Lorsqu'"
+],
+"then":[
+"* ",
+"Alors ",
+"Donc "
+],
+"and":[
+"* ",
+"Et que ",
+"Et qu'",
+"Et "
+],
+"but":[
+"* ",
+"Mais que ",
+"Mais qu'",
+"Mais "
+],
+"rule":[
+"Règle"
+]
+},
+"ga":{
+"name":"Irish",
+"native":"Gaeilge",
+"feature":[
+"Gné"
+],
+"background":[
+"Cúlra"
+],
+"scenario":[
+"Sampla",
+"Cás"
+],
+"scenarioOutline":[
+"Cás Achomair"
+],
+"examples":[
+"Samplaí"
+],
+"given":[
+"* ",
+"Cuir i gcás go ",
+"Cuir i gcás nach ",
+"Cuir i gcás gur ",
+"Cuir i gcás nár "
+],
+"when":[
+"* ",
+"Nuair a ",
+"Nuair nach ",
+"Nuair ba ",
+"Nuair nár "
+],
+"then":[
+"* ",
+"Ansin "
+],
+"and":[
+"* ",
+"Agus "
+],
+"but":[
+"* ",
+"Ach "
+],
+"rule":[
+"Riail"
+]
+},
+"gj":{
+"name":"Gujarati",
+"native":"ગુજરાતી",
+"feature":[
+"લક્ષણ",
+"વ્યાપાર જરૂર",
+"ક્ષમતા"
+],
+"background":[
+"બેકગ્રાઉન્ડ"
+],
+"scenario":[
+"ઉદાહરણ",
+"સ્થિતિ"
+],
+"scenarioOutline":[
+"પરિદ્દશ્ય રૂપરેખા",
+"પરિદ્દશ્ય ઢાંચો"
+],
+"examples":[
+"ઉદાહરણો"
+],
+"given":[
+"* ",
+"આપેલ છે "
+],
+"when":[
+"* ",
+"ક્યારે "
+],
+"then":[
+"* ",
+"પછી "
+],
+"and":[
+"* ",
+"અને "
+],
+"but":[
+"* ",
+"પણ "
+],
+"rule":[
+"નિયમ"
+]
+},
+"gl":{
+"name":"Galician",
+"native":"galego",
+"feature":[
+"Característica"
+],
+"background":[
+"Contexto"
+],
+"scenario":[
+"Exemplo",
+"Escenario"
+],
+"scenarioOutline":[
+"Esbozo do escenario"
+],
+"examples":[
+"Exemplos"
+],
+"given":[
+"* ",
+"Dado ",
+"Dada ",
+"Dados ",
+"Dadas "
+],
+"when":[
+"* ",
+"Cando "
+],
+"then":[
+"* ",
+"Entón ",
+"Logo "
+],
+"and":[
+"* ",
+"E "
+],
+"but":[
+"* ",
+"Mais ",
+"Pero "
+],
+"rule":[
+"Rule"
+]
+},
+"he":{
+"name":"Hebrew",
+"native":"עברית",
+"feature":[
+"תכונה"
+],
+"background":[
+"רקע"
+],
+"scenario":[
+"דוגמא",
+"תרחיש"
+],
+"scenarioOutline":[
+"תבנית תרחיש"
+],
+"examples":[
+"דוגמאות"
+],
+"given":[
+"* ",
+"בהינתן "
+],
+"when":[
+"* ",
+"כאשר "
+],
+"then":[
+"* ",
+"אז ",
+"אזי "
+],
+"and":[
+"* ",
+"וגם "
+],
+"but":[
+"* ",
+"אבל "
+],
+"rule":[
+"כלל"
+]
+},
+"hi":{
+"name":"Hindi",
+"native":"हिंदी",
+"feature":[
+"रूप लेख"
+],
+"background":[
+"पृष्ठभूमि"
+],
+"scenario":[
+"परिदृश्य"
+],
+"scenarioOutline":[
+"परिदृश्य रूपरेखा"
+],
+"examples":[
+"उदाहरण"
+],
+"given":[
+"* ",
+"अगर ",
+"यदि ",
+"चूंकि "
+],
+"when":[
+"* ",
+"जब ",
+"कदा "
+],
+"then":[
+"* ",
+"तब ",
+"तदा "
+],
+"and":[
+"* ",
+"और ",
+"तथा "
+],
+"but":[
+"* ",
+"पर ",
+"परन्तु ",
+"किन्तु "
+],
+"rule":[
+"नियम"
+]
+},
+"hr":{
+"name":"Croatian",
+"native":"hrvatski",
+"feature":[
+"Osobina",
+"Mogućnost",
+"Mogucnost"
+],
+"background":[
+"Pozadina"
+],
+"scenario":[
+"Primjer",
+"Scenarij"
+],
+"scenarioOutline":[
+"Skica",
+"Koncept"
+],
+"examples":[
+"Primjeri",
+"Scenariji"
+],
+"given":[
+"* ",
+"Zadan ",
+"Zadani ",
+"Zadano ",
+"Ukoliko "
+],
+"when":[
+"* ",
+"Kada ",
+"Kad "
+],
+"then":[
+"* ",
+"Onda "
+],
+"and":[
+"* ",
+"I "
+],
+"but":[
+"* ",
+"Ali "
+],
+"rule":[
+"Rule"
+]
+},
+"ht":{
+"name":"Creole",
+"native":"kreyòl",
+"feature":[
+"Karakteristik",
+"Mak",
+"Fonksyonalite"
+],
+"background":[
+"Kontèks",
+"Istorik"
+],
+"scenario":[
+"Senaryo"
+],
+"scenarioOutline":[
+"Plan senaryo",
+"Plan Senaryo",
+"Senaryo deskripsyon",
+"Senaryo Deskripsyon",
+"Dyagram senaryo",
+"Dyagram Senaryo"
+],
+"examples":[
+"Egzanp"
+],
+"given":[
+"* ",
+"Sipoze ",
+"Sipoze ke ",
+"Sipoze Ke "
+],
+"when":[
+"* ",
+"Lè ",
+"Le "
+],
+"then":[
+"* ",
+"Lè sa a ",
+"Le sa a "
+],
+"and":[
+"* ",
+"Ak ",
+"Epi ",
+"E "
+],
+"but":[
+"* ",
+"Men "
+],
+"rule":[
+"Rule"
+]
+},
+"hu":{
+"name":"Hungarian",
+"native":"magyar",
+"feature":[
+"Jellemző"
+],
+"background":[
+"Háttér"
+],
+"scenario":[
+"Példa",
+"Forgatókönyv"
+],
+"scenarioOutline":[
+"Forgatókönyv vázlat"
+],
+"examples":[
+"Példák"
+],
+"given":[
+"* ",
+"Amennyiben ",
+"Adott "
+],
+"when":[
+"* ",
+"Majd ",
+"Ha ",
+"Amikor "
+],
+"then":[
+"* ",
+"Akkor "
+],
+"and":[
+"* ",
+"És "
+],
+"but":[
+"* ",
+"De "
+],
+"rule":[
+"Szabály"
+]
+},
+"id":{
+"name":"Indonesian",
+"native":"Bahasa Indonesia",
+"feature":[
+"Fitur"
+],
+"background":[
+"Dasar",
+"Latar Belakang"
+],
+"scenario":[
+"Skenario"
+],
+"scenarioOutline":[
+"Skenario konsep",
+"Garis-Besar Skenario"
+],
+"examples":[
+"Contoh",
+"Misal"
+],
+"given":[
+"* ",
+"Dengan ",
+"Diketahui ",
+"Diasumsikan ",
+"Bila ",
+"Jika "
+],
+"when":[
+"* ",
+"Ketika "
+],
+"then":[
+"* ",
+"Maka ",
+"Kemudian "
+],
+"and":[
+"* ",
+"Dan "
+],
+"but":[
+"* ",
+"Tapi ",
+"Tetapi "
+],
+"rule":[
+"Rule",
+"Aturan"
+]
+},
+"is":{
+"name":"Icelandic",
+"native":"Íslenska",
+"feature":[
+"Eiginleiki"
+],
+"background":[
+"Bakgrunnur"
+],
+"scenario":[
+"Atburðarás"
+],
+"scenarioOutline":[
+"Lýsing Atburðarásar",
+"Lýsing Dæma"
+],
+"examples":[
+"Dæmi",
+"Atburðarásir"
+],
+"given":[
+"* ",
+"Ef "
+],
+"when":[
+"* ",
+"Þegar "
+],
+"then":[
+"* ",
+"Þá "
+],
+"and":[
+"* ",
+"Og "
+],
+"but":[
+"* ",
+"En "
+],
+"rule":[
+"Rule"
+]
+},
+"it":{
+"name":"Italian",
+"native":"italiano",
+"feature":[
+"Funzionalità",
+"Esigenza di Business",
+"Abilità"
+],
+"background":[
+"Contesto"
+],
+"scenario":[
+"Esempio",
+"Scenario"
+],
+"scenarioOutline":[
+"Schema dello scenario"
+],
+"examples":[
+"Esempi"
+],
+"given":[
+"* ",
+"Dato ",
+"Data ",
+"Dati ",
+"Date "
+],
+"when":[
+"* ",
+"Quando "
+],
+"then":[
+"* ",
+"Allora "
+],
+"and":[
+"* ",
+"E ",
+"Ed "
+],
+"but":[
+"* ",
+"Ma "
+],
+"rule":[
+"Regola"
+]
+},
+"ja":{
+"name":"Japanese",
+"native":"日本語",
+"feature":[
+"フィーチャ",
+"機能"
+],
+"background":[
+"背景"
+],
+"scenario":[
+"シナリオ"
+],
+"scenarioOutline":[
+"シナリオアウトライン",
+"シナリオテンプレート",
+"テンプレ",
+"シナリオテンプレ"
+],
+"examples":[
+"例",
+"サンプル"
+],
+"given":[
+"* ",
+"前提"
+],
+"when":[
+"* ",
+"もし"
+],
+"then":[
+"* ",
+"ならば"
+],
+"and":[
+"* ",
+"且つ",
+"かつ"
+],
+"but":[
+"* ",
+"然し",
+"しかし",
+"但し",
+"ただし"
+],
+"rule":[
+"ルール"
+]
+},
+"jv":{
+"name":"Javanese",
+"native":"Basa Jawa",
+"feature":[
+"Fitur"
+],
+"background":[
+"Dasar"
+],
+"scenario":[
+"Skenario"
+],
+"scenarioOutline":[
+"Konsep skenario"
+],
+"examples":[
+"Conto",
+"Contone"
+],
+"given":[
+"* ",
+"Nalika ",
+"Nalikaning "
+],
+"when":[
+"* ",
+"Manawa ",
+"Menawa "
+],
+"then":[
+"* ",
+"Njuk ",
+"Banjur "
+],
+"and":[
+"* ",
+"Lan "
+],
+"but":[
+"* ",
+"Tapi ",
+"Nanging ",
+"Ananging "
+],
+"rule":[
+"Rule"
+]
+},
+"ka":{
+"name":"Georgian",
+"native":"ქართული",
+"feature":[
+"თვისება",
+"მოთხოვნა"
+],
+"background":[
+"კონტექსტი"
+],
+"scenario":[
+"მაგალითად",
+"მაგალითი",
+"მაგ",
+"სცენარი"
+],
+"scenarioOutline":[
+"სცენარის ნიმუში",
+"სცენარის შაბლონი",
+"ნიმუში",
+"შაბლონი"
+],
+"examples":[
+"მაგალითები"
+],
+"given":[
+"* ",
+"მოცემული ",
+"მოცემულია ",
+"ვთქვათ "
+],
+"when":[
+"* ",
+"როდესაც ",
+"როცა ",
+"როგორც კი ",
+"თუ "
+],
+"then":[
+"* ",
+"მაშინ "
+],
+"and":[
+"* ",
+"და ",
+"ასევე "
+],
+"but":[
+"* ",
+"მაგრამ ",
+"თუმცა "
+],
+"rule":[
+"წესი"
+]
+},
+"kn":{
+"name":"Kannada",
+"native":"ಕನ್ನಡ",
+"feature":[
+"ಹೆಚ್ಚಳ"
+],
+"background":[
+"ಹಿನ್ನೆಲೆ"
+],
+"scenario":[
+"ಉದಾಹರಣೆ",
+"ಕಥಾಸಾರಾಂಶ"
+],
+"scenarioOutline":[
+"ವಿವರಣೆ"
+],
+"examples":[
+"ಉದಾಹರಣೆಗಳು"
+],
+"given":[
+"* ",
+"ನೀಡಿದ "
+],
+"when":[
+"* ",
+"ಸ್ಥಿತಿಯನ್ನು "
+],
+"then":[
+"* ",
+"ನಂತರ "
+],
+"and":[
+"* ",
+"ಮತ್ತು "
+],
+"but":[
+"* ",
+"ಆದರೆ "
+],
+"rule":[
+"Rule"
+]
+},
+"ko":{
+"name":"Korean",
+"native":"한국어",
+"feature":[
+"기능"
+],
+"background":[
+"배경"
+],
+"scenario":[
+"시나리오"
+],
+"scenarioOutline":[
+"시나리오 개요"
+],
+"examples":[
+"예"
+],
+"given":[
+"* ",
+"조건 ",
+"먼저 "
+],
+"when":[
+"* ",
+"만일 ",
+"만약 "
+],
+"then":[
+"* ",
+"그러면 "
+],
+"and":[
+"* ",
+"그리고 "
+],
+"but":[
+"* ",
+"하지만 ",
+"단 "
+],
+"rule":[
+"규칙"
+]
+},
+"lt":{
+"name":"Lithuanian",
+"native":"lietuvių kalba",
+"feature":[
+"Savybė"
+],
+"background":[
+"Kontekstas"
+],
+"scenario":[
+"Pavyzdys",
+"Scenarijus"
+],
+"scenarioOutline":[
+"Scenarijaus šablonas"
+],
+"examples":[
+"Pavyzdžiai",
+"Scenarijai",
+"Variantai"
+],
+"given":[
+"* ",
+"Duota "
+],
+"when":[
+"* ",
+"Kai "
+],
+"then":[
+"* ",
+"Tada "
+],
+"and":[
+"* ",
+"Ir "
+],
+"but":[
+"* ",
+"Bet "
+],
+"rule":[
+"Rule"
+]
+},
+"lu":{
+"name":"Luxemburgish",
+"native":"Lëtzebuergesch",
+"feature":[
+"Funktionalitéit"
+],
+"background":[
+"Hannergrond"
+],
+"scenario":[
+"Beispill",
+"Szenario"
+],
+"scenarioOutline":[
+"Plang vum Szenario"
+],
+"examples":[
+"Beispiller"
+],
+"given":[
+"* ",
+"ugeholl "
+],
+"when":[
+"* ",
+"wann "
+],
+"then":[
+"* ",
+"dann "
+],
+"and":[
+"* ",
+"an ",
+"a "
+],
+"but":[
+"* ",
+"awer ",
+"mä "
+],
+"rule":[
+"Rule"
+]
+},
+"lv":{
+"name":"Latvian",
+"native":"latviešu",
+"feature":[
+"Funkcionalitāte",
+"Fīča"
+],
+"background":[
+"Konteksts",
+"Situācija"
+],
+"scenario":[
+"Piemērs",
+"Scenārijs"
+],
+"scenarioOutline":[
+"Scenārijs pēc parauga"
+],
+"examples":[
+"Piemēri",
+"Paraugs"
+],
+"given":[
+"* ",
+"Kad "
+],
+"when":[
+"* ",
+"Ja "
+],
+"then":[
+"* ",
+"Tad "
+],
+"and":[
+"* ",
+"Un "
+],
+"but":[
+"* ",
+"Bet "
+],
+"rule":[
+"Rule"
+]
+},
+"mk-Cyrl":{
+"name":"Macedonian",
+"native":"Македонски",
+"feature":[
+"Функционалност",
+"Бизнис потреба",
+"Можност"
+],
+"background":[
+"Контекст",
+"Содржина"
+],
+"scenario":[
+"Пример",
+"Сценарио",
+"На пример"
+],
+"scenarioOutline":[
+"Преглед на сценарија",
+"Скица",
+"Концепт"
+],
+"examples":[
+"Примери",
+"Сценарија"
+],
+"given":[
+"* ",
+"Дадено ",
+"Дадена "
+],
+"when":[
+"* ",
+"Кога "
+],
+"then":[
+"* ",
+"Тогаш "
+],
+"and":[
+"* ",
+"И "
+],
+"but":[
+"* ",
+"Но "
+],
+"rule":[
+"Rule"
+]
+},
+"mk-Latn":{
+"name":"Macedonian (Latin)",
+"native":"Makedonski (Latinica)",
+"feature":[
+"Funkcionalnost",
+"Biznis potreba",
+"Mozhnost"
+],
+"background":[
+"Kontekst",
+"Sodrzhina"
+],
+"scenario":[
+"Scenario",
+"Na primer"
+],
+"scenarioOutline":[
+"Pregled na scenarija",
+"Skica",
+"Koncept"
+],
+"examples":[
+"Primeri",
+"Scenaria"
+],
+"given":[
+"* ",
+"Dadeno ",
+"Dadena "
+],
+"when":[
+"* ",
+"Koga "
+],
+"then":[
+"* ",
+"Togash "
+],
+"and":[
+"* ",
+"I "
+],
+"but":[
+"* ",
+"No "
+],
+"rule":[
+"Rule"
+]
+},
+"ml":{
+"name":"Malayalam",
+"native":"മലയാളം",
+"feature":[
+"സവിശേഷത"
+],
+"background":[
+"പശ്ചാത്തലം"
+],
+"scenario":[
+"രംഗം"
+],
+"scenarioOutline":[
+"സാഹചര്യത്തിന്റെ രൂപരേഖ"
+],
+"examples":[
+"ഉദാഹരണങ്ങൾ"
+],
+"given":[
+"* ",
+"നൽകിയത്"
+],
+"when":[
+"എപ്പോൾ"
+],
+"then":[
+"* ",
+"പിന്നെ"
+],
+"and":[
+"* ",
+"ഒപ്പം"
+],
+"but":[
+"* ",
+"പക്ഷേ"
+],
+"rule":[
+"നിയമം"
+]
+},
+"mn":{
+"name":"Mongolian",
+"native":"монгол",
+"feature":[
+"Функц",
+"Функционал"
+],
+"background":[
+"Агуулга"
+],
+"scenario":[
+"Сценар"
+],
+"scenarioOutline":[
+"Сценарын төлөвлөгөө"
+],
+"examples":[
+"Тухайлбал"
+],
+"given":[
+"* ",
+"Өгөгдсөн нь ",
+"Анх "
+],
+"when":[
+"* ",
+"Хэрэв "
+],
+"then":[
+"* ",
+"Тэгэхэд ",
+"Үүний дараа "
+],
+"and":[
+"* ",
+"Мөн ",
+"Тэгээд "
+],
+"but":[
+"* ",
+"Гэхдээ ",
+"Харин "
+],
+"rule":[
+"Rule"
+]
+},
+"mr":{
+"name":"Marathi",
+"native":"मराठी",
+"feature":[
+"वैशिष्ट्य",
+"सुविधा"
+],
+"background":[
+"पार्श्वभूमी"
+],
+"scenario":[
+"परिदृश्य"
+],
+"scenarioOutline":[
+"परिदृश्य रूपरेखा"
+],
+"examples":[
+"उदाहरण"
+],
+"given":[
+"* ",
+"जर",
+"दिलेल्या प्रमाणे "
+],
+"when":[
+"* ",
+"जेव्हा "
+],
+"then":[
+"* ",
+"मग ",
+"तेव्हा "
+],
+"and":[
+"* ",
+"आणि ",
+"तसेच "
+],
+"but":[
+"* ",
+"पण ",
+"परंतु "
+],
+"rule":[
+"नियम"
+]
+},
+"ne":{
+"name":"Nepali",
+"native":"नेपाली",
+"feature":[
+"सुविधा",
+"विशेषता"
+],
+"background":[
+"पृष्ठभूमी"
+],
+"scenario":[
+"परिदृश्य"
+],
+"scenarioOutline":[
+"परिदृश्य रूपरेखा"
+],
+"examples":[
+"उदाहरण",
+"उदाहरणहरु"
+],
+"given":[
+"* ",
+"दिइएको ",
+"दिएको ",
+"यदि "
+],
+"when":[
+"* ",
+"जब "
+],
+"then":[
+"* ",
+"त्यसपछि ",
+"अनी "
+],
+"and":[
+"* ",
+"र ",
+"अनि "
+],
+"but":[
+"* ",
+"तर "
+],
+"rule":[
+"नियम"
+]
+},
+"nl":{
+"name":"Dutch",
+"native":"Nederlands",
+"feature":[
+"Functionaliteit"
+],
+"background":[
+"Achtergrond"
+],
+"scenario":[
+"Voorbeeld",
+"Scenario"
+],
+"scenarioOutline":[
+"Abstract Scenario"
+],
+"examples":[
+"Voorbeelden"
+],
+"given":[
+"* ",
+"Gegeven ",
+"Stel "
+],
+"when":[
+"* ",
+"Als ",
+"Wanneer "
+],
+"then":[
+"* ",
+"Dan "
+],
+"and":[
+"* ",
+"En "
+],
+"but":[
+"* ",
+"Maar "
+],
+"rule":[
+"Regel"
+]
+},
+"no":{
+"name":"Norwegian",
+"native":"norsk",
+"feature":[
+"Egenskap"
+],
+"background":[
+"Bakgrunn"
+],
+"scenario":[
+"Eksempel",
+"Scenario"
+],
+"scenarioOutline":[
+"Scenariomal",
+"Abstrakt Scenario"
+],
+"examples":[
+"Eksempler"
+],
+"given":[
+"* ",
+"Gitt "
+],
+"when":[
+"* ",
+"Når "
+],
+"then":[
+"* ",
+"Så "
+],
+"and":[
+"* ",
+"Og "
+],
+"but":[
+"* ",
+"Men "
+],
+"rule":[
+"Regel"
+]
+},
+"pa":{
+"name":"Panjabi",
+"native":"ਪੰਜਾਬੀ",
+"feature":[
+"ਖਾਸੀਅਤ",
+"ਮੁਹਾਂਦਰਾ",
+"ਨਕਸ਼ ਨੁਹਾਰ"
+],
+"background":[
+"ਪਿਛੋਕੜ"
+],
+"scenario":[
+"ਉਦਾਹਰਨ",
+"ਪਟਕਥਾ"
+],
+"scenarioOutline":[
+"ਪਟਕਥਾ ਢਾਂਚਾ",
+"ਪਟਕਥਾ ਰੂਪ ਰੇਖਾ"
+],
+"examples":[
+"ਉਦਾਹਰਨਾਂ"
+],
+"given":[
+"* ",
+"ਜੇਕਰ ",
+"ਜਿਵੇਂ ਕਿ "
+],
+"when":[
+"* ",
+"ਜਦੋਂ "
+],
+"then":[
+"* ",
+"ਤਦ "
+],
+"and":[
+"* ",
+"ਅਤੇ "
+],
+"but":[
+"* ",
+"ਪਰ "
+],
+"rule":[
+"Rule"
+]
+},
+"pl":{
+"name":"Polish",
+"native":"polski",
+"feature":[
+"Właściwość",
+"Funkcja",
+"Aspekt",
+"Potrzeba biznesowa"
+],
+"background":[
+"Założenia"
+],
+"scenario":[
+"Przykład",
+"Scenariusz"
+],
+"scenarioOutline":[
+"Szablon scenariusza"
+],
+"examples":[
+"Przykłady"
+],
+"given":[
+"* ",
+"Zakładając ",
+"Mając ",
+"Zakładając, że "
+],
+"when":[
+"* ",
+"Jeżeli ",
+"Jeśli ",
+"Gdy ",
+"Kiedy "
+],
+"then":[
+"* ",
+"Wtedy "
+],
+"and":[
+"* ",
+"Oraz ",
+"I "
+],
+"but":[
+"* ",
+"Ale "
+],
+"rule":[
+"Zasada",
+"Reguła"
+]
+},
+"pt":{
+"name":"Portuguese",
+"native":"português",
+"feature":[
+"Funcionalidade",
+"Característica",
+"Caracteristica"
+],
+"background":[
+"Contexto",
+"Cenário de Fundo",
+"Cenario de Fundo",
+"Fundo"
+],
+"scenario":[
+"Exemplo",
+"Cenário",
+"Cenario"
+],
+"scenarioOutline":[
+"Esquema do Cenário",
+"Esquema do Cenario",
+"Delineação do Cenário",
+"Delineacao do Cenario"
+],
+"examples":[
+"Exemplos",
+"Cenários",
+"Cenarios"
+],
+"given":[
+"* ",
+"Dado ",
+"Dada ",
+"Dados ",
+"Dadas "
+],
+"when":[
+"* ",
+"Quando "
+],
+"then":[
+"* ",
+"Então ",
+"Entao "
+],
+"and":[
+"* ",
+"E "
+],
+"but":[
+"* ",
+"Mas "
+],
+"rule":[
+"Regra"
+]
+},
+"ro":{
+"name":"Romanian",
+"native":"română",
+"feature":[
+"Functionalitate",
+"Funcționalitate",
+"Funcţionalitate"
+],
+"background":[
+"Context"
+],
+"scenario":[
+"Exemplu",
+"Scenariu"
+],
+"scenarioOutline":[
+"Structura scenariu",
+"Structură scenariu"
+],
+"examples":[
+"Exemple"
+],
+"given":[
+"* ",
+"Date fiind ",
+"Dat fiind ",
+"Dată fiind",
+"Dati fiind ",
+"Dați fiind ",
+"Daţi fiind "
+],
+"when":[
+"* ",
+"Cand ",
+"Când "
+],
+"then":[
+"* ",
+"Atunci "
+],
+"and":[
+"* ",
+"Si ",
+"Și ",
+"Şi "
+],
+"but":[
+"* ",
+"Dar "
+],
+"rule":[
+"Rule"
+]
+},
+"ru":{
+"name":"Russian",
+"native":"русский",
+"feature":[
+"Функция",
+"Функциональность",
+"Функционал",
+"Свойство",
+"Фича"
+],
+"background":[
+"Предыстория",
+"Контекст"
+],
+"scenario":[
+"Пример",
+"Сценарий"
+],
+"scenarioOutline":[
+"Структура сценария",
+"Шаблон сценария"
+],
+"examples":[
+"Примеры",
+"Значения"
+],
+"given":[
+"* ",
+"Допустим ",
+"Дано ",
+"Пусть "
+],
+"when":[
+"* ",
+"Когда ",
+"Если "
+],
+"then":[
+"* ",
+"То ",
+"Затем ",
+"Тогда "
+],
+"and":[
+"* ",
+"И ",
+"К тому же ",
+"Также "
+],
+"but":[
+"* ",
+"Но ",
+"А ",
+"Иначе "
+],
+"rule":[
+"Правило"
+]
+},
+"sk":{
+"name":"Slovak",
+"native":"Slovensky",
+"feature":[
+"Požiadavka",
+"Funkcia",
+"Vlastnosť"
+],
+"background":[
+"Pozadie"
+],
+"scenario":[
+"Príklad",
+"Scenár"
+],
+"scenarioOutline":[
+"Náčrt Scenáru",
+"Náčrt Scenára",
+"Osnova Scenára"
+],
+"examples":[
+"Príklady"
+],
+"given":[
+"* ",
+"Pokiaľ ",
+"Za predpokladu "
+],
+"when":[
+"* ",
+"Keď ",
+"Ak "
+],
+"then":[
+"* ",
+"Tak ",
+"Potom "
+],
+"and":[
+"* ",
+"A ",
+"A tiež ",
+"A taktiež ",
+"A zároveň "
+],
+"but":[
+"* ",
+"Ale "
+],
+"rule":[
+"Rule"
+]
+},
+"sl":{
+"name":"Slovenian",
+"native":"Slovenski",
+"feature":[
+"Funkcionalnost",
+"Funkcija",
+"Možnosti",
+"Moznosti",
+"Lastnost",
+"Značilnost"
+],
+"background":[
+"Kontekst",
+"Osnova",
+"Ozadje"
+],
+"scenario":[
+"Primer",
+"Scenarij"
+],
+"scenarioOutline":[
+"Struktura scenarija",
+"Skica",
+"Koncept",
+"Oris scenarija",
+"Osnutek"
+],
+"examples":[
+"Primeri",
+"Scenariji"
+],
+"given":[
+"Dano ",
+"Podano ",
+"Zaradi ",
+"Privzeto "
+],
+"when":[
+"Ko ",
+"Ce ",
+"Če ",
+"Kadar "
+],
+"then":[
+"Nato ",
+"Potem ",
+"Takrat "
+],
+"and":[
+"In ",
+"Ter "
+],
+"but":[
+"Toda ",
+"Ampak ",
+"Vendar "
+],
+"rule":[
+"Rule"
+]
+},
+"sr-Cyrl":{
+"name":"Serbian",
+"native":"Српски",
+"feature":[
+"Функционалност",
+"Могућност",
+"Особина"
+],
+"background":[
+"Контекст",
+"Основа",
+"Позадина"
+],
+"scenario":[
+"Сценарио",
+"Пример"
+],
+"scenarioOutline":[
+"Структура сценарија",
+"Скица",
+"Концепт"
+],
+"examples":[
+"Примери",
+"Сценарији"
+],
+"given":[
+"* ",
+"За дато ",
+"За дате ",
+"За дати "
+],
+"when":[
+"* ",
+"Када ",
+"Кад "
+],
+"then":[
+"* ",
+"Онда "
+],
+"and":[
+"* ",
+"И "
+],
+"but":[
+"* ",
+"Али "
+],
+"rule":[
+"Правило"
+]
+},
+"sr-Latn":{
+"name":"Serbian (Latin)",
+"native":"Srpski (Latinica)",
+"feature":[
+"Funkcionalnost",
+"Mogućnost",
+"Mogucnost",
+"Osobina"
+],
+"background":[
+"Kontekst",
+"Osnova",
+"Pozadina"
+],
+"scenario":[
+"Scenario",
+"Primer"
+],
+"scenarioOutline":[
+"Struktura scenarija",
+"Skica",
+"Koncept"
+],
+"examples":[
+"Primeri",
+"Scenariji"
+],
+"given":[
+"* ",
+"Za dato ",
+"Za date ",
+"Za dati "
+],
+"when":[
+"* ",
+"Kada ",
+"Kad "
+],
+"then":[
+"* ",
+"Onda "
+],
+"and":[
+"* ",
+"I "
+],
+"but":[
+"* ",
+"Ali "
+],
+"rule":[
+"Pravilo"
+]
+},
+"sv":{
+"name":"Swedish",
+"native":"Svenska",
+"feature":[
+"Egenskap"
+],
+"background":[
+"Bakgrund"
+],
+"scenario":[
+"Scenario"
+],
+"scenarioOutline":[
+"Abstrakt Scenario",
+"Scenariomall"
+],
+"examples":[
+"Exempel"
+],
+"given":[
+"* ",
+"Givet "
+],
+"when":[
+"* ",
+"När "
+],
+"then":[
+"* ",
+"Så "
+],
+"and":[
+"* ",
+"Och "
+],
+"but":[
+"* ",
+"Men "
+],
+"rule":[
+"Regel"
+]
+},
+"ta":{
+"name":"Tamil",
+"native":"தமிழ்",
+"feature":[
+"அம்சம்",
+"வணிக தேவை",
+"திறன்"
+],
+"background":[
+"பின்னணி"
+],
+"scenario":[
+"உதாரணமாக",
+"காட்சி"
+],
+"scenarioOutline":[
+"காட்சி சுருக்கம்",
+"காட்சி வார்ப்புரு"
+],
+"examples":[
+"எடுத்துக்காட்டுகள்",
+"காட்சிகள்",
+"நிலைமைகளில்"
+],
+"given":[
+"* ",
+"கொடுக்கப்பட்ட "
+],
+"when":[
+"* ",
+"எப்போது "
+],
+"then":[
+"* ",
+"அப்பொழுது "
+],
+"and":[
+"* ",
+"மேலும் ",
+"மற்றும் "
+],
+"but":[
+"* ",
+"ஆனால் "
+],
+"rule":[
+"Rule"
+]
+},
+"te":{
+"name":"Telugu",
+"native":"తెలుగు",
+"feature":[
+"గుణము"
+],
+"background":[
+"నేపథ్యం"
+],
+"scenario":[
+"ఉదాహరణ",
+"సన్నివేశం"
+],
+"scenarioOutline":[
+"కథనం"
+],
+"examples":[
+"ఉదాహరణలు"
+],
+"given":[
+"* ",
+"చెప్పబడినది "
+],
+"when":[
+"* ",
+"ఈ పరిస్థితిలో "
+],
+"then":[
+"* ",
+"అప్పుడు "
+],
+"and":[
+"* ",
+"మరియు "
+],
+"but":[
+"* ",
+"కాని "
+],
+"rule":[
+"Rule"
+]
+},
+"th":{
+"name":"Thai",
+"native":"ไทย",
+"feature":[
+"โครงหลัก",
+"ความต้องการทางธุรกิจ",
+"ความสามารถ"
+],
+"background":[
+"แนวคิด"
+],
+"scenario":[
+"เหตุการณ์"
+],
+"scenarioOutline":[
+"สรุปเหตุการณ์",
+"โครงสร้างของเหตุการณ์"
+],
+"examples":[
+"ชุดของตัวอย่าง",
+"ชุดของเหตุการณ์"
+],
+"given":[
+"* ",
+"กำหนดให้ "
+],
+"when":[
+"* ",
+"เมื่อ "
+],
+"then":[
+"* ",
+"ดังนั้น "
+],
+"and":[
+"* ",
+"และ "
+],
+"but":[
+"* ",
+"แต่ "
+],
+"rule":[
+"Rule"
+]
+},
+"tlh":{
+"name":"Klingon",
+"native":"tlhIngan",
+"feature":[
+"Qap",
+"Qu'meH 'ut",
+"perbogh",
+"poQbogh malja'",
+"laH"
+],
+"background":[
+"mo'"
+],
+"scenario":[
+"lut"
+],
+"scenarioOutline":[
+"lut chovnatlh"
+],
+"examples":[
+"ghantoH",
+"lutmey"
+],
+"given":[
+"* ",
+"ghu' noblu' ",
+"DaH ghu' bejlu' "
+],
+"when":[
+"* ",
+"qaSDI' "
+],
+"then":[
+"* ",
+"vaj "
+],
+"and":[
+"* ",
+"'ej ",
+"latlh "
+],
+"but":[
+"* ",
+"'ach ",
+"'a "
+],
+"rule":[
+"Rule"
+]
+},
+"tr":{
+"name":"Turkish",
+"native":"Türkçe",
+"feature":[
+"Özellik",
+"İş Gereksinimi",
+"Gereksinim",
+"İşlev",
+"Kullanıcı Hikayesi",
+"Yetenek",
+"Teknik Gereksinim"
+],
+"background":[
+"Geçmiş",
+"Arka Plan",
+"Ön Koşul",
+"Önkoşul",
+"Önceki Durum",
+"Giriş",
+"Mukaddime",
+"Mevcut Durum"
+],
+"scenario":[
+"Örnek",
+"Senaryo",
+"Durum",
+"Vaka"
+],
+"scenarioOutline":[
+"Senaryo taslağı",
+"Senaryo şablonu"
+],
+"examples":[
+"Örnekler",
+"Değerler"
+],
+"given":[
+"* ",
+"Mevcut ",
+"Önceden ",
+"Geçmişte ",
+"Daha önce ",
+"Halihazırda ",
+"Zaten ",
+"Sistemde ",
+"Diyelim ki ",
+"Varsayalım ki ",
+"Farz edelim ki ",
+"Kabul edelim ki ",
+"Başlangıçta ",
+"Varsayılan olarak ",
+"Biliniyor ki "
+],
+"when":[
+"* ",
+"Eğer ",
+"Eğer ki ",
+"Ne zaman ",
+"Ne zaman ki ",
+"Şayet "
+],
+"then":[
+"* ",
+"Beklenen ",
+"O zaman ",
+"Sonuç olarak ",
+"Böylece ",
+"Bunun üzerine ",
+"Bu durumda ",
+"O takdirde ",
+"Şu halde ",
+"Netice itibariyle ",
+"Buna binaen "
+],
+"and":[
+"* ",
+"Ve ",
+"Hem de ",
+"Bir de ",
+"Ayrıca ",
+"İlaveten ",
+"Buna ek olarak "
+],
+"but":[
+"* ",
+"Fakat ",
+"Ama ",
+"Ancak ",
+"Yalnız ",
+"Lakin ",
+"Meğer ki ",
+"Buna mukabil ",
+"Aksi halde "
+],
+"rule":[
+"Kural",
+"İş Kuralı",
+"Kaide",
+"Hüküm",
+"Madde"
+]
+},
+"tt":{
+"name":"Tatar",
+"native":"Татарча",
+"feature":[
+"Мөмкинлек",
+"Үзенчәлеклелек"
+],
+"background":[
+"Кереш"
+],
+"scenario":[
+"Сценарий"
+],
+"scenarioOutline":[
+"Сценарийның төзелеше"
+],
+"examples":[
+"Үрнәкләр",
+"Мисаллар"
+],
+"given":[
+"* ",
+"Әйтик "
+],
+"when":[
+"* ",
+"Әгәр "
+],
+"then":[
+"* ",
+"Нәтиҗәдә "
+],
+"and":[
+"* ",
+"Һәм ",
+"Вә "
+],
+"but":[
+"* ",
+"Ләкин ",
+"Әмма "
+],
+"rule":[
+"Rule"
+]
+},
+"uk":{
+"name":"Ukrainian",
+"native":"Українська",
+"feature":[
+"Функціонал"
+],
+"background":[
+"Передумова"
+],
+"scenario":[
+"Приклад",
+"Сценарій"
+],
+"scenarioOutline":[
+"Структура сценарію"
+],
+"examples":[
+"Приклади"
+],
+"given":[
+"* ",
+"Припустимо ",
+"Припустимо, що ",
+"Нехай ",
+"Дано "
+],
+"when":[
+"* ",
+"Якщо ",
+"Коли "
+],
+"then":[
+"* ",
+"То ",
+"Тоді "
+],
+"and":[
+"* ",
+"І ",
+"А також ",
+"Та "
+],
+"but":[
+"* ",
+"Але "
+],
+"rule":[
+"Rule"
+]
+},
+"ur":{
+"name":"Urdu",
+"native":"اردو",
+"feature":[
+"صلاحیت",
+"کاروبار کی ضرورت",
+"خصوصیت"
+],
+"background":[
+"پس منظر"
+],
+"scenario":[
+"منظرنامہ"
+],
+"scenarioOutline":[
+"منظر نامے کا خاکہ"
+],
+"examples":[
+"مثالیں"
+],
+"given":[
+"* ",
+"اگر ",
+"بالفرض ",
+"فرض کیا "
+],
+"when":[
+"* ",
+"جب "
+],
+"then":[
+"* ",
+"پھر ",
+"تب "
+],
+"and":[
+"* ",
+"اور "
+],
+"but":[
+"* ",
+"لیکن "
+],
+"rule":[
+"Rule"
+]
+},
+"uz":{
+"name":"Uzbek",
+"native":"Узбекча",
+"feature":[
+"Функционал"
+],
+"background":[
+"Тарих"
+],
+"scenario":[
+"Сценарий"
+],
+"scenarioOutline":[
+"Сценарий структураси"
+],
+"examples":[
+"Мисоллар"
+],
+"given":[
+"* ",
+"Belgilangan "
+],
+"when":[
+"* ",
+"Агар "
+],
+"then":[
+"* ",
+"Унда "
+],
+"and":[
+"* ",
+"Ва "
+],
+"but":[
+"* ",
+"Лекин ",
+"Бирок ",
+"Аммо "
+],
+"rule":[
+"Rule"
+]
+},
+"vi":{
+"name":"Vietnamese",
+"native":"Tiếng Việt",
+"feature":[
+"Tính năng"
+],
+"background":[
+"Bối cảnh"
+],
+"scenario":[
+"Tình huống",
+"Kịch bản"
+],
+"scenarioOutline":[
+"Khung tình huống",
+"Khung kịch bản"
+],
+"examples":[
+"Dữ liệu"
+],
+"given":[
+"* ",
+"Biết ",
+"Cho "
+],
+"when":[
+"* ",
+"Khi "
+],
+"then":[
+"* ",
+"Thì "
+],
+"and":[
+"* ",
+"Và "
+],
+"but":[
+"* ",
+"Nhưng "
+],
+"rule":[
+"Quy tắc"
+]
+},
+"zh-CN":{
+"name":"Chinese simplified",
+"native":"简体中文",
+"feature":[
+"功能"
+],
+"background":[
+"背景"
+],
+"scenario":[
+"场景",
+"剧本"
+],
+"scenarioOutline":[
+"场景大纲",
+"剧本大纲"
+],
+"examples":[
+"例子"
+],
+"given":[
+"* ",
+"假如",
+"假设",
+"假定"
+],
+"when":[
+"* ",
+"当"
+],
+"then":[
+"* ",
+"那么"
+],
+"and":[
+"* ",
+"而且",
+"并且",
+"同时"
+],
+"but":[
+"* ",
+"但是"
+],
+"rule":[
+"Rule",
+"规则"
+]
+},
+"zh-TW":{
+"name":"Chinese traditional",
+"native":"繁體中文",
+"feature":[
+"功能"
+],
+"background":[
+"背景"
+],
+"scenario":[
+"場景",
+"劇本"
+],
+"scenarioOutline":[
+"場景大綱",
+"劇本大綱"
+],
+"examples":[
+"例子"
+],
+"given":[
+"* ",
+"假如",
+"假設",
+"假定"
+],
+"when":[
+"* ",
+"當"
+],
+"then":[
+"* ",
+"那麼"
+],
+"and":[
+"* ",
+"而且",
+"並且",
+"同時"
+],
+"but":[
+"* ",
+"但是"
+],
+"rule":[
+"Rule"
+]
+}
+}
