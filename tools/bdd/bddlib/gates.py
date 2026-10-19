@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import approvals, enforcement, featurefiles, lockfile, state, store
+from . import approvals, enforcement, featurefiles, lockfile, state, store, tripwire
 from .errors import UsageError
 
 # Human gates that must be validly approved before a machine gate may pass.
@@ -37,6 +37,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str) -> list[
         problems += approvals.effective_problems(root, data, human_gate)
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
+        problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]
     if gate == "verify" and data["gates"].get("implement", {}).get("result") != "pass":
         problems.append("the implement gate has not passed")
     return problems
