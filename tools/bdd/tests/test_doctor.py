@@ -25,6 +25,8 @@ class DoctorChecksTest(unittest.TestCase):
         self.assertEqual(doctor.check_latency([250, 260, 255], "linux").status, "warn")
         self.assertEqual(doctor.check_latency([250, 260, 255], "win32").status, "ok")
         self.assertEqual(doctor.check_latency([], "linux").status, "warn")
+        c = doctor.check_latency([], "linux", "exit 2: can't open main.py")
+        self.assertIn("can't open main.py", c.detail)
 
     def test_exit_code_reflects_failures(self):
         ok = [doctor.Check("a", "ok", "")]

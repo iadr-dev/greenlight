@@ -1,0 +1,20 @@
+---
+name: init
+description: Check that this machine and repository are ready for greenlight (Python 3.11+, sh, git, hook latency) and report what to fix. Use when the user runs /greenlight:init or asks to set up or diagnose greenlight.
+---
+
+# greenlight init
+
+Scaffolding for a repository (stack detection, adapter, `.bdd/`) is not available yet.
+For now this command only checks the environment.
+
+1. Run the doctor and show its output unchanged:
+
+   ```sh
+   "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" doctor
+   ```
+
+2. For every `WARN` or `FAIL` line, repeat its `fix:` text and offer to help apply it.
+   Do not change anything on the machine without asking first.
+3. If the command itself cannot run (exit code 127), the machine has no Python 3.11+.
+   Relay the message the wrapper printed.
