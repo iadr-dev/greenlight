@@ -56,6 +56,16 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(command["type"], "command")
         self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" guard')
 
+    def test_every_prompt_reaches_the_approval_hook(self):
+        (entry,) = load("hooks/hooks.json")["hooks"]["UserPromptSubmit"]
+        self.assertNotIn("matcher", entry)                      # UserPromptSubmit has no matcher: it sees every prompt
+        (command,) = entry["hooks"]
+        self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve --from-hook')
+
+    def test_the_approve_skill_cannot_be_invoked_by_the_model(self):
+        meta, _ = parse((ROOT / "skills" / "approve" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertEqual(meta.get("disable-model-invocation"), "true")
+
     def test_wrapper_uses_lf_line_endings(self):
         raw = (ROOT / "tools/bdd/bdd").read_bytes()
         self.assertNotIn(b"\r\n", raw, "tools/bdd/bdd must use LF line endings")

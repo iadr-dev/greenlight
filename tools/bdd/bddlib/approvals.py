@@ -171,11 +171,17 @@ def find_transcript(transcript_path: str) -> Path | None:
     return None
 
 
-def prompt_entries(transcript_path: str, prompt_id: str) -> list[dict]:
-    """Every real (non-meta) user entry of the transcript carrying ``prompt_id``.
+def is_tool_result(entry: dict) -> bool:
+    """Claude Code records each tool result as a user entry that shares the prompt's id; it is not a prompt."""
+    content = (entry.get("message") or {}).get("content")
+    return isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
 
-    Normally exactly one. They are all kept so that a second entry with the same id but another origin
-    makes the approval invalid instead of being skipped."""
+
+def prompt_entries(transcript_path: str, prompt_id: str) -> list[dict]:
+    """Every real user entry of the transcript carrying ``prompt_id``: not meta, not a tool result.
+
+    Normally exactly one. They are all kept so that a second prompt entry with the same id but another
+    origin makes the approval invalid instead of being skipped."""
     path = find_transcript(transcript_path)
     if path is None:
         return []
@@ -185,8 +191,9 @@ def prompt_entries(transcript_path: str, prompt_id: str) -> list[dict]:
             entry = json.loads(line)
         except ValueError:
             continue
-        if entry.get("type") == "user" and entry.get("promptId") == prompt_id and not entry.get("isMeta"):
-            found.append(entry)
+        if entry.get("type") == "user" and entry.get("promptId") == prompt_id:
+            if not entry.get("isMeta") and not is_tool_result(entry):
+                found.append(entry)
     return found
 
 
