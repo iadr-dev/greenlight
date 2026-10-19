@@ -56,15 +56,39 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(command["type"], "command")
         self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" guard')
 
-    def test_every_prompt_reaches_the_approval_hook(self):
+    def test_every_prompt_reaches_the_approval_hook_and_the_baseline_refresh(self):
         (entry,) = load("hooks/hooks.json")["hooks"]["UserPromptSubmit"]
         self.assertNotIn("matcher", entry)                      # UserPromptSubmit has no matcher: it sees every prompt
+        commands = [c["command"] for c in entry["hooks"]]
+        self.assertEqual(commands, ['sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve --from-hook',
+                                    'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" tripwire --accept'])
+
+    def test_the_tripwire_runs_after_every_tool_the_guard_checks_and_after_mcp_tools(self):
+        from bddlib import guard
+        (entry,) = load("hooks/hooks.json")["hooks"]["PostToolUse"]
+        matched = set(entry["matcher"].split("|"))
+        self.assertEqual(matched, set(guard.WRITE_TOOLS) | guard.INJECTION_TOOLS | {"Bash", "mcp__.*"})
         (command,) = entry["hooks"]
-        self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve --from-hook')
+        self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" tripwire')
 
     def test_the_approve_skill_cannot_be_invoked_by_the_model(self):
         meta, _ = parse((ROOT / "skills" / "approve" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertEqual(meta.get("disable-model-invocation"), "true")
+
+    def test_every_hook_command_is_a_real_bdd_command(self):
+        """An unknown command exits 2, which would block every prompt or tool call."""
+        import re
+        from bddlib.cli import COMMANDS
+        used = []
+        for entries in load("hooks/hooks.json")["hooks"].values():
+            for entry in entries:
+                used += [c["command"] for c in entry["hooks"]]
+        self.assertTrue(used)
+        for command in used:
+            with self.subTest(command=command):
+                match = re.fullmatch(r'sh "\$\{CLAUDE_PLUGIN_ROOT\}/tools/bdd/bdd" (\w+)(?: .*)?', command)
+                self.assertIsNotNone(match)
+                self.assertIn(match.group(1), COMMANDS)
 
     def test_wrapper_uses_lf_line_endings(self):
         raw = (ROOT / "tools/bdd/bdd").read_bytes()

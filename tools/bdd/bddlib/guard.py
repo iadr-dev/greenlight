@@ -55,6 +55,7 @@ AGENT_WRITES = {
 }
 MANAGED_NAMES = {"state.json", "lock.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
+MANAGED_DIRS = (".enforcement", ".integrity")   # session markers, integrity baseline and violations
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
@@ -147,7 +148,7 @@ class Project:
             return False
         inside = key[len(data_root) + 1:]
         name = inside.rsplit("/", 1)[-1]
-        return (inside.startswith(".enforcement/") or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
+        return (inside.startswith(tuple(d + "/" for d in MANAGED_DIRS)) or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
                 or inside == MANAGED_CONFIG)
 
     def category(self, path: Path) -> str:
@@ -244,8 +245,9 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
         if ".bdd/config.toml" in text:
             return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
-        if "/.enforcement/" in text:
-            return project.root / cfg.BDD_DIR / ".enforcement", None
+        for managed in MANAGED_DIRS:
+            if f"/{managed}/" in text:
+                return project.root / cfg.BDD_DIR / managed, None
     return None
 
 

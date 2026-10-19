@@ -17,6 +17,21 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd\" approve --from-hook"
+          },
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd\" tripwire --accept"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|CronCreate|ScheduleWakeup|SendMessage|Skill|RemoteTrigger|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd\" tripwire"
           }
         ]
       }

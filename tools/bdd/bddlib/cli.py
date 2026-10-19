@@ -20,6 +20,7 @@ COMMANDS = {
     "assume": ("statecmd", "run_assume"),
     "cost": ("statecmd", "run_cost"),
     "mode": ("statecmd", "run_mode"),
+    "tripwire": ("tripwire", "main"),
 }
 
 
