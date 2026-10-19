@@ -12,6 +12,8 @@ versions follow [SemVer](https://semver.org/).
 - `bdd doctor` (python, sh, git, hook-latency checks with fixes; `--json`).
 - Plugin manifest and single-plugin marketplace (`/plugin marketplace add iadr-dev/greenlight`, `/plugin install greenlight@greenlight`), and an `init` skill that runs `bdd doctor`. Unit tests check the manifests, skill front matter and version agreement; `claude plugin validate` is part of the release checklist.
 
+- Gherkin parser (`bddlib/gherkin.py`): Feature, Rule, Background, Scenario, Scenario Outline, Examples, steps, data tables, doc strings, tags and comments, with localized keywords for 80 languages (`# language: zh-TW`), line-numbered errors, and tag inheritance helpers. The keyword table is a trimmed copy of Cucumber's `gherkin-languages.json` (MIT).
+
 ### Added (tooling)
 - `evals/platform-probe/probe.py`: re-verifies the Claude Code behaviours the design depends on (hook shell, agent naming, approval-hook behaviour, transcript origin markers, `/loop` scheduling) against the installed CLI.
 
