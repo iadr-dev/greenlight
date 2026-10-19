@@ -10,6 +10,7 @@ from . import __version__
 # run this on every tool call.
 COMMANDS = {
     "doctor": ("doctor", "main"),
+    "guard": ("guard", "main"),
     "lint": ("lint", "run"),
     "lock": ("lockcmd", "run_lock"),
     "unlock": ("lockcmd", "run_unlock"),
