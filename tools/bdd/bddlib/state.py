@@ -11,7 +11,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-from . import featurefiles, lockfile, store
+from . import enforcement, store
 from .errors import UsageError
 
 STATE_FILE = "state.json"
@@ -40,7 +40,17 @@ def path_of(feature_dir: Path) -> Path:
 def new_state(feature_id: str, title: str, autonomy: str) -> dict:
     return {"schema": store.SCHEMA, "feature": feature_id, "title": title, "created_at": store.utc_now(),
             "phase": PHASES[0], "autonomy": {"level": autonomy, "switches": []}, "gates": {},
-            "approvals": [], "assumptions": [], "cost": {}, "red": None}
+            "approvals": [], "assumptions": [], "cost": {}, "red": None, "hooks_seen": False}
+
+
+def observe_hooks(root: Path, feature_dir: Path) -> bool:
+    """Copy 'hooks have run in this project' into the feature's state, one way only.
+
+    The marker files can be deleted; the state is CLI-managed and checked at the gates. Once a
+    feature has been built where hooks ran, it stays recorded as such."""
+    if enforcement.hooks_seen(root) and not load(feature_dir).get("hooks_seen"):
+        update(feature_dir, lambda current: current.__setitem__("hooks_seen", True))
+    return bool(load(feature_dir).get("hooks_seen"))
 
 
 def create(root: Path, feature_id: str, title: str, autonomy: str) -> Path:
@@ -69,7 +79,7 @@ def load(feature_dir: Path) -> dict:
         raise _missing(feature_dir) from None
 
 
-def _update(feature_dir: Path, mutate) -> dict:
+def update(feature_dir: Path, mutate) -> dict:
     """Apply ``mutate`` to the feature's state under the file lock."""
     try:
         return store.update_json(path_of(feature_dir), "state file", mutate)
@@ -77,54 +87,10 @@ def _update(feature_dir: Path, mutate) -> dict:
         raise _missing(feature_dir) from None
 
 
-def _advance(state: dict, gate: str) -> None:
+def advance_phase(state: dict, gate: str) -> None:
     target = GATE_NEXT.get(gate)
     if target and PHASES.index(target) > PHASES.index(state["phase"]):
         state["phase"] = target
-
-
-def gate_problems(root: Path, feature_dir: Path, state: dict, gate: str) -> list[str]:
-    """Reasons a *passing* result may not be recorded yet (empty list = fine).
-
-    These are the machine-enforced gates: implementation is only done if the approved specs and
-    the bound steps are still exactly what was locked, and a feature is only verified after
-    implementation passed."""
-    problems: list[str] = []
-    if gate in ("implement", "verify"):
-        feature_id = state["feature"]
-        data = lockfile.read_lock(feature_dir, feature_id)
-        problems += [f"{scope} is not locked" for scope in lockfile.SCOPES if scope not in data["scopes"]]
-        current = [lockfile.relative(root, f) for f in featurefiles.spec_files(root, feature_id)]
-        problems += [str(v) for v in lockfile.check(root, feature_dir, feature_id, lockfile.SCOPES, current)]
-    if gate == "verify" and state["gates"].get("implement", {}).get("result") != "pass":
-        problems.append("the implement gate has not passed")
-    return problems
-
-
-def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: dict[str, str],
-                red: dict | None = None) -> dict:
-    if name in HUMAN_GATES:
-        raise UsageError(f"'{name}' is a human gate: only the person can approve it, by typing "
-                         f"/greenlight:approve <feature> {name}")
-    if name not in MACHINE_GATES:
-        raise UsageError(f"unknown gate '{name}'; machine gates are: {', '.join(MACHINE_GATES)}")
-    if result not in RESULTS:
-        raise UsageError(f"result must be one of {', '.join(RESULTS)}")
-    if red is not None and name != "bind":
-        raise UsageError("--record-red belongs to the bind gate")
-
-    def mutate(state: dict) -> None:
-        if result == "pass":
-            problems = gate_problems(root, feature_dir, state, name)
-            if problems:
-                raise UsageError(f"cannot record {name}=pass: " + "; ".join(problems))
-        state["gates"][name] = {"result": result, "at": store.utc_now(), "detail": detail}
-        if red is not None:
-            state["red"] = red
-        if result == "pass":
-            _advance(state, name)
-
-    return _update(feature_dir, mutate)
 
 
 def add_assumption(feature_dir: Path, text: str, rationale: str, alternatives: list[str]) -> str:
@@ -139,7 +105,7 @@ def add_assumption(feature_dir: Path, text: str, rationale: str, alternatives: l
                                      "alternatives": alternatives, "at": store.utc_now()})
         created.append(assumption_id)
 
-    _update(feature_dir, mutate)
+    update(feature_dir, mutate)
     return created[0]
 
 
@@ -155,7 +121,7 @@ def add_cost(feature_dir: Path, phase: str, tokens: int, seconds: float) -> dict
         entry["seconds"] = round(entry["seconds"] + seconds, 3)
         entry["runs"] += 1
 
-    return _update(feature_dir, mutate)
+    return update(feature_dir, mutate)
 
 
 def switch_autonomy(feature_dir: Path, level: str, reason: str) -> dict:
@@ -172,4 +138,4 @@ def switch_autonomy(feature_dir: Path, level: str, reason: str) -> dict:
                                               "at": store.utc_now(), "phase": state["phase"]})
         state["autonomy"]["level"] = level
 
-    return _update(feature_dir, mutate)
+    return update(feature_dir, mutate)
