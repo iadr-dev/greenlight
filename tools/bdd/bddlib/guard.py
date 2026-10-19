@@ -58,13 +58,20 @@ SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
 _APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b", re.IGNORECASE)
-_CLAUDE_MANAGEMENT = {"plugin", "plugins", "mcp", "config", "doctor", "update", "install", "--version", "-v",
-                      "--help", "-h"}
+# The only `claude ...` forms a greenlight project's agent may run: they neither start a session nor
+# change anything. Everything else is refused, including `claude plugin disable|uninstall|install`,
+# `mcp add|remove`, `config set` and `update`, because those can switch greenlight's own checks off.
+_CLAUDE_READ_ONLY = {("--version",), ("-v",), ("--help",), ("-h",), ("doctor",),
+                     ("plugin", "list"), ("plugins", "list"), ("plugin", "details"), ("plugin", "validate"),
+                     ("mcp", "list"), ("mcp", "get"), ("config", "list"), ("config", "get")}
 # `claude ...` as a command: at the start of a command or pipeline segment, after optional env/sudo-style
-# prefixes and VAR=value assignments, possibly with a path in front. Captures the next word.
+# prefixes and VAR=value assignments, possibly with a path in front. Captures the next two words.
 _CLAUDE_CALL = re.compile(
     r"(?:^|[;&|(`\n]|\$\()\s*(?:(?:env|sudo|command|exec|nohup|time|nice)\s+|[A-Za-z_]\w*=\S*\s+)*"
-    r"(?:\S*[\\/])?claude(?:\.exe|\.cmd)?(?:\s+(\S+))?", re.IGNORECASE)
+    r"(?:\S*[\\/])?claude(?:\.exe|\.cmd)?(?:\s+(\S+))?(?:\s+(\S+))?", re.IGNORECASE)
+# The `.claude` directory itself as an argument (not a file inside it): moving, deleting or replacing
+# it with a symlink would take its settings with it.
+_CLAUDE_DIR_ARG = re.compile(r"(?<![\w.-])\.claude/?(?=[\s;&|)]|$)", re.IGNORECASE)
 _CLAUDE_RUNNER = re.compile(r"\b(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec)\b[^;&|\n]*"
                             r"(?:\bclaude\b|@anthropic-ai/claude-code)", re.IGNORECASE)
 _CLAUDE_FROM_CODE = re.compile(r"(?:subprocess|Popen|os\.system|os\.exec\w*|spawn\w*|execFile?|execa)\W[^\n]*"
@@ -169,9 +176,12 @@ def check_enforcement_files(path: Path) -> str | None:
         return enforcement_message(path, "is part of the greenlight plugin")
     if "/.claude/hooks/" in key:
         return enforcement_message(path, "is a Claude Code hook")
-    real_parts = [part.casefold() for part in Path(os.path.realpath(path)).parts]      # symlinks resolved
-    if ".claude" in real_parts[:-1] and real_parts[-1] in SETTINGS_NAMES:
-        return enforcement_message(path, "is a Claude Code settings file")
+    # Both spellings: the path as written (a `.claude` that is itself a symlink to somewhere else
+    # resolves to a path without `.claude` in it) and the resolved path (a symlink *to* `.claude`).
+    for parts in (path.parts, Path(os.path.realpath(path)).parts):
+        names = [part.casefold() for part in parts]
+        if ".claude" in names[:-1] and names[-1] in SETTINGS_NAMES:
+            return enforcement_message(path, "is a Claude Code settings file")
     return None
 
 
@@ -222,11 +232,12 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
 
 def command_touches_enforcement(command: str) -> bool:
     """Does a (write-like) shell command target Claude Code's hook settings or the plugin itself?"""
-    text = command.replace("\\", "/")
-    if _SETTINGS_TEXT.search(text):
+    # Quotes are dropped first so that `.cla"ude/set"tings.json` reads as the path it spells.
+    text = command.replace("\\", "/").replace('"', "").replace("'", "")
+    if _SETTINGS_TEXT.search(text) or _CLAUDE_DIR_ARG.search(text):
         return True
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
-    return bool(plugin_root) and path_key(plugin_root) in text.casefold().replace("\\", "/")
+    return bool(plugin_root) and path_key(plugin_root) in text.casefold()
 
 
 def starts_claude_session(command: str) -> bool:
@@ -234,19 +245,22 @@ def starts_claude_session(command: str) -> bool:
 
     A nested session is the one way for the agent to produce a prompt that *looks* typed. Matching
     the approval text alone cannot be complete (it can be built from pieces), so the session itself
-    is refused. Subcommands that only manage Claude Code (``claude plugin list``, ``--version``)
-    are fine. This is friction, not the safeguard: the approval is still checked against the
-    transcript, and a prompt from a headless session is not accepted by default."""
+    is refused, and so is every management command that changes something (``plugin disable``
+    would switch greenlight off). Only the read-only forms in ``_CLAUDE_READ_ONLY`` pass. This is
+    friction, not the safeguard: the approval is still checked against the transcript, and a
+    prompt from a headless session is not accepted by default."""
     for call in _CLAUDE_CALL.finditer(command):
-        if (call.group(1) or "").strip("\"'").casefold() not in _CLAUDE_MANAGEMENT:
+        words = tuple(word.strip("\"'").casefold() for word in call.groups() if word)
+        if not any(words[:size] in _CLAUDE_READ_ONLY for size in (1, 2)):
             return True
     return bool(_CLAUDE_RUNNER.search(command) or _CLAUDE_FROM_CODE.search(command))
 
 
 NESTED_SESSION_MESSAGE = (
     "greenlight: starting another Claude Code session from inside this one is not allowed in a greenlight "
-    "project: a prompt typed into a nested session could be used to approve work on the person's behalf. "
-    "`claude plugin ...`, `claude mcp ...` and `claude --version` are fine.")
+    "project: a prompt typed into a nested session could be used to approve work on the person's behalf, and "
+    "commands such as `claude plugin disable` would switch greenlight off. Read-only commands such as "
+    "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
 def check_bash(project: Project, command: str) -> str | None:

@@ -392,6 +392,17 @@ class EnforcementFilesTest(GuardCase):
             self.skipTest("symlinks are not available here")
         self.assertIn("is a Claude Code settings file", self.call("Write", file_path=str(link / "settings.json"), content="{}"))
 
+    def test_a_claude_folder_that_is_a_symlink_to_somewhere_else_is_still_recognised(self):
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        try:
+            (self.root / ".claude").symlink_to(elsewhere, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are not available here")
+        # The resolved path no longer contains ".claude", but the path as written does.
+        reason = self.call("Write", file_path=str(self.root / ".claude" / "settings.json"), content="{}")
+        self.assertIn("is a Claude Code settings file", reason)
+
     def test_settings_json_files_elsewhere_are_ordinary_files(self):
         for rel in ("settings.json", "src/settings.json", ".vscode/settings.json"):
             with self.subTest(rel=rel):
@@ -417,11 +428,16 @@ class EnforcementFilesTest(GuardCase):
                         "echo '{\"permissions\": {}}' > .claude/settings.json",
                         "sed -i 's/a/b/' .claude/settings.local.json",
                         "cp /tmp/x.json ~/.claude/settings.json",
-                        "rm -r .claude/hooks/"]:
+                        "rm -r .claude/hooks/",
+                        "echo '{}' > .claude/set\"tings\".json",             # quotes splitting the name
+                        "sed -i s/a/b/ \".cla\"\"ude/settings.json\"",
+                        "rm -rf .claude", "rm -rf .claude/", "mv .claude .claude-old", "ln -sfn /tmp/x .claude",
+                        "rm -r ~/.claude", "cp -r /tmp/evil .claude", "Remove-Item -Recurse .claude"]:
             with self.subTest(command=command):
                 self.assertIn("what enforces greenlight", self.call("Bash", command=command))
         for command in ["cat .claude/settings.json", "jq .permissions .claude/settings.json",
-                        "grep hooks .claude/settings.json", "ls .claude"]:
+                        "grep hooks .claude/settings.json", "ls .claude", "ls -la .claude/", "cat .claude/agents/x.md",
+                        "cat .claude/settings.json > /dev/null", "echo done > notes.txt"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.call("Bash", command=command))
 
@@ -441,8 +457,11 @@ class NestedSessionTest(GuardCase):
                 self.assertTrue(guard.starts_claude_session(command), command)
                 self.assertIsNotNone(self.call("Bash", command=command))
 
-    def test_commands_that_only_manage_claude_code_or_mention_the_word_are_fine(self):
-        for command in ["claude plugin list", "claude --version", "claude mcp list", "claude config get theme",
+    def test_read_only_claude_commands_and_the_bare_word_are_fine(self):
+        for command in ["claude plugin list", "claude plugin list --json", "claude plugins list",
+                        "claude plugin details greenlight", "claude plugin validate .", "claude mcp list",
+                        "claude mcp get server", "claude config get theme", "claude config list", "claude --version",
+                        "claude -v", "claude --help", "claude doctor",
                         "git commit -m 'ask claude later'", "ls claude-notes", "cat claude.md", "echo claude",
                         "cat .claude/settings.json", "ls ~/.claude/projects", "./.claude/hooks/run.sh",
                         "grep -r claude src", "python -m unittest"]:
@@ -450,10 +469,21 @@ class NestedSessionTest(GuardCase):
                 self.assertFalse(guard.starts_claude_session(command), command)
                 self.assertIsNone(self.call("Bash", command=command))
 
+    def test_management_commands_that_change_something_are_blocked_because_they_can_switch_greenlight_off(self):
+        for command in ["claude plugin disable greenlight@greenlight", "claude plugin uninstall greenlight@greenlight",
+                        "claude plugin install other@market", "claude plugin enable x", "claude plugin marketplace remove greenlight",
+                        "claude plugin update greenlight", "claude mcp add evil -- node x.js", "claude mcp remove x",
+                        "claude config set theme dark", "claude config add a b", "claude update", "claude install",
+                        "claude plugin", "claude mcp"]:
+            with self.subTest(command=command):
+                self.assertTrue(guard.starts_claude_session(command), command)
+                self.assertIn("nested session", self.call("Bash", command=command))
+
     def test_the_reason_explains_what_is_allowed(self):
         reason = self.call("Bash", command="claude -p hi")
         self.assertIn("nested session", reason)
-        self.assertIn("`claude plugin ...`", reason)
+        self.assertIn("`claude plugin disable`", reason)
+        self.assertIn("`claude plugin list`", reason)
 
 
 class PerformanceTest(unittest.TestCase):
