@@ -5,8 +5,22 @@ import sys
 
 from . import __version__
 
+LF = chr(10)  # newline="\n" for reconfigure(): no translation, so Windows pipes get LF, not CRLF
+
+
+def configure_streams(*streams) -> None:
+    """Make stdout/stderr UTF-8 with LF endings whatever the terminal or code page.
+
+    Hook output and reports are read by tools, not people at a console: PowerShell, cmd
+    and Git Bash on Windows must all produce identical bytes (and not crash on a check mark).
+    """
+    for stream in streams or (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace", newline=LF)
+
 
 def main(argv: list[str]) -> int:
+    configure_streams()
     if argv in (["--version"], ["version"]):
         print(f"bdd {__version__}")
         return 0

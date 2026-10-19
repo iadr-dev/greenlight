@@ -15,5 +15,8 @@ it cannot talk its way past.
 /plugin install greenlight@greenlight
 ```
 
-Requires Python 3.11+ (standard library only) and `sh` (Git Bash on Windows). Run
-`/greenlight:init` to check your machine.
+Requires Python 3.11+ (standard library only) and a POSIX `sh`: native on Linux and macOS,
+Git for Windows on Windows. It does not matter whether you start `claude` from PowerShell,
+cmd or Git Bash; with Git installed, hooks always run in Git Bash. Without Git for Windows
+greenlight still works, but only with soft enforcement. Run `/greenlight:init` to check
+your machine.

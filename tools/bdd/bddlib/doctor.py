@@ -89,7 +89,7 @@ def run_checks() -> list[Check]:
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
-                   "Hooks need a POSIX shell. On Windows install Git for Windows (Git Bash).", True),
+                   "Hooks need a POSIX sh. On Windows install Git for Windows (https://git-scm.com/download/win); without it greenlight runs in soft enforcement only.", False),
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
     ]
