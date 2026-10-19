@@ -5,7 +5,7 @@ becomes human-approved rules and examples, then red tests, then green code, unde
 AI cannot bypass. Plugin name and repo: `greenlight`. CLI: `bdd`. Project data: `.bdd/`.
 
 ## How to work
-- One task per branch and PR (`m1.3-lint`, …). The PR description lists the task's
+- One task per branch and PR (`lint-near-duplicates`, …). The PR description lists the task's
   acceptance criteria and how each was verified (command output or test name).
 - Squash-merge when checks pass. Update `CHANGELOG.md` under *Unreleased* in every PR.
 - Record new design decisions in `docs/dev/decisions.md`; platform facts in
