@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Tripwire hardening (security review): a missing integrity baseline is now a violation instead of a fresh start, the baseline is only created or moved by the prompt hook, what that hook accepts is announced and kept in the baseline history, and unreadable integrity data is reported to the model (exit 2) and refuses the gates; the prompt hook itself never blocks a prompt.
+
 - The integrity tripwire (`PostToolUse` runs `bdd tripwire`): after every file, shell and MCP tool call it compares the files that make greenlight enforce anything (Claude Code settings and hooks, the plugin's own files, `.bdd/config.toml`) with a baseline of their hashes and the locked specs and steps with their locks, whatever command produced the change. A difference is reported to the model at once (exit 2), kept in `.bdd/.integrity/violations.json`, and the `implement` and `verify` gates refuse while one is open; it closes when the file is back as it was. The baseline is taken on first use and moves only when the person submits a prompt and nothing is open (`bdd tripwire --accept`, run by the prompt hook). A test now checks that every command named in `hooks.json` exists, because an unknown command exits 2 and would block every prompt.
 
 - Approval verification now reads what the person typed from the transcript and requires it to be exactly the recorded approval (feature, gate, approve or reject), and a prompt can approve only once. Before, an approval recorded with the prompt id of any prompt the person had typed (for example by calling the hook command from a shell with forged input) was accepted as human. Found by security review.
