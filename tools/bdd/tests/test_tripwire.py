@@ -108,6 +108,23 @@ class MissingBaselineTest(TripwireCase):
         (change,) = [c for c in tripwire.accept(self.root, self.plugin)]
         self.assertEqual(change["kind"], "changed")                         # reported, from the backup copy
 
+    def test_a_malformed_backup_is_a_violation_not_a_crash(self):
+        self.baseline_file.unlink()
+        for text in ("[]", '{"schema": 1}', '{"schema": 1, "files": {"a": 3}}', '{"schema": 9, "files": {}}', "{broken"):
+            with self.subTest(text=text):
+                tripwire.backup_path(self.root).write_text(text, encoding="utf-8")
+                kinds = {(v["what"], v["kind"]) for v in tripwire.violations(self.root) if v["open"]} |                     {(v["what"], v["kind"]) for v in self.check()}
+                self.assertIn(("baseline backup", "corrupt"), kinds)
+                self.assertEqual(self.fire()[0], 0)                          # already reported, and no traceback
+        self.assertEqual(tripwire.accept(self.root, self.plugin), [])        # the prompt replaces both copies
+        self.assertTrue(tripwire._valid_baseline(tripwire.load_backup(self.root)))
+
+    def test_a_malformed_project_baseline_is_reported_and_refuses_the_gates(self):
+        self.baseline_file.write_text('{"schema": 1, "files": []}', encoding="utf-8")
+        code, message = self.fire()
+        self.assertEqual(code, 2)
+        self.assertIn("could not run", message)
+
     def test_locked_files_are_still_checked_while_the_baseline_is_missing(self):
         lockfile.lock(self.root, self.feature_dir, "FEAT-007", "spec", [self.spec])
         self.baseline_file.unlink()
