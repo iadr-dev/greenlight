@@ -17,6 +17,7 @@ from pathlib import Path
 MIN_PYTHON = (3, 11)
 BUDGET_MS_POSIX = 200
 BUDGET_MS_WINDOWS = 300
+LATENCY = "hook latency"
 
 
 @dataclass
@@ -51,15 +52,15 @@ def budget_ms(platform: str) -> int:
 def check_latency(samples_ms: list[float], platform: str, error: str = "") -> Check:
     if not samples_ms:
         why = error or "wrapper not found"
-        return Check("hook latency", "warn", f"could not measure ({why})",
+        return Check(LATENCY, "warn", f"could not measure ({why})",
                      "Hooks call tools/bdd/bdd, so this likely means hooks will fail too. "
                      "Run `sh tools/bdd/bdd --version` and fix what it reports.")
     med = statistics.median(samples_ms)
     limit = budget_ms(platform)
     detail = f"median {med:.0f} ms over {len(samples_ms)} runs (budget {limit} ms)"
     if med <= limit:
-        return Check("hook latency", "ok", detail)
-    return Check("hook latency", "warn", detail,
+        return Check(LATENCY, "ok", detail)
+    return Check(LATENCY, "warn", detail,
                  "Hooks run on every edit. Exclude the plugin and Python folders from antivirus "
                  "real-time scanning, or move the repo off a network drive.")
 

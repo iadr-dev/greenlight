@@ -7,6 +7,8 @@ AI cannot bypass. Plugin name and repo: `greenlight`. CLI: `bdd`. Project data: 
 ## How to work
 - One task per branch and PR (`lint-near-duplicates`, …). The PR description lists the task's
   acceptance criteria and how each was verified (command output or test name).
+- Run `claude plugin validate . --strict` and `claude plugin validate skills --strict`
+  before releases (a root-level `CLAUDE.md` warning on the plugin manifest is expected).
 - Squash-merge when checks pass. Update `CHANGELOG.md` under *Unreleased* in every PR.
 - Record new design decisions in `docs/dev/decisions.md`; platform facts in
   `docs/dev/platform-notes.md` (verified by experiment, with the date).
