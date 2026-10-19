@@ -45,6 +45,17 @@ class ManifestTest(unittest.TestCase):
                 self.assertGreater(len(meta.get("description", "")), 40, "description must say what and when")
                 self.assertTrue(body.strip())
 
+    def test_hooks_cover_every_tool_the_guard_handles(self):
+        from bddlib import guard
+        hooks = load("hooks/hooks.json")["hooks"]["PreToolUse"]
+        (entry,) = hooks
+        matched = set(entry["matcher"].split("|"))
+        handled = set(guard.WRITE_TOOLS) | guard.INJECTION_TOOLS | {"Bash"}
+        self.assertEqual(matched, handled, "hooks.json matcher and bddlib.guard disagree")
+        (command,) = entry["hooks"]
+        self.assertEqual(command["type"], "command")
+        self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" guard')
+
     def test_wrapper_uses_lf_line_endings(self):
         raw = (ROOT / "tools/bdd/bdd").read_bytes()
         self.assertNotIn(b"\r\n", raw, "tools/bdd/bdd must use LF line endings")
