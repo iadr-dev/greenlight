@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+# local Claude Code state
+.claude/settings.local.json
+.claude/scheduled_tasks.*
