@@ -30,6 +30,8 @@ INTEGRITY_DIR = ".integrity"
 BASELINE = "baseline.json"
 VIOLATIONS = "violations.json"
 SCHEMA = 1
+BASELINE_WHAT = "integrity baseline"
+ACCEPTED_KEPT = 50
 PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml")
 PLUGIN_FILES = ("hooks/hooks.json", ".claude-plugin/plugin.json", "tools/bdd/bdd", "tools/bdd/main.py")
 PLUGIN_TREES = ("tools/bdd/bddlib",)
@@ -81,10 +83,6 @@ def load_baseline(root: Path) -> dict[str, str] | None:
     return data.get("files") if data else None
 
 
-def save_baseline(root: Path, files: dict[str, str]) -> None:
-    store.write_json(_path(root, BASELINE), {"schema": SCHEMA, "files": files})
-
-
 def violations(root: Path) -> list[dict]:
     return _load(root, VIOLATIONS, {"schema": SCHEMA, "items": []})["items"]
 
@@ -123,12 +121,15 @@ def _key(finding: dict) -> tuple[str, str, str]:
 
 
 def check(root: Path, plugin_root: Path | None, tool: str | None = None) -> list[dict]:
-    """Compare everything watched with what it should be. Returns the violations that are new."""
+    """Compare everything watched with what it should be. Returns the violations that are new.
+
+    A missing baseline is a violation, not a first run: the baseline is taken when the person submits a
+    prompt, which happens before any tool call, so only deleting it makes it vanish."""
     baseline = load_baseline(root)
-    if baseline is None:                                  # first use in this project: trust what is there now
-        save_baseline(root, snapshot(root, plugin_root))
-        baseline = load_baseline(root) or {}
-    findings = baseline_findings(root, plugin_root, baseline) + lock_findings(root)
+    if baseline is None:
+        findings = [{"kind": "missing", "path": _path(root, BASELINE).as_posix(), "what": BASELINE_WHAT}]
+    else:
+        findings = baseline_findings(root, plugin_root, baseline) + lock_findings(root)
     current = {_key(f) for f in findings}
     items = violations(root)
     before = json.loads(json.dumps(items))
@@ -144,12 +145,27 @@ def check(root: Path, plugin_root: Path | None, tool: str | None = None) -> list
     return new
 
 
-def accept(root: Path, plugin_root: Path | None) -> bool:
-    """Take the current state of the enforcement files as the baseline, unless a violation is open."""
-    if open_violations(root):
-        return False
-    save_baseline(root, snapshot(root, plugin_root))
-    return True
+def accept(root: Path, plugin_root: Path | None) -> list[dict] | None:
+    """Take the current state of the enforcement files as the baseline.
+
+    Returns what differed from the previous baseline (also kept in its ``accepted`` history, so a change
+    that slipped past the tool-call checks is at least on record), or None if a violation is open and
+    nothing was accepted. A missing baseline does not stop this: restoring it is what this is for."""
+    items = violations(root)
+    if any(v["open"] and v["what"] != BASELINE_WHAT for v in items):
+        return None
+    previous = load_baseline(root)
+    now = store.utc_now()
+    changes = [] if previous is None else [{**f, "at": now} for f in baseline_findings(root, plugin_root, previous)]
+    history = (_load(root, BASELINE, {}).get("accepted") or []) + changes
+    store.write_json(_path(root, BASELINE), {"schema": SCHEMA, "files": snapshot(root, plugin_root),
+                                             "accepted": history[-ACCEPTED_KEPT:]})
+    if any(v["open"] for v in items):
+        for v in items:
+            if v["open"]:
+                v["open"], v["closed_at"] = False, now
+        _save_violations(root, items)
+    return changes
 
 
 def describe(item: dict) -> str:
@@ -180,15 +196,31 @@ def main(argv: list[str]) -> int:
         return 0
     try:
         if argv:
-            accept(root, _plugin_root())
-            return 0
+            return run_accept(root)
         new = check(root, _plugin_root(), payload.get("tool_name"))
     except (StoreError, OSError, cfg.ConfigError) as exc:
-        print(f"greenlight tripwire: could not compare the enforcement files ({exc})", file=sys.stderr)
-        return 0
+        print(f"greenlight: the integrity check could not run ({exc}). The implement and verify gates will refuse "
+              "until the integrity data under .bdd/.integrity is readable again; tell the person.", file=sys.stderr)
+        return 2
     if new:
         print("greenlight: integrity check failed after this tool call:\n  " + "\n  ".join(describe(i) for i in new)
               + "\nThe implement and verify gates will refuse to pass until this is undone. Restore the file "
               "(for example with git) and tell the person what happened.", file=sys.stderr)
         return 2
+    return 0
+
+
+def run_accept(root: Path) -> int:
+    """UserPromptSubmit: never blocks the prompt (exit 2 would), and says what it accepted or why not."""
+    try:
+        changes = accept(root, _plugin_root())
+    except (StoreError, OSError, cfg.ConfigError) as exc:
+        print(f"greenlight: the integrity baseline could not be refreshed ({exc}); the implement and verify gates "
+              "will refuse until .bdd/.integrity is readable again.")
+        return 0
+    if changes is None:
+        print("greenlight: an integrity violation is still open, so the baseline was not refreshed.")
+    elif changes:
+        print("greenlight: accepted changes made since the last check: "
+              + "; ".join(f"{c['path']} {c['kind']}" for c in changes) + ".")
     return 0
