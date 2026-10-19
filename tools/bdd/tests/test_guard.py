@@ -494,6 +494,33 @@ class ShellSpellingTest(GuardCase):
             with self.subTest(command=command):
                 self.assertFalse(self.blocked(command), command)
 
+    def test_brace_expansion_ansi_c_quoting_and_variables_spell_the_same_paths(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.root / "cc")}):
+            for command in ["rm -rf .{claude,x}", "cp evil .claude/{settings.json,x}", "echo x > .{a,claude}/settings.local.json",
+                            "rm -rf $'.cl\\x61ude'", "rm -rf $'\\056claude'", "echo x > $'.claude/set\\x74ings.json'",
+                            "rm -rf $HOME/.claude", "rm -rf ${HOME}/.claude", "rm -rf ~/.claude", "cp x ~/.claude/settings.json",
+                            "echo x >> $CLAUDE_CONFIG_DIR/projects/p/s.jsonl", "echo x >> ${CLAUDE_CONFIG_DIR}/projects/p/s.jsonl",
+                            "echo x >> %CLAUDE_CONFIG_DIR%/projects/p/s.jsonl", "rm -r .claude/pro*", "rm -r .claude/h*",
+                            "echo x > .claude/set*.json", "rm .claude/{hooks,projects}"]:
+                with self.subTest(command=command):
+                    self.assertTrue(self.blocked(command), command)
+
+    def test_the_same_tricks_cannot_hide_a_locked_file(self):
+        for command in ["sed -i s/a/b/ features/a.{feature,x}", "sed -i s/a/b/ $'features/a.f\\x65ature'",
+                        "sed -i s/a/b/ \"$PWD/features/a.feature\"", "echo x > features/{a,b}.feature"]:
+            with self.subTest(command=command):
+                self.assertIn("locked by FEAT-001", self.call("Bash", command=command) or "")
+
+    def test_expansion_does_not_flag_ordinary_commands(self):
+        for command in ["mkdir -p src/{a,b,c}", "rm -rf build/{x,y}", "echo $HOME > home.txt", "cp ~/notes.txt .",
+                        "echo $'tab\\there' > out.txt", "touch file{1,2,3}.txt", "rm -rf $TMPDIR/work"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.call("Bash", command=command), command)
+
+    def test_expansion_is_bounded(self):
+        readings = guard.shell_readings("rm " + " ".join("{a,b,c,d}" for _ in range(30)))
+        self.assertLessEqual(len(readings), guard.MAX_READINGS)
+
     def test_reading_with_a_glob_is_not_a_write(self):
         self.assertIsNone(self.call("Bash", command="cat .claude/sett*.json"))
         self.assertIsNone(self.call("Bash", command="ls -d .cl*"))

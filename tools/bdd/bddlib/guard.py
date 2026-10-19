@@ -82,7 +82,16 @@ _CLAUDE_RUNNER = re.compile(r"\b(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec)\b[
 _CLAUDE_FROM_CODE = re.compile(r"(?:subprocess|Popen|os\.system|os\.exec\w*|spawn\w*|execFile?|execa)\W[^\n]*"
                                r"\bclaude\b", re.IGNORECASE)
 _GLOB = re.compile(r"[*?\[]")
-_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|(?<![\w-])\.claude/(?:hooks|projects)\b", re.IGNORECASE)
+# One list of what is protected inside a `.claude` folder, used by the text check and the glob check:
+# the settings files, the hook scripts, and the session transcripts that approvals are verified against.
+CLAUDE_PROTECTED_DIRS = ("hooks", "projects")
+_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|(?<![\w-])\.claude/(?:" + "|".join(CLAUDE_PROTECTED_DIRS) + r")\b",
+                            re.IGNORECASE)
+_BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
+_ANSI_C = re.compile(r"\$'((?:[^'\\]|\\.)*)'", re.DOTALL)
+_VARIABLE = re.compile(r"\$\{(\w+)\}|\$(\w+)|%(\w+)%")
+_HOME = re.compile(r"(?<![\w$])~(?=/|\\|\s|$)")
+MAX_READINGS = 256
 _NOISE = re.compile(r"\d?>\s*/dev/null|\d>&\d|&>\s*/dev/null|2>\s*nul\b", re.IGNORECASE)
 _SHELL_WRITES = re.compile(
     r"(?:^|[\s;&|(])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
@@ -223,18 +232,20 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
     (``features/a.feature``, ``'a.feature'`` inside a Python one-liner, a backslash path), so a
     command that ``cd``s first or builds the path in a script is still recognised. A false alarm
     only produces a clear refusal; a miss would defeat the point."""
-    text = command.replace("\\", "/").casefold()
     by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
     names = sorted(set(by_name) | MANAGED_NAMES, key=len, reverse=True)
-    match = re.search(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])", text)
-    if match:
-        name = match.group(0)
-        lock = by_name.get(name)
-        return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
-    if ".bdd/config.toml" in text:
-        return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
-    if "/.enforcement/" in text:
-        return project.root / cfg.BDD_DIR / ".enforcement", None
+    pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
+    for reading in shell_readings(command):
+        text = reading.casefold()
+        match = pattern.search(text)
+        if match:
+            name = match.group(0)
+            lock = by_name.get(name)
+            return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
+        if ".bdd/config.toml" in text:
+            return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
+        if "/.enforcement/" in text:
+            return project.root / cfg.BDD_DIR / ".enforcement", None
     return None
 
 
@@ -252,13 +263,57 @@ def command_touches_enforcement(command: str) -> bool:
     return False
 
 
+def decode_ansi_c(text: str) -> str:
+    """Decode bash ``$'...'`` strings (``$'.cl\\x61ude'`` is ``.claude``)."""
+    def decode(match: re.Match) -> str:
+        try:
+            return match.group(1).encode("utf-8").decode("unicode_escape")
+        except UnicodeDecodeError:
+            return match.group(1)
+    return _ANSI_C.sub(decode, text)
+
+
+def expand_variables(text: str) -> str:
+    """Substitute ``$VAR``, ``${VAR}``, ``%VAR%`` and a leading ``~`` from this process's environment
+    (the hook runs with the same environment as the agent's shell), leaving unknown names alone."""
+    def substitute(match: re.Match) -> str:
+        name = next(group for group in match.groups() if group)
+        return os.environ.get(name, match.group(0))
+    home = str(Path.home()).replace("\\", "/")
+    return _HOME.sub(lambda _match: home, _VARIABLE.sub(substitute, text))
+
+
+def expand_braces(text: str, limit: int = 64) -> list[str]:
+    """Bash brace expansion for ``{a,b}`` lists (``.{claude,x}`` is ``.claude`` and ``.x``), bounded."""
+    results = [text]
+    for _ in range(6):                                       # nesting depth
+        expanded, changed = [], False
+        for item in results:
+            match = _BRACES.search(item)
+            if match is None:
+                expanded.append(item)
+                continue
+            changed = True
+            expanded += [item[:match.start()] + option + item[match.end():] for option in match.group(1).split(",")]
+        results = expanded[:limit]
+        if not changed:
+            break
+    return results
+
+
 def shell_readings(command: str) -> list[str]:
     """The ways a shell could read this command's file names, so each can be checked.
 
-    Quotes are dropped (``.cla"ude/set"tings.json`` spells a path). A backslash is either a Windows
-    separator or, in a POSIX shell, an escape for the next character (``.cla\\ude``): one reading each."""
-    unquoted = command.replace('"', "").replace("'", "")
-    return [unquoted.replace("\\", "/"), re.sub(r"\\(.)", r"\1", unquoted)]
+    ANSI-C strings are decoded, variables and ``~`` substituted, braces expanded, and quotes dropped
+    (``.cla"ude/set"tings.json`` spells a path). A backslash is either a Windows separator or, in a
+    POSIX shell, an escape for the next character (``.cla\\ude``): one reading each. Bounded."""
+    decoded = decode_ansi_c(command)
+    readings: list[str] = []
+    for variant in (decoded, expand_variables(decoded)):
+        for expanded in expand_braces(variant):
+            unquoted = expanded.replace('"', "").replace("'", "")
+            readings += [unquoted.replace("\\", "/"), re.sub(r"\\(.)", r"\1", unquoted)]
+    return readings[:MAX_READINGS]
 
 
 def glob_reaches_claude(text: str) -> bool:
@@ -274,7 +329,7 @@ def glob_reaches_claude(text: str) -> bool:
                 return True
             following = segments[position + 1] if position + 1 < len(segments) else ""
             if segment.casefold() == ".claude" and _GLOB.search(following) and any(
-                    fnmatch.fnmatchcase(name, following.casefold()) for name in (*SETTINGS_NAMES, "hooks")):
+                    fnmatch.fnmatchcase(name, following.casefold()) for name in (*SETTINGS_NAMES, *CLAUDE_PROTECTED_DIRS)):
                 return True
     return False
 
