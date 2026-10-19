@@ -32,6 +32,7 @@ BASELINE = "baseline.json"
 VIOLATIONS = "violations.json"
 SCHEMA = 1
 BASELINE_WHAT = "integrity baseline"
+RESTORED_BY_ACCEPT = (BASELINE_WHAT, "baseline backup")      # accepting writes both copies afresh
 ACCEPTED_KEPT = 50
 PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml")
 PLUGIN_FILES = ("hooks/hooks.json", ".claude-plugin/plugin.json", "tools/bdd/bdd", "tools/bdd/main.py")
@@ -85,16 +86,27 @@ def backup_path(root: Path) -> Path:
     return claudepaths.config_dir() / "greenlight" / key / BASELINE
 
 
+def _valid_baseline(data: object) -> bool:
+    files = data.get("files") if isinstance(data, dict) else None
+    return (isinstance(data, dict) and data.get("schema") == SCHEMA and isinstance(files, dict)
+            and all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()))
+
+
 def load_backup(root: Path) -> dict | None:
+    """The backup copy, or None if there is none. A backup that exists but is unusable raises StoreError."""
     path = backup_path(root)
-    try:
-        return store.read_json(path, "the baseline backup") if path.is_file() else None
-    except StoreError:
+    if not path.is_file():
         return None
+    data = store.read_json(path, "the baseline backup")
+    if not _valid_baseline(data):
+        raise StoreError(f"{path} is not a valid integrity baseline")
+    return data
 
 
 def load_baseline(root: Path) -> dict[str, str] | None:
     data = _load(root, BASELINE, {})
+    if data and not _valid_baseline(data):
+        raise StoreError(f"{_path(root, BASELINE)} is not a valid integrity baseline")
     return data.get("files") if data else None
 
 
@@ -144,7 +156,11 @@ def check(root: Path, plugin_root: Path | None, tool: str | None = None) -> list
     findings = lock_findings(root)
     if baseline is None:                                   # still compare with the backup, if there is one
         findings.insert(0, {"kind": "missing", "path": _path(root, BASELINE).as_posix(), "what": BASELINE_WHAT})
-        backup = load_backup(root)
+        try:
+            backup = load_backup(root)
+        except StoreError:
+            findings.append({"kind": "corrupt", "path": backup_path(root).as_posix(), "what": "baseline backup"})
+            backup = None
         findings += baseline_findings(root, plugin_root, backup["files"]) if backup else []
     else:
         findings += baseline_findings(root, plugin_root, baseline)
@@ -163,6 +179,13 @@ def check(root: Path, plugin_root: Path | None, tool: str | None = None) -> list
     return new
 
 
+def _usable_backup(root: Path) -> dict | None:
+    try:
+        return load_backup(root)
+    except StoreError:
+        return None                                       # a corrupt backup is replaced by the new baseline
+
+
 def accept(root: Path, plugin_root: Path | None) -> list[dict] | None:
     """Take the current state of the enforcement files as the baseline.
 
@@ -171,9 +194,10 @@ def accept(root: Path, plugin_root: Path | None) -> list[dict] | None:
     nothing was accepted. A missing baseline does not stop this (restoring it is what this is for), but
     the differences from the backup copy are reported and recorded like any other accepted change."""
     items = violations(root)
-    if any(v["open"] and v["what"] != BASELINE_WHAT for v in items):
+    if any(v["open"] and v["what"] not in RESTORED_BY_ACCEPT for v in items):
         return None
-    kept = _load(root, BASELINE, {}) or load_backup(root) or {}      # the project's copy, else the backup
+    kept = _load(root, BASELINE, {})                                 # the project's copy, else the backup
+    kept = kept if _valid_baseline(kept) else (_usable_backup(root) or {})
     now = store.utc_now()
     changes = [{**f, "at": now} for f in baseline_findings(root, plugin_root, kept["files"])] if kept else []
     history = (kept.get("accepted") or []) + changes
@@ -221,7 +245,7 @@ def main(argv: list[str]) -> int:
         if argv:
             return run_accept(root)
         new = check(root, _plugin_root(), payload.get("tool_name"))
-    except (StoreError, OSError, cfg.ConfigError) as exc:
+    except (StoreError, OSError, cfg.ConfigError, KeyError, TypeError, ValueError) as exc:
         print(f"greenlight: the integrity check could not run ({exc}). The implement and verify gates will refuse "
               "until the integrity data under .bdd/.integrity is readable again; tell the person.", file=sys.stderr)
         return 2
@@ -237,7 +261,7 @@ def run_accept(root: Path) -> int:
     """UserPromptSubmit: never blocks the prompt (exit 2 would), and says what it accepted or why not."""
     try:
         changes = accept(root, _plugin_root())
-    except (StoreError, OSError, cfg.ConfigError) as exc:
+    except (StoreError, OSError, cfg.ConfigError, KeyError, TypeError, ValueError) as exc:
         print(f"greenlight: the integrity baseline could not be refreshed ({exc}); the implement and verify gates "
               "will refuse until .bdd/.integrity is readable again.")
         return 0

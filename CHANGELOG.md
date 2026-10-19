@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Tripwire: the baseline and its backup are validated; a malformed or corrupt backup is reported as a violation (and replaced by the next prompt) instead of crashing the check, and malformed integrity data exits 2 to the model.
+
 - Tripwire: a second copy of the integrity baseline is kept outside the project; while the project's copy is missing the tripwire still compares with the backup and checks the locked files, and restoring the baseline reports the differences found.
 
 - Tripwire hardening (security review): a missing integrity baseline is now a violation instead of a fresh start, the baseline is only created or moved by the prompt hook, what that hook accepts is announced and kept in the baseline history, and unreadable integrity data is reported to the model (exit 2) and refuses the gates; the prompt hook itself never blocks a prompt.
