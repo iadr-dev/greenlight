@@ -1,0 +1,60 @@
+#!/bin/sh
+# greenlight CLI wrapper. Finds a real Python >= 3.11, caches its path, runs main.py with -I.
+#
+# Why a wrapper: on Windows `python` is often the Microsoft Store stub (exits non-zero or
+# opens the Store) and `python3` may not exist at all; `py -3` is the reliable launcher.
+# Each candidate is therefore *executed* with a version check instead of trusting PATH.
+# The cache keeps hook calls to one process spawn after the first run.
+#
+# Only POSIX builtins are used on the hot path so the wrapper also works with a minimal PATH.
+
+# $0 may use backslashes on Windows (e.g. a ${CLAUDE_PLUGIN_ROOT} path), so split on both.
+case "$0" in *[/\\]*) here=${0%[/\\]*} ;; *) here=. ;; esac
+here=$(cd "$here" && pwd)
+# Cache location: per-plugin data dir, else a private dir under $HOME. Never a shared
+# directory such as /tmp: another user could plant a path there and get it executed.
+# With none of these set, caching is skipped and the interpreter is probed on every run.
+if [ -n "$CLAUDE_PLUGIN_DATA" ]; then cache_dir=$CLAUDE_PLUGIN_DATA
+elif [ -n "$GREENLIGHT_CACHE_DIR" ]; then cache_dir=$GREENLIGHT_CACHE_DIR
+elif [ -n "$HOME" ]; then cache_dir=$HOME/.cache/greenlight
+else cache_dir=""; fi
+cache_file=""
+[ -n "$cache_dir" ] && cache_file="$cache_dir/python-path"
+probe='import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
+
+py=""
+# Only trust a cache file that we own (not one planted by another user).
+if [ -n "$cache_file" ] && [ -r "$cache_file" ] && [ -O "$cache_file" ]; then
+    read -r py < "$cache_file"
+    [ -n "$py" ] && [ -x "$py" ] || py=""
+fi
+
+if [ -z "$py" ]; then
+    for cand in python3 python "py -3"; do
+        # shellcheck disable=SC2086  # "py -3" must split into command + flag
+        if $cand -I -c "$probe" >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            found=$($cand -I -c 'import sys; print(sys.executable.replace(chr(92), "/"))' 2>/dev/null)
+            if [ -n "$found" ]; then
+                py=$found
+                if [ -n "$cache_file" ]; then
+                    ( umask 077; mkdir -p "$cache_dir" 2>/dev/null && printf '%s\n' "$py" > "$cache_file" 2>/dev/null )
+                fi
+                break
+            fi
+        fi
+    done
+fi
+
+if [ -z "$py" ]; then
+    {
+        echo "greenlight: no Python 3.11+ found (tried python3, python, py -3)."
+        echo "  Windows: install from https://www.python.org/downloads/ or 'winget install Python.Python.3.12',"
+        echo "           then turn off the 'python.exe' Microsoft Store alias in Settings > Apps > App execution aliases."
+        echo "  macOS:   brew install python    Linux: use your package manager (python3 >= 3.11)"
+        echo "  Then run 'bdd doctor'."
+    } >&2
+    exit 127
+fi
+
+exec "$py" -I "$here/main.py" "$@"

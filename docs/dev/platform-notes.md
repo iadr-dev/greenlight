@@ -1,10 +1,10 @@
 # Platform notes — verified Claude Code facts
 
 > Rows labelled P1–P16 are referenced from code comments and decisions. Re-run the probes
-> (task M0.2) on every Claude Code upgrade.
+> on every Claude Code upgrade.
 
 Checked 2026-10-19 against code.claude.com docs and Claude Code 2.1.286 on Windows 11.
-M0.2 re-checks these against the then-current docs. Rows marked **tested** were confirmed
+Re-check these against the then-current docs on every Claude Code upgrade. Rows marked **tested** were confirmed
 by experiment with a throwaway probe plugin (`claude -p --plugin-dir`, Haiku, temp folder).
 
 | # | Question | Answer | Source | Plan impact |
@@ -20,9 +20,9 @@ by experiment with a throwaway probe plugin (`claude -p --plugin-dir`, Haiku, te
 | P9 | Plugin env vars | `${CLAUDE_PLUGIN_ROOT}` (install dir); `${CLAUDE_PLUGIN_DATA}` (persistent per-plugin dir, survives updates) | [manifest-reference](https://code.claude.com/docs/en/plugins/manifest-reference.md) | Wrapper caches the resolved interpreter in `${CLAUDE_PLUGIN_DATA}` |
 | P10 | Plugin layout | `.claude-plugin/plugin.json` optional; auto-discovers `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`; marketplace plugin `"source": "./"` | [create](https://code.claude.com/docs/en/plugins/create.md), [marketplace-reference](https://code.claude.com/docs/en/plugins/marketplace-reference.md) | Matches plan; still ship `plugin.json` for metadata |
 | P11 | `bin/` on PATH | Yes for the Bash tool, **but** claude.ai and Cowork refuse to install plugins with a top-level `bin/` | [components](https://code.claude.com/docs/en/plugins/components.md) | Wrapper lives at `tools/bdd/bdd`, not `bin/`, to keep those install paths open |
-| P12 | `claude plugin eval` | Exists (GA). Each case runs in a fresh session, N times (default 3); graders: regex, tool_used, tool_order, file_exists, llm, baseline; compares with-plugin vs no-plugin; HTML + JSON output; non-zero exit below threshold | [plugin-evals](https://code.claude.com/docs/en/plugins/plugin-evals.md) | Eval layer uses it (QA-STRATEGY §6) |
+| P12 | `claude plugin eval` | Exists (GA). Each case runs in a fresh session, N times (default 3); graders: regex, tool_used, tool_order, file_exists, llm, baseline; compares with-plugin vs no-plugin; HTML + JSON output; non-zero exit below threshold | [plugin-evals](https://code.claude.com/docs/en/plugins/plugin-evals.md) | Eval layer uses it |
 | P13 | Shell that runs hook commands on Windows | Not documented. **Tested:** Git Bash (`$0=/usr/bin/bash`, bash 5.3; `%OS%` not expanded → not cmd), SHELL = Git for Windows bin/bash.exe | experiment | POSIX `sh` wrapper is correct on Windows. Re-test if Claude Code adds a PowerShell-only mode |
-| P14 | Does the transcript record where a prompt came from? | **Tested, undocumented fields.** Each user entry has `promptId` (= hook `prompt_id`) and origin metadata: typed interactive → `promptSource: "typed"`, `origin.kind: "human"`; headless `-p` → `promptSource: "sdk"`; task notification → `promptSource: "system"`, `origin.kind: "task-notification"`; CronCreate prompt and ScheduleWakeup prompt → `promptSource: "system"`, `turnOrigin: "scheduled"`, `isMeta: true`, no `origin`; subagent/peer message → `promptSource: "system"`, `origin.kind: "peer"`. **Real incident in this planning session:** two model-scheduled wakeups carrying the text of an earlier user message were indistinguishable from the user to the model itself; only these fields told them apart | experiment (this repo's own session + probe) | Provenance check: look up `prompt_id` in the transcript and accept only `origin.kind == "human"` (or `promptSource == "sdk"` in headless runs, labelled `headless`). Undocumented → re-verify on every Claude Code upgrade (M0.2 + release checklist) |
+| P14 | Does the transcript record where a prompt came from? | **Tested, undocumented fields.** Each user entry has `promptId` (= hook `prompt_id`) and origin metadata: typed interactive → `promptSource: "typed"`, `origin.kind: "human"`; headless `-p` → `promptSource: "sdk"`; task notification → `promptSource: "system"`, `origin.kind: "task-notification"`; CronCreate prompt and ScheduleWakeup prompt → `promptSource: "system"`, `turnOrigin: "scheduled"`, `isMeta: true`, no `origin`; subagent/peer message → `promptSource: "system"`, `origin.kind: "peer"`. **Real incident in this planning session:** two model-scheduled wakeups carrying the text of an earlier user message were indistinguishable from the user to the model itself; only these fields told them apart | experiment (this repo's own session + probe) | Provenance check: look up `prompt_id` in the transcript and accept only `origin.kind == "human"` (or `promptSource == "sdk"` in headless runs, labelled `headless`). Undocumented → re-verify on every Claude Code upgrade (re-check before each release) |
 | P15 | Codex skill format | **Tested:** Codex 0.142 discovers `~/.codex/skills/<name>/SKILL.md` and project `.agents/skills/<name>/SKILL.md`; same `name`/`description` frontmatter; the model is given the SKILL.md absolute path. Feature flags: `hooks` stable, `multi_agent` stable, `plugin_hooks` **removed** | `codex debug prompt-input`, `codex features list` | Soft mode works in Codex. Skill names are not namespaced there → install with `greenlight-` prefix. Hard mode in Codex would need user-configured hooks (not plugin-shipped) — v2 |
 | P16 | Other prompt-injection paths | **Tested:** `/loop` is a model-invocable skill and schedules via `CronCreate` (`{"cron": "*/7 * * * *", "prompt": …}`); ToolSearch for "remote trigger" returns only `SendMessage` (no RemoteTrigger tool in Claude Code 2.1.286) | experiment | Guard `--inject` matcher = `CronCreate\|ScheduleWakeup\|SendMessage\|Skill` |
 
@@ -47,6 +47,6 @@ Eval and probe scripts must set `MSYS_NO_PATHCONV=1` when passing slash commands
 Consequences:
 - Always start the CLI with `python -I` (isolated mode is ~2–3× faster here and ignores
   user site-packages, which also helps determinism).
-- The hook budget is **< 200 ms on macOS/Linux, < 300 ms on Windows**, measured in M0.5.
+- The hook budget is **< 200 ms on macOS/Linux, < 300 ms on Windows**, measured with `bdd doctor`.
   PreToolUse runs on every Edit/Write/Bash, so this matters.
 - Hooks run under Git Bash on Windows (P13), so the sh wrapper works there.
