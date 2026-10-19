@@ -87,7 +87,7 @@ class TraceTagsTest(unittest.TestCase):
                 Scenario: S
                   Given x
         ''')
-        self.assertTrue(any("@R-9.1 belongs to feature 9, not 7" in m for m in wrong), wrong)
+        self.assertTrue(any("@R-9.1 belongs to feature 9, but this feature is @FEAT-7" in m for m in wrong), wrong)
 
     def test_scenario_needs_exactly_one_example_tag(self):
         text = "@FEAT-7\nFeature: F\n  @R-7.1\n  Scenario: S\n    Given x\n"
@@ -109,7 +109,7 @@ class TraceTagsTest(unittest.TestCase):
                   Given x
         ''')
         self.assertTrue(any("@EX-7.2.1 does not belong to @R-7.1" in m for m in found), found)
-        self.assertTrue(any("@EX-8.1.1 belongs to feature 8, not 7" in m for m in found), found)
+        self.assertTrue(any("@EX-8.1.1 belongs to feature 8, but this feature is @FEAT-7" in m for m in found), found)
 
     def test_malformed_tags_are_reported_once_where_they_are_written(self):
         found = check('''
@@ -143,6 +143,12 @@ class TraceTagsTest(unittest.TestCase):
         ''')
         self.assertEqual([m.split(":")[0] for m in found], ["L006"])
         self.assertIn('already used by Scenario "first"', found[0])
+
+    def test_leading_zeros_must_match_exactly(self):
+        padded_feature = "@FEAT-007\nFeature: F\n  {tags}\n  Scenario: S\n    Given x\n"
+        found = check(padded_feature.format(tags="@R-7.1 @EX-7.1.1"))
+        self.assertTrue(any("leading zeros" in m for m in found), found)
+        self.assertEqual(check(padded_feature.format(tags="@R-007.1 @EX-007.1.1")), [])
 
     def test_other_tags_are_ignored(self):
         self.assertEqual(check(GOOD.replace("@FEAT-7", "@FEAT-7 @smoke @existing")), [])

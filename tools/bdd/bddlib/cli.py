@@ -29,5 +29,8 @@ def main(argv: list[str]) -> int:
     if argv and argv[0] == "lint":
         from . import lint
         return lint.run(argv[1:])
-    print("usage: bdd <command> [options]   (commands: doctor, lint, --version)", file=sys.stderr)
+    if argv and argv[0] in ("lock", "unlock"):
+        from . import lockcmd
+        return (lockcmd.run_lock if argv[0] == "lock" else lockcmd.run_unlock)(argv[1:])
+    print("usage: bdd <command> [options]   (commands: doctor, lint, lock, unlock, --version)", file=sys.stderr)
     return 2
