@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `bdd status [--json]` lists every feature with its phase, autonomy, approvals, enforcement level and what it is waiting for (including the exact command the person has to type), plus open integrity violations. `bdd status --brief` is one line for the session start (a `SessionStart` hook prints it; silent outside projects or when nothing is in progress, and it never fails). `bdd trace FEAT-n [--json]` builds the rule, example, scenario and task matrix from `rules.md`, `test-design.md`, the tagged feature files and `tasks.md`, and reports gaps `T000`-`T007` (rule without example, example without scenario, unknown ids, scenario not owned by a task, untagged or unreadable scenarios); it only compares artifacts that exist, and exits 1 when there are gaps.
+
 - `bdd doctor` inside a project checks the settings files (project, local, user and managed, read-only) for the recommended native deny rules and prints the exact JSON to add for the ones that are missing: no writes to `state.json`, `lock.json` or `.claude/settings*.json`, and no `claude plugin disable|uninstall` or `claude mcp add`. Claude Code applies these before any hook, so they hold against shell spellings the guard cannot read. Rule syntax was tried live. The `init` skill tells the model to relay the snippet rather than write it.
 
 - Tripwire: the baseline and its backup are validated; a malformed or corrupt backup is reported as a violation (and replaced by the next prompt) instead of crashing the check, and malformed integrity data exits 2 to the model.
