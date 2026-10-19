@@ -11,8 +11,8 @@ from bddlib.cli import configure_streams
 MAIN = Path(__file__).resolve().parents[1] / "main.py"
 WRAPPER = MAIN.parent / "bdd"
 
-CR, LF = chr(13), chr(10)
-CHECK_MARK, ZH = chr(0x2713), chr(0x4E2D) + chr(0x6587)  # a check mark and "中文"
+CR, LF = "\r", "\n"
+CHECK_MARK, ZH = "✓", "中文"  # a check mark and "中文"
 
 
 class CliSmokeTest(unittest.TestCase):

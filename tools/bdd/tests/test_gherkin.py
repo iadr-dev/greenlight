@@ -118,8 +118,8 @@ class FixtureFilesTest(unittest.TestCase):
         (sc, _), = load("13_escaped_cells.feature").scenarios()
         rows = sc.steps[0].table
         self.assertEqual(rows[1], ["a | b", "pipe"])
-        self.assertEqual(rows[2], ["c " + chr(92) + " d", "backslash"])
-        self.assertEqual(rows[3][0], "line1" + chr(10) + "line2")
+        self.assertEqual(rows[2], ["c \\ d", "backslash"])
+        self.assertEqual(rows[3][0], "line1\nline2")
         self.assertEqual(rows[4], ["", "empty first cell"])
 
     def test_keyword_aliases(self):
@@ -144,7 +144,7 @@ class FixtureFilesTest(unittest.TestCase):
 
 class InputVariantsTest(unittest.TestCase):
     def test_bom_and_crlf_are_accepted(self):
-        text = chr(0xFEFF) + "Feature: F\r\n  Scenario: S\r\n    Given a thing\r\n    Then ok\r\n"
+        text = "\ufeff" + "Feature: F\r\n  Scenario: S\r\n    Given a thing\r\n    Then ok\r\n"
         f = parse(text)
         (sc, _), = f.scenarios()
         self.assertEqual([s.text for s in sc.steps], ["a thing", "ok"])
