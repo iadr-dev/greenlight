@@ -14,28 +14,17 @@ Outside a greenlight project it does nothing, and it reads nothing but its input
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
-PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(?:[ \t]+(reject)(?:[ \t]+(\S.*))?)?")
+from . import approvalcommand
+
 PREFIX = "greenlight approval:"
-
-
-def parse(prompt: object) -> tuple[str, str, str | None] | None:
-    """(feature, gate, reject reason or None) when the whole prompt is an approval command."""
-    if not isinstance(prompt, str):
-        return None
-    match = PROMPT.fullmatch(prompt.strip())
-    if match is None:
-        return None
-    feature, gate, reject, reason = match.groups()
-    return feature, gate, (reason or "no reason given") if reject else None
 
 
 def record(payload: dict) -> str | None:
     """Record the approval the prompt asks for. Returns the line to show, or None if it is not one."""
-    parsed = parse(payload.get("prompt"))
+    parsed = approvalcommand.parse(payload.get("prompt"))
     if parsed is None:
         return None
     from . import approvals, config, enforcement, state, store

@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest import mock
 
-from bddlib import approvecmd, approvehook, enforcement
+from bddlib import approvalcommand, approvecmd, approvehook, enforcement
 
 from tests.helpers import ProjectCase, typed
 
@@ -19,14 +19,14 @@ class ParseTest(unittest.TestCase):
                     ("FEAT-007", "examples", "the boundary is missing")}
         for prompt, expected in good.items():
             with self.subTest(prompt=prompt):
-                self.assertEqual(approvehook.parse(prompt), expected)
+                self.assertEqual(approvalcommand.parse(prompt), expected)
 
     def test_everything_else_is_ignored(self):
         for prompt in ("please run /greenlight:approve FEAT-007 rules", "/greenlight:approve FEAT-007 rules now",
                        "/greenlight:approve FEAT-007 tasks", "/greenlight:approve rules", "/greenlight:approve FEAT-007 rules\nrm -rf /",
                        "/greenlight:approve FEAT-007 rules reject a\nb", "/greenlight:reject FEAT-007 rules", "", None, 5):
             with self.subTest(prompt=prompt):
-                self.assertIsNone(approvehook.parse(prompt))
+                self.assertIsNone(approvalcommand.parse(prompt))
 
 
 class HookTest(ProjectCase):
