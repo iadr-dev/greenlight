@@ -3,12 +3,17 @@
 Every finding has a stable code so reports can refer to it:
 
     L001 error    file does not parse as Gherkin
-    L002 error    step matches no vocabulary entry (no suggestion is guessed silently)
+    L002 error    step matches no vocabulary entry (a close match is suggested when there is one)
     L003 error    step matches more than one vocabulary entry
+    L004 error    step or pattern mentions an implementation detail (URL, SQL, selector, ...)
+    L005 error    missing, malformed or inconsistent trace tag (@FEAT-n, @R-n.m, @EX-n.m.k)
+    L006 error    the same example id is used by two scenarios
     L007 error    step uses a core instruction from a profile the project has not enabled
     L008 error    table / doc string does not fit what the instruction accepts
     L009 error    Scenario Outline parameter mismatch (warning for unused Examples columns)
+    L010 error    two vocabulary patterns are nearly identical and neither is justified
     L011 warning  step is marked ``# proposed-step`` and still has to be added to the vocabulary
+    L012 error    a domain step does not compose core instructions properly
 """
 from __future__ import annotations
 
@@ -20,24 +25,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config as cfg
-from . import gherkin, vocabulary
+from . import denylist, gherkin, tagcheck, vocabcheck, vocabulary
+from .issues import ERROR, WARNING, Issue
 
-ERROR, WARNING = "error", "warning"
 _OUTLINE_PARAM = re.compile(r"<([^<>]+)>")
 _WORD = re.compile(r"[^\W\d_]+|\d+", re.UNICODE)
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}|<[^<>]*>")
-
-
-@dataclass(frozen=True)
-class Issue:
-    path: str
-    line: int
-    severity: str
-    code: str
-    message: str
-
-    def __str__(self) -> str:
-        return f"{self.path}:{self.line}: {self.severity} {self.code}: {self.message}"
 
 
 # -- steps -------------------------------------------------------------------------------
@@ -73,10 +66,18 @@ def shape_problem(requires: str, step: gherkin.Step) -> str | None:
 
 
 class Linter:
-    def __init__(self, vocab: vocabulary.Vocabulary, profiles: tuple[str, ...] = cfg.ALL_PROFILES):
-        self.vocab, self.profiles = vocab, set(profiles)
+    def __init__(self, vocab: vocabulary.Vocabulary, profiles: tuple[str, ...] = cfg.ALL_PROFILES,
+                 trace_tags: bool = True):
+        self.vocab, self.profiles, self.trace_tags = vocab, set(profiles), trace_tags
 
     def check_step(self, step: gherkin.Step, language: str, path: str) -> list[Issue]:
+        details = [Issue(path, step.line, ERROR, "L004",
+                         f'"{step.keyword} {step.text}" mentions an implementation detail '
+                         f'({category}: "{snippet}"); describe the behaviour in business terms')
+                   for category, snippet in denylist.implementation_details(step.text)]
+        return details + self.check_resolution(step, language, path)
+
+    def check_resolution(self, step: gherkin.Step, language: str, path: str) -> list[Issue]:
         matches = self.vocab.resolve(step.kind, step.text, language)
         where = f'{step.keyword} {step.text}'
         if not matches:
@@ -132,6 +133,8 @@ class Linter:
             for step in scenario.steps:
                 issues += self.check_step(step, feature.language, path)
             issues += self.check_outline(scenario, path)
+        if self.trace_tags:
+            issues += tagcheck.check_trace_tags(feature, path)
         return issues
 
     def lint_text(self, text: str, path: str = "<string>") -> list[Issue]:
@@ -184,22 +187,42 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("paths", nargs="*", type=Path, help="files or directories (default: the project's feature directories)")
     ap.add_argument("--vocabulary", type=Path, help="project vocabulary.toml (default: .bdd/vocabulary.toml)")
     ap.add_argument("--profiles", help="comma-separated profiles to allow (default: from .bdd/config.toml)")
+    ap.add_argument("--no-trace-tags", action="store_true",
+                    help="do not require @FEAT/@R/@EX trace tags (for files greenlight does not manage)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     return ap
 
 
-def prepare(args: argparse.Namespace) -> tuple[Linter, list[Path]]:
+@dataclass
+class Plan:
+    linter: Linter
+    files: list[Path]
+    vocabulary_issues: list[Issue]
+
+
+def check_project_vocabulary(vocab: vocabulary.Vocabulary, path: Path | None, config: cfg.Config,
+                             profiles: tuple[str, ...]) -> list[Issue]:
+    """Validate the project's own domain steps (if it has a vocabulary file)."""
+    if path is None or not path.exists():
+        return []
+    return vocabcheck.check_vocabulary(vocab, profiles, config.near_duplicate_similarity, path,
+                                       path.read_text(encoding="utf-8"))
+
+
+def prepare(args: argparse.Namespace) -> Plan:
     """Resolve configuration, vocabulary and target files; raise UsageError for bad requests."""
     config = cfg.load(cfg.find_root())
     profiles = tuple(args.profiles.split(",")) if args.profiles else config.profiles
     bad = [p for p in profiles if p not in cfg.ALL_PROFILES]
     if bad:
         raise UsageError(f"unknown profile(s): {', '.join(bad)}")
-    vocab = vocabulary.load(vocabulary_file(args.vocabulary, config))
+    vocab_path = vocabulary_file(args.vocabulary, config)
+    vocab = vocabulary.load(vocab_path)
     targets = args.paths or list(config.feature_dirs)
     if not targets:
         raise UsageError("no paths given and no feature directories configured")
-    return Linter(vocab, profiles), collect_files(targets)
+    return Plan(Linter(vocab, profiles, trace_tags=not args.no_trace_tags), collect_files(targets),
+                check_project_vocabulary(vocab, vocab_path, config, profiles))
 
 
 def report(issues: list[Issue], file_count: int, as_json: bool) -> None:
@@ -217,10 +240,10 @@ def report(issues: list[Issue], file_count: int, as_json: bool) -> None:
 def run(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     try:
-        linter, files = prepare(args)
+        plan = prepare(args)
     except (cfg.ConfigError, vocabulary.VocabularyError, FileNotFoundError, UsageError) as exc:
         print(f"bdd lint: {exc}", file=sys.stderr)
         return 2
-    issues = [issue for f in files for issue in linter.lint_file(f)]
-    report(issues, len(files), args.json)
+    issues = plan.vocabulary_issues + [issue for f in plan.files for issue in plan.linter.lint_file(f)]
+    report(issues, len(plan.files), args.json)
     return 1 if any(i.severity == ERROR for i in issues) else 0
