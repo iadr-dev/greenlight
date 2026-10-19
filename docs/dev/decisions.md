@@ -14,3 +14,4 @@ Record of design decisions. Add a row (or a section below) for every new one, wi
 | D8 | Orchestrator placement | **Decided:** `feature` skill in the main session, because subagents can't ask the user (P2) |
 | D9 | Wrapper location | **Decided:** `tools/bdd/bdd`, not top-level `bin/`, so claude.ai/Cowork can still install the plugin (P11) |
 | D10 | Skill count | **Decided:** 6 user-typed skills; phases are playbooks in `phases/` |
+| D11 | Windows shells | **Decided:** hooks are POSIX `sh` commands, so hard enforcement on Windows requires Git for Windows (Claude Code then runs hooks in Git Bash whichever terminal launched it, platform-notes P13). Without Git, Claude Code uses PowerShell for hooks and the `sh` wrapper cannot run: greenlight works in soft mode and `bdd doctor` says how to get hard mode. Linux and macOS use their native `sh`. All CLI output is UTF-8 with LF endings regardless of terminal (P17) |

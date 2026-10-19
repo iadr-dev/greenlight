@@ -12,5 +12,9 @@ versions follow [SemVer](https://semver.org/).
 - `bdd doctor` (python, sh, git, hook-latency checks with fixes; `--json`).
 - Plugin manifest and single-plugin marketplace (`/plugin marketplace add iadr-dev/greenlight`, `/plugin install greenlight@greenlight`), and an `init` skill that runs `bdd doctor`. Unit tests check the manifests, skill front matter and version agreement; `claude plugin validate` is part of the release checklist.
 
+### Added (tooling)
+- `evals/platform-probe/probe.py`: re-verifies the Claude Code behaviours the design depends on (hook shell, agent naming, approval-hook behaviour, transcript origin markers, `/loop` scheduling) against the installed CLI.
+
 ### Fixed
+- CLI output is UTF-8 with LF endings on every terminal and code page (PowerShell, cmd, Git Bash); the wrapper runs Python with `-X utf8`.
 - Wrapper failed with `MSYS_NO_PATHCONV=1` on Windows (native `python.exe` received an unconverted `/c/...` path); it now uses `pwd -W`. `bdd doctor` also says why it could not measure hook latency.

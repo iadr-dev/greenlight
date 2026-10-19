@@ -19,7 +19,7 @@ AI cannot bypass. Plugin name and repo: `greenlight`. CLI: `bdd`. Project data: 
 ## Engineering rules
 - `tools/bdd` is **Python 3.11+, stdlib only** (TOML via `tomllib`). No third-party imports
   at runtime. Dev/test-only dependencies go in `requirements-dev.txt`.
-- Cross-platform: Windows (Git Bash), macOS, Linux. Use `pathlib`. Hooks run under Git Bash
+- Cross-platform: Windows (hooks need Git for Windows, D11), macOS, Linux. Run `python evals/platform-probe/probe.py` after Claude Code upgrades. Use `pathlib`. Hooks run under Git Bash
   on Windows. Hooks and skills call `${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd`, never `python`
   directly; the wrapper is POSIX `sh`, LF line endings (see `.gitattributes`), and runs
   Python with `-I`.

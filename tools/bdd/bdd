@@ -59,4 +59,5 @@ if [ -z "$py" ]; then
     exit 127
 fi
 
-exec "$py" -I "$here/main.py" "$@"
+# -X utf8: files and pipes are UTF-8 regardless of the Windows code page (cp950, cp1252, ...).
+exec "$py" -X utf8 -I "$here/main.py" "$@"
