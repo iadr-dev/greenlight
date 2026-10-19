@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config as cfg
-from . import claudepaths, enforcement, featurefiles, lockfile, state, store
+from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store
 from .errors import UsageError
 
 GATES = state.HUMAN_GATES
@@ -228,24 +228,40 @@ def _age_exceeds_timeout(at: str) -> bool:
         return True
 
 
-def verdict_for(approval: dict) -> tuple[str, str] | None:
+def says_something_else(entries: list[dict], feature: str, approval: dict) -> bool:
+    """Is any entry of the prompt not exactly the approval that was recorded?
+
+    Without this an approval could borrow the prompt id of anything else the person typed."""
+    return not all(approvalcommand.matches(e, feature, approval["gate"], approval["decision"]) for e in entries)
+
+
+def verdict_for(approval: dict, feature: str, earlier: list[dict]) -> tuple[str, str] | None:
     """New (origin, evidence) for a pending hook approval, or None if it still cannot be decided."""
     if not approval.get("transcript_path") or not approval.get("prompt_id"):
         return "unverifiable", "the hook did not record where the prompt came from"
+    if any(a.get("prompt_id") == approval["prompt_id"] for a in earlier):
+        return "invalid", "this prompt was already used for another approval"
     try:
         entries = prompt_entries(approval["transcript_path"], approval["prompt_id"])
     except UsageError as exc:
         return "unverifiable", str(exc)
     if not entries:
         return ("unverifiable", "the prompt never appeared in the transcript") if _age_exceeds_timeout(approval["at"]) else None
-    return classify_all(entries)
+    origin, evidence = classify_all(entries)
+    if origin in ("human", "headless") and says_something_else(entries, feature, approval):
+        return "invalid", f"the prompt is not the {approval['gate']} {approval['decision']} that was recorded ({evidence})"
+    return origin, evidence
 
 
 def verify_origins(feature_dir: Path) -> int:
     """Check every pending hook approval against the transcript. Returns how many were decided."""
-    pending = [a for a in state.load(feature_dir)["approvals"] if a["grade"] == "hook" and a["origin"] == "pending"]
-    verdicts = {a["id"]: verdict_for(a) for a in pending}
-    verdicts = {i: v for i, v in verdicts.items() if v}
+    data = state.load(feature_dir)
+    verdicts = {}
+    for index, approval in enumerate(data["approvals"]):
+        if approval["grade"] == "hook" and approval["origin"] == "pending":
+            verdict = verdict_for(approval, data["feature"], data["approvals"][:index])
+            if verdict:
+                verdicts[approval["id"]] = verdict
     if not verdicts:
         return 0
 

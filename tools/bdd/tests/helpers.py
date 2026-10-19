@@ -84,14 +84,21 @@ class ProjectCase(unittest.TestCase):
         return path
 
 
-def typed(prompt_id: str, **extra) -> dict:
-    """The transcript entry Claude Code writes for a prompt the person typed."""
+def command_message(args: str = "FEAT-007 rules") -> dict:
+    """How Claude Code stores a typed slash command in the transcript."""
+    text = ("<command-message>greenlight:approve</command-message>\n<command-name>/greenlight:approve</command-name>\n"
+            f"<command-args>{args}</command-args>")
+    return {"role": "user", "content": text}
+
+
+def typed(prompt_id: str, args: str = "FEAT-007 rules", **extra) -> dict:
+    """The transcript entry Claude Code writes for an approval command the person typed."""
     return {"type": "user", "promptId": prompt_id, "promptSource": "typed", "turnOrigin": "human",
-            "origin": {"kind": "human"}, **extra}
+            "origin": {"kind": "human"}, "message": command_message(args), **extra}
 
 
-def headless(prompt_id: str) -> dict:
-    return {"type": "user", "promptId": prompt_id, "turnOrigin": "sdk"}
+def headless(prompt_id: str, args: str = "FEAT-007 rules") -> dict:
+    return {"type": "user", "promptId": prompt_id, "turnOrigin": "sdk", "message": command_message(args)}
 
 
 def injected(prompt_id: str, turn: str = "scheduled", kind: str | None = None) -> dict:

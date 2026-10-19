@@ -132,6 +132,44 @@ class VerifyTest(ProjectCase):
         self.assertEqual(approvals.verify_origins(self.feature_dir), 0)
         self.assertEqual(self.origin(), "pending")
 
+    def test_an_approval_cannot_borrow_the_prompt_id_of_something_else_the_person_typed(self):
+        chat = {**typed("p-1"), "message": {"role": "user", "content": "thanks, that looks good"}}
+        self.hook_approval(entries=[chat])
+        approvals.verify_origins(self.feature_dir)
+        self.assertEqual(self.origin(), "invalid")
+        self.assertIn("is not the rules approve that was recorded", self.data()["approvals"][0]["evidence"])
+
+    def test_the_typed_command_must_name_the_same_gate_and_decision(self):
+        for args in ("FEAT-007 examples", "FEAT-008 rules", "FEAT-007 rules reject too vague"):
+            with self.subTest(args=args):
+                self.setUp()
+                self.hook_approval(entries=[typed("p-1", args)])
+                approvals.verify_origins(self.feature_dir)
+                self.assertEqual(self.origin(), "invalid")
+
+    def test_a_rejection_matches_a_typed_rejection(self):
+        self.gate("discover")
+        path = self.transcript(typed("p-1", "FEAT-007 rules reject rule 2 is wrong"))
+        self.approve("rules", grade="hook", decision="reject", session="s1", prompt_id="p-1", transcript_path=str(path),
+                     reason="rule 2 is wrong")
+        approvals.verify_origins(self.feature_dir)
+        self.assertEqual(self.origin(), "human")
+
+    def test_a_plain_text_command_is_accepted_too(self):
+        plain = {**typed("p-1"), "message": {"role": "user", "content": "/greenlight:approve FEAT-007 rules"}}
+        self.hook_approval(entries=[plain])
+        approvals.verify_origins(self.feature_dir)
+        self.assertEqual(self.origin(), "human")
+
+    def test_one_typed_prompt_approves_once(self):
+        self.hook_approval(entries=[typed("p-1")])
+        self.approve("rules", grade="hook", session="s1", prompt_id="p-1",
+                     transcript_path=str(self.transcripts / "session.jsonl"))
+        approvals.verify_origins(self.feature_dir)
+        first, second = self.data()["approvals"]
+        self.assertEqual((first["origin"], second["origin"]), ("human", "invalid"))
+        self.assertIn("already used", second["evidence"])
+
     def test_tool_results_that_share_the_prompt_id_are_not_prompts(self):
         result = {"type": "user", "promptId": "p-1", "sourceToolAssistantUUID": "a-1",
                   "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t-1", "content": "ok"}]}}
@@ -168,7 +206,7 @@ class VerifyTest(ProjectCase):
                      transcript_path=str(self.root / "anywhere" / ".." / "real.jsonl"))
         approvals.verify_origins(self.feature_dir)
         self.assertEqual(self.origin(), "human")                   # found by file name inside our own folders
-        self.approve("rules", grade="hook", session="s1", prompt_id="p", transcript_path="../../etc/passwd")
+        self.approve("rules", grade="hook", session="s1", prompt_id="p-2", transcript_path="../../etc/passwd")
         approvals.verify_origins(self.feature_dir)
         second = self.data()["approvals"][1]
         self.assertEqual(second["origin"], "unverifiable")
