@@ -24,3 +24,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Unit tests (stdlib unittest)
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -v
+      - name: Wrapper smoke test and doctor
+        shell: bash
+        run: |
+          sh tools/bdd/bdd --version
+          sh tools/bdd/bdd doctor

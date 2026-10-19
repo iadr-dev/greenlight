@@ -10,5 +10,8 @@ def main(argv: list[str]) -> int:
     if argv in (["--version"], ["version"]):
         print(f"bdd {__version__}")
         return 0
-    print("usage: bdd <command> [options]   (commands arrive in later milestones)", file=sys.stderr)
+    if argv and argv[0] == "doctor":
+        from . import doctor
+        return doctor.main(argv[1:])
+    print("usage: bdd <command> [options]   (commands: doctor, --version)", file=sys.stderr)
     return 2
