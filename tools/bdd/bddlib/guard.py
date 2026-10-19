@@ -24,6 +24,7 @@ error) the call is blocked and the reason says how to fix it.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -31,6 +32,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import claudepaths
 from . import config as cfg
 from . import lockfile, store
 from .config import ConfigError
@@ -65,10 +67,13 @@ _CLAUDE_READ_ONLY = {("--version",), ("-v",), ("--help",), ("-h",), ("doctor",),
                      ("plugin", "list"), ("plugins", "list"), ("plugin", "details"), ("plugin", "validate"),
                      ("mcp", "list"), ("mcp", "get"), ("config", "list"), ("config", "get")}
 # `claude ...` as a command: at the start of a command or pipeline segment, after optional env/sudo-style
-# prefixes and VAR=value assignments, possibly with a path in front. Captures the next two words.
+# prefixes and VAR=value assignments, possibly with a path in front. The next two words are captured in
+# a lookahead, so a match does not swallow the text after it (a second `claude` inside `$(...)` is
+# still found), and a word never contains a shell separator.
+_ARG = r"[^\s;&|()`$]+"
 _CLAUDE_CALL = re.compile(
     r"(?:^|[;&|(`\n]|\$\()\s*(?:(?:env|sudo|command|exec|nohup|time|nice)\s+|[A-Za-z_]\w*=\S*\s+)*"
-    r"(?:\S*[\\/])?claude(?:\.exe|\.cmd)?(?:\s+(\S+))?(?:\s+(\S+))?", re.IGNORECASE)
+    r"(?:\S*[\\/])?claude(?:\.exe|\.cmd)?(?=(?:\s+(" + _ARG + r"))?(?:\s+(" + _ARG + r"))?)", re.IGNORECASE)
 # The `.claude` directory itself as an argument (not a file inside it): moving, deleting or replacing
 # it with a symlink would take its settings with it.
 _CLAUDE_DIR_ARG = re.compile(r"(?<![\w.-])\.claude/?(?=[\s;&|)]|$)", re.IGNORECASE)
@@ -76,7 +81,8 @@ _CLAUDE_RUNNER = re.compile(r"\b(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec)\b[
                             r"(?:\bclaude\b|@anthropic-ai/claude-code)", re.IGNORECASE)
 _CLAUDE_FROM_CODE = re.compile(r"(?:subprocess|Popen|os\.system|os\.exec\w*|spawn\w*|execFile?|execa)\W[^\n]*"
                                r"\bclaude\b", re.IGNORECASE)
-_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|(?<![\w-])\.claude/hooks\b", re.IGNORECASE)
+_GLOB = re.compile(r"[*?\[]")
+_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|(?<![\w-])\.claude/(?:hooks|projects)\b", re.IGNORECASE)
 _NOISE = re.compile(r"\d?>\s*/dev/null|\d>&\d|&>\s*/dev/null|2>\s*nul\b", re.IGNORECASE)
 _SHELL_WRITES = re.compile(
     r"(?:^|[\s;&|(])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
@@ -176,6 +182,8 @@ def check_enforcement_files(path: Path) -> str | None:
         return enforcement_message(path, "is part of the greenlight plugin")
     if "/.claude/hooks/" in key:
         return enforcement_message(path, "is a Claude Code hook")
+    if any(key.startswith(path_key(root) + "/") for root in claudepaths.transcript_roots()):
+        return enforcement_message(path, "is a Claude Code session transcript, which approvals are verified against")
     # Both spellings: the path as written (a `.claude` that is itself a symlink to somewhere else
     # resolves to a path without `.claude` in it) and the resolved path (a symlink *to* `.claude`).
     for parts in (path.parts, Path(os.path.realpath(path)).parts):
@@ -232,12 +240,43 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
 
 def command_touches_enforcement(command: str) -> bool:
     """Does a (write-like) shell command target Claude Code's hook settings or the plugin itself?"""
-    # Quotes are dropped first so that `.cla"ude/set"tings.json` reads as the path it spells.
-    text = command.replace("\\", "/").replace('"', "").replace("'", "")
-    if _SETTINGS_TEXT.search(text) or _CLAUDE_DIR_ARG.search(text):
-        return True
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
-    return bool(plugin_root) and path_key(plugin_root) in text.casefold()
+    named_places = [path_key(root) for root in claudepaths.transcript_roots()]
+    if plugin_root:
+        named_places.append(path_key(plugin_root))
+    for text in shell_readings(command):
+        if _SETTINGS_TEXT.search(text) or _CLAUDE_DIR_ARG.search(text) or glob_reaches_claude(text):
+            return True
+        if any(place in text.casefold() for place in named_places):
+            return True
+    return False
+
+
+def shell_readings(command: str) -> list[str]:
+    """The ways a shell could read this command's file names, so each can be checked.
+
+    Quotes are dropped (``.cla"ude/set"tings.json`` spells a path). A backslash is either a Windows
+    separator or, in a POSIX shell, an escape for the next character (``.cla\\ude``): one reading each."""
+    unquoted = command.replace('"', "").replace("'", "")
+    return [unquoted.replace("\\", "/"), re.sub(r"\\(.)", r"\1", unquoted)]
+
+
+def glob_reaches_claude(text: str) -> bool:
+    """Could a glob in the command expand to the `.claude` folder, or to a settings file inside it?
+
+    Decided by matching the glob against the real names, not by guessing: `.cl*`, `.c?aude` and
+    `.*` reach `.claude`; `.gitignore*` and `build/*` do not. Shells do not let `*` match a leading dot,
+    so a segment has to start with a dot to count."""
+    for token in re.split(r"[\s;&|()`]+", text):
+        segments = token.split("/")
+        for position, segment in enumerate(segments):
+            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(".claude", segment.casefold()):
+                return True
+            following = segments[position + 1] if position + 1 < len(segments) else ""
+            if segment.casefold() == ".claude" and _GLOB.search(following) and any(
+                    fnmatch.fnmatchcase(name, following.casefold()) for name in (*SETTINGS_NAMES, "hooks")):
+                return True
+    return False
 
 
 def starts_claude_session(command: str) -> bool:
@@ -251,7 +290,7 @@ def starts_claude_session(command: str) -> bool:
     prompt from a headless session is not accepted by default."""
     for call in _CLAUDE_CALL.finditer(command):
         words = tuple(word.strip("\"'").casefold() for word in call.groups() if word)
-        if not any(words[:size] in _CLAUDE_READ_ONLY for size in (1, 2)):
+        if any("claude" in word for word in words) or not any(words[:size] in _CLAUDE_READ_ONLY for size in (1, 2)):
             return True
     return bool(_CLAUDE_RUNNER.search(command) or _CLAUDE_FROM_CODE.search(command))
 

@@ -442,6 +442,63 @@ class EnforcementFilesTest(GuardCase):
                 self.assertIsNone(self.call("Bash", command=command))
 
 
+class TranscriptProtectionTest(GuardCase):
+    """Approvals are verified against the session transcript, so the agent must not be able to edit it."""
+
+    def setUp(self):
+        super().setUp()
+        self.config_dir = self.root / "claude-home"
+        patch = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.config_dir)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.transcript = self.config_dir / "projects" / "some-project" / "session-1.jsonl"
+
+    def test_the_file_tools_cannot_write_a_transcript(self):
+        for tool in ("Write", "Edit", "MultiEdit"):
+            with self.subTest(tool=tool):
+                self.assertIn("session transcript", self.call(tool, file_path=str(self.transcript)))
+
+    def test_the_shell_cannot_write_to_the_transcript_folder(self):
+        for command in [f"echo '{{}}' >> {self.transcript}", "echo x >> ~/.claude/projects/p/s.jsonl",
+                        "sed -i s/a/b/ .claude/projects/p/s.jsonl", "cp forged.jsonl ~/.claude/projects/p/s.jsonl"]:
+            with self.subTest(command=command):
+                self.assertIn("what enforces greenlight", self.call("Bash", command=command))
+
+    def test_reading_transcripts_is_allowed(self):
+        self.assertIsNone(self.call("Read", file_path=str(self.transcript)))
+        self.assertIsNone(self.call("Bash", command=f"grep promptId {self.transcript}"))
+        self.assertIsNone(self.call("Bash", command="ls ~/.claude/projects"))
+
+
+class ShellSpellingTest(GuardCase):
+    """Ways of writing the same path in a shell: escapes, quotes and globs."""
+
+    def blocked(self, command: str) -> bool:
+        return guard.command_touches_enforcement(command) and self.call("Bash", command=command) is not None
+
+    def test_backslash_escapes_and_quotes_that_still_spell_the_path(self):
+        for command in [r"echo x > .cla\ude/settings.json", r"rm -rf .cl\aude", 'echo x > .claude/set"ti"ngs.json',
+                        r"cp evil ~/.cla\u\de/settings.local.json", "sed -i 's/a/b/' '.claude/settings.json'"]:
+            with self.subTest(command=command):
+                self.assertTrue(self.blocked(command), command)
+
+    def test_a_glob_that_can_expand_to_the_claude_folder_or_its_settings(self):
+        for command in ["rm -rf .cl*", "rm -rf .*", "mv .c?aude /tmp/x", "rm .claude/*", "echo x > .claude/sett*.json",
+                        "cp evil ~/.c*/settings.json", "rm -rf .claud[e]", "rm -r .claude/h*", "cp -r /tmp/x ./.cl[a-z]ude"]:
+            with self.subTest(command=command):
+                self.assertTrue(self.blocked(command), command)
+
+    def test_globs_that_cannot_reach_it_are_fine(self):
+        for command in ["rm -rf build/*", "rm *.pyc", "touch .gitignore*", "rm -rf .cache/*", "rm -f .coverage*",
+                        "rm -rf node_modules/.cache/*", "echo x > .claude/agents/x.md", "cp a.txt b.txt", "ls .cl*"]:
+            with self.subTest(command=command):
+                self.assertFalse(self.blocked(command), command)
+
+    def test_reading_with_a_glob_is_not_a_write(self):
+        self.assertIsNone(self.call("Bash", command="cat .claude/sett*.json"))
+        self.assertIsNone(self.call("Bash", command="ls -d .cl*"))
+
+
 class NestedSessionTest(GuardCase):
     """The approval text can be assembled from pieces, so the nested session itself is refused."""
 
@@ -478,6 +535,21 @@ class NestedSessionTest(GuardCase):
             with self.subTest(command=command):
                 self.assertTrue(guard.starts_claude_session(command), command)
                 self.assertIn("nested session", self.call("Bash", command=command))
+
+    def test_a_second_claude_call_hidden_behind_a_read_only_one_is_still_found(self):
+        # The first call is read-only; a match that swallowed the words after it would never see the second.
+        for command in ["claude --help $(claude plugin disable greenlight)", "claude -v;claude plugin disable x",
+                        "claude plugin list;claude plugin disable x", "claude --help `claude mcp add x`",
+                        "claude --version && claude -p hi", "claude plugin list | claude -p x",
+                        "claude doctor\nclaude plugin disable x"]:
+            with self.subTest(command=command):
+                self.assertTrue(guard.starts_claude_session(command), command)
+
+    def test_read_only_calls_joined_by_separators_stay_allowed(self):
+        for command in ["claude doctor; ls", "claude mcp get a | cat", "claude plugin list && claude --version",
+                        "claude plugin list > plugins.txt"]:
+            with self.subTest(command=command):
+                self.assertFalse(guard.starts_claude_session(command), command)
 
     def test_the_reason_explains_what_is_allowed(self):
         reason = self.call("Bash", command="claude -p hi")
