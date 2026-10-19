@@ -1,9 +1,24 @@
 """Command-line dispatch."""
 from __future__ import annotations
 
+import importlib
 import sys
 
 from . import __version__
+
+# command -> (module, function). Modules are imported on demand to keep start-up fast: hooks
+# run this on every tool call.
+COMMANDS = {
+    "doctor": ("doctor", "main"),
+    "lint": ("lint", "run"),
+    "lock": ("lockcmd", "run_lock"),
+    "unlock": ("lockcmd", "run_unlock"),
+    "state": ("statecmd", "run_state"),
+    "gate": ("statecmd", "run_gate"),
+    "assume": ("statecmd", "run_assume"),
+    "cost": ("statecmd", "run_cost"),
+    "mode": ("statecmd", "run_mode"),
+}
 
 
 def configure_streams(*streams) -> None:
@@ -23,14 +38,8 @@ def main(argv: list[str]) -> int:
     if argv in (["--version"], ["version"]):
         print(f"bdd {__version__}")
         return 0
-    if argv and argv[0] == "doctor":
-        from . import doctor
-        return doctor.main(argv[1:])
-    if argv and argv[0] == "lint":
-        from . import lint
-        return lint.run(argv[1:])
-    if argv and argv[0] in ("lock", "unlock"):
-        from . import lockcmd
-        return (lockcmd.run_lock if argv[0] == "lock" else lockcmd.run_unlock)(argv[1:])
-    print("usage: bdd <command> [options]   (commands: doctor, lint, lock, unlock, --version)", file=sys.stderr)
+    if argv and argv[0] in COMMANDS:
+        module, function = COMMANDS[argv[0]]
+        return getattr(importlib.import_module(f"{__package__}.{module}"), function)(argv[1:])
+    print(f"usage: bdd <command> [options]   (commands: {', '.join(sorted(COMMANDS))}, --version)", file=sys.stderr)
     return 2

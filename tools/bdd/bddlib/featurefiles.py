@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from . import config as cfg
 from .errors import UsageError
 
 
@@ -32,3 +33,11 @@ def tagged_files(files: list[Path], tag: str) -> list[Path]:
     into something that no longer parses."""
     pattern = re.compile(r"^\s*(?:@\S+\s+)*" + re.escape(tag) + r"(?=\s|$)", re.MULTILINE)
     return [f for f in files if pattern.search(f.read_text(encoding="utf-8-sig"))]
+
+
+def spec_files(root: Path, feature_id: str) -> list[Path]:
+    """The .feature files in the configured feature directories that carry @<feature_id>."""
+    dirs = list(cfg.load(root).feature_dirs)
+    if not dirs:
+        raise UsageError("no feature directories are configured in .bdd/config.toml; pass the files explicitly")
+    return tagged_files(collect_files(dirs), "@" + feature_id)

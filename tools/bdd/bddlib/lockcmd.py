@@ -24,14 +24,6 @@ def project_root() -> Path:
     return root
 
 
-def spec_files(root: Path, feature_id: str) -> list[Path]:
-    """The .feature files in the configured feature directories that carry @<feature_id>."""
-    dirs = list(cfg.load(root).feature_dirs)
-    if not dirs:
-        raise UsageError("no feature directories are configured in .bdd/config.toml; pass the files explicitly")
-    return featurefiles.tagged_files(featurefiles.collect_files(dirs), "@" + feature_id)
-
-
 def lock_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="bdd lock", description="Hash-lock approved specs and bound steps.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
@@ -49,7 +41,7 @@ def do_lock(args: argparse.Namespace, root: Path) -> int:
     feature_dir = store.find_feature_dir(root, args.feature)
     paths = args.paths
     if not paths and args.scope == "spec":
-        paths = spec_files(root, args.feature)
+        paths = featurefiles.spec_files(root, args.feature)
         if not paths:
             raise UsageError(f"no .feature file is tagged @{args.feature}")
     if not paths:
@@ -67,7 +59,7 @@ def do_check(args: argparse.Namespace, root: Path) -> int:
     data = lockfile.read_lock(feature_dir, args.feature)
     current = None
     if "spec" in scopes and "spec" in data["scopes"]:
-        current = [lockfile.relative(root, f) for f in spec_files(root, args.feature)]
+        current = [lockfile.relative(root, f) for f in featurefiles.spec_files(root, args.feature)]
     violations = lockfile.check(root, feature_dir, args.feature, scopes, current)
     unlocked = [s for s in scopes if s not in data["scopes"]] if args.require else []
     ok = not violations and not unlocked
