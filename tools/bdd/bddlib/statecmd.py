@@ -1,0 +1,180 @@
+"""State commands.
+
+    bdd state init FEAT-007 --title "Order discounts" [--autonomy standard]
+    bdd state show FEAT-007 [--json]
+    bdd gate FEAT-007 bind --result pass [--detail key=value ...] [--record-red]
+    bdd assume FEAT-007 --text "..." --rationale "..." [--alt "..."]
+    bdd cost FEAT-007 --phase bind --tokens 12000 --seconds 95
+    bdd mode FEAT-007 --switch autopilot --reason "you decide"
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from . import config as cfg
+from . import lockfile, redrecord, state, store
+from .errors import StoreError, UsageError
+
+
+def project_root() -> Path:
+    root = cfg.find_root()
+    if root is None:
+        raise UsageError("not inside a greenlight project (no .bdd directory found); run /greenlight:init first")
+    return root
+
+
+def guarded(prog: str, action) -> int:
+    """Run ``action`` and turn the expected failures into a message and exit status 2."""
+    try:
+        return action()
+    except (UsageError, StoreError) as exc:
+        print(f"bdd {prog}: {exc}", file=sys.stderr)
+        return 2
+
+
+def feature_dir_of(root: Path, feature_id: str) -> Path:
+    return store.find_feature_dir(root, feature_id)
+
+
+# -- state init / show ---------------------------------------------------------------------
+def state_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="bdd state")
+    sub = ap.add_subparsers(dest="action", required=True)
+    init = sub.add_parser("init", help="create a feature and its state file")
+    init.add_argument("feature")
+    init.add_argument("--title", required=True)
+    init.add_argument("--autonomy", choices=state.AUTONOMY, help="default: from .bdd/config.toml")
+    show = sub.add_parser("show", help="print where a feature stands")
+    show.add_argument("feature")
+    show.add_argument("--json", action="store_true")
+    return ap
+
+
+def summary(root: Path, feature_dir: Path, data: dict) -> dict:
+    locks = lockfile.read_lock(feature_dir, data["feature"])["scopes"]
+    return {**data, "locks": {scope: len(v["files"]) for scope, v in locks.items()}}
+
+
+def render(info: dict) -> str:
+    gates = ", ".join(f"{n} {g['result']}" for n, g in info["gates"].items()) or "none yet"
+    locks = ", ".join(f"{s}: {n} file(s)" for s, n in sorted(info["locks"].items())) or "none"
+    kinds = {}
+    for approval in info["approvals"]:
+        kinds[approval.get("grade", "?")] = kinds.get(approval.get("grade", "?"), 0) + 1
+    approvals = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())) or "none"
+    tokens = sum(c["tokens"] for c in info["cost"].values())
+    seconds = sum(c["seconds"] for c in info["cost"].values())
+    red = info["red"]
+    lines = [f"{info['feature']} {info['title']}",
+             f"phase: {info['phase']}    autonomy: {info['autonomy']['level']}",
+             f"gates: {gates}", f"approvals: {approvals}", f"assumptions: {len(info['assumptions'])}",
+             f"locks: {locks}",
+             "red: " + (f"commit {red['commit'][:8]} ({'uncommitted source changes' if red['dirty'] else 'source matches the commit'})" if red else "not recorded"),
+             f"cost: {tokens:,} tokens, {seconds:.1f} s"]
+    return "\n".join(lines)
+
+
+def do_state(args: argparse.Namespace) -> int:
+    root = project_root()
+    if args.action == "init":
+        autonomy = args.autonomy or cfg.load(root).autonomy
+        feature_dir = state.create(root, args.feature, args.title, autonomy)
+        print(f"created {args.feature} in {lockfile.relative(root, feature_dir)}")
+        return 0
+    feature_dir = feature_dir_of(root, args.feature)
+    info = summary(root, feature_dir, state.load(feature_dir))
+    print(json.dumps(info, ensure_ascii=False, indent=2) if args.json else render(info))
+    return 0
+
+
+def run_state(argv: list[str]) -> int:
+    args = state_parser().parse_args(argv)
+    return guarded("state", lambda: do_state(args))
+
+
+# -- gate ----------------------------------------------------------------------------------
+def parse_details(pairs: list[str]) -> dict[str, str]:
+    details = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key.strip():
+            raise UsageError(f"--detail expects key=value, got {pair!r}")
+        details[key.strip()] = value
+    return details
+
+
+def gate_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="bdd gate", description="Record the result of a machine-checkable gate.")
+    ap.add_argument("feature")
+    ap.add_argument("name", help="one of: " + ", ".join(state.MACHINE_GATES))
+    ap.add_argument("--result", choices=state.RESULTS, required=True)
+    ap.add_argument("--detail", action="append", default=[], metavar="KEY=VALUE", help="evidence to keep with the result")
+    ap.add_argument("--record-red", action="store_true",
+                    help="bind gate: also record the git commit and production-source digest of this moment")
+    return ap
+
+
+def do_gate(args: argparse.Namespace) -> int:
+    root = project_root()
+    feature_dir = feature_dir_of(root, args.feature)
+    if args.record_red and args.name != "bind":
+        raise UsageError("--record-red belongs to the bind gate")
+    red = redrecord.capture(root, cfg.load(root).test_dirs) if args.record_red else None
+    data = state.record_gate(root, feature_dir, args.name, args.result, parse_details(args.detail), red)
+    print(f"{args.feature}: {args.name} {args.result}; phase is now {data['phase']}")
+    return 0
+
+
+def run_gate(argv: list[str]) -> int:
+    args = gate_parser().parse_intermixed_args(argv)
+    return guarded("gate", lambda: do_gate(args))
+
+
+# -- assume / cost / mode ------------------------------------------------------------------
+def run_assume(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="bdd assume", description="Record a decision made on the user's behalf.")
+    ap.add_argument("feature")
+    ap.add_argument("--text", required=True, help="what was assumed")
+    ap.add_argument("--rationale", required=True, help="why this answer was chosen")
+    ap.add_argument("--alt", action="append", default=[], help="an alternative that was rejected (repeatable)")
+    args = ap.parse_args(argv)
+
+    def action() -> int:
+        feature_dir = feature_dir_of(project_root(), args.feature)
+        print(state.add_assumption(feature_dir, args.text, args.rationale, args.alt))
+        return 0
+    return guarded("assume", action)
+
+
+def run_cost(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="bdd cost", description="Add tokens and time spent in a phase.")
+    ap.add_argument("feature")
+    ap.add_argument("--phase", required=True, choices=state.PHASES)
+    ap.add_argument("--tokens", type=int, default=0)
+    ap.add_argument("--seconds", type=float, default=0.0)
+    args = ap.parse_args(argv)
+
+    def action() -> int:
+        feature_dir = feature_dir_of(project_root(), args.feature)
+        entry = state.add_cost(feature_dir, args.phase, args.tokens, args.seconds)["cost"][args.phase]
+        print(f"{args.feature} {args.phase}: {entry['tokens']:,} tokens, {entry['seconds']:.1f} s in {entry['runs']} run(s)")
+        return 0
+    return guarded("cost", action)
+
+
+def run_mode(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="bdd mode", description="Switch a feature's autonomy level, recording why.")
+    ap.add_argument("feature")
+    ap.add_argument("--switch", required=True, choices=state.AUTONOMY, metavar="LEVEL")
+    ap.add_argument("--reason", required=True, help="the user's words that asked for the switch")
+    args = ap.parse_args(argv)
+
+    def action() -> int:
+        feature_dir = feature_dir_of(project_root(), args.feature)
+        data = state.switch_autonomy(feature_dir, args.switch, args.reason)
+        print(f"{args.feature}: autonomy is now {data['autonomy']['level']}")
+        return 0
+    return guarded("mode", action)

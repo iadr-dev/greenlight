@@ -20,6 +20,7 @@ class Config:
     profiles: tuple[str, ...] = ALL_PROFILES
     near_duplicate_similarity: float = DEFAULT_SIMILARITY
     feature_dirs: tuple[Path, ...] = ()
+    test_dirs: tuple[Path, ...] = ()         # features + steps + drivers: not "production source"
     autonomy: str = "standard"
     language: str = "auto"
 
@@ -59,6 +60,8 @@ def load(root: Path | str | None) -> Config:
         profiles=profiles,
         near_duplicate_similarity=float(gates.get("near_duplicate_step_similarity", DEFAULT_SIMILARITY)),
         feature_dirs=tuple(root / a["features"] for a in data.get("adapters", []) if "features" in a),
+        test_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("features", "steps", "drivers")
+                        if key in a),
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
     )

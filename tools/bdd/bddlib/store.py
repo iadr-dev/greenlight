@@ -6,10 +6,12 @@ rather than silently misread.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -62,6 +64,19 @@ def read_json(path: Path, what: str) -> dict:
     return data
 
 
+def _replace(source: str, target: Path, attempts: int = 20) -> None:
+    """os.replace, retried briefly: on Windows it fails while another process (a reader, an
+    antivirus scanner) has the target open, which clears within milliseconds."""
+    for attempt in range(attempts):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.01 * (attempt + 1))
+
+
 def write_json(path: Path, data: dict) -> None:
     """Atomically write ``data`` as UTF-8 JSON with LF endings."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +85,56 @@ def write_json(path: Path, data: dict) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, timeout: float = 10.0, stale_after: float = 60.0):
+    """Cross-process mutual exclusion around ``path`` (a sibling ``.lock`` file made with O_EXCL).
+
+    Subagents may update the same feature state concurrently; without this one update could
+    silently overwrite another. A lock left behind by a crashed process is broken after
+    ``stale_after`` seconds."""
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            os.close(os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except (FileExistsError, PermissionError):
+            # Windows reports PermissionError, not FileExistsError, while another process's
+            # delete of the lock file is still pending: that also means "busy, try again".
+            if _is_stale(lock_path, stale_after):
+                lock_path.unlink(missing_ok=True)
+            elif time.monotonic() > deadline:
+                if not lock_path.exists():       # never saw anyone else's lock: a permissions problem
+                    raise StoreError(f"cannot create {lock_path}: permission denied") from None
+                raise StoreError(f"{path.name} is locked by another greenlight process "
+                                 f"(remove {lock_path.name} if none is running)") from None
+            else:
+                time.sleep(0.02)
+    try:
+        yield
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+def _is_stale(lock_path: Path, stale_after: float) -> bool:
+    try:
+        return time.time() - lock_path.stat().st_mtime > stale_after
+    except FileNotFoundError:
+        return False
+
+
+def update_json(path: Path, what: str, mutate) -> dict:
+    """Read ``path``, apply ``mutate(data)`` (which edits in place), write it back atomically,
+    all under the file lock. Returns the new content."""
+    with file_lock(path):
+        data = read_json(path, what)
+        mutate(data)
+        write_json(path, data)
+        return data
