@@ -14,10 +14,21 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
+from . import claudepaths, config as cfg
+
 MIN_PYTHON = (3, 11)
 BUDGET_MS_POSIX = 200
 BUDGET_MS_WINDOWS = 300
 LATENCY = "hook latency"
+DENY_RULES = "deny rules"
+# Claude Code refuses a call matching one of these before any hook runs and no hook can override it
+# (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
+RECOMMENDED_DENY = (
+    "Write(**/.bdd/**/state.json)", "Edit(**/.bdd/**/state.json)",
+    "Write(**/.bdd/**/lock.json)", "Edit(**/.bdd/**/lock.json)",
+    "Write(**/.claude/settings*.json)", "Edit(**/.claude/settings*.json)",
+    "Bash(claude plugin disable:*)", "Bash(claude plugin uninstall:*)", "Bash(claude mcp add:*)",
+)
 
 
 @dataclass
@@ -83,15 +94,51 @@ def measure_wrapper(wrapper: Path, runs: int = 5) -> tuple[list[float], str]:
     return samples[1:], ""  # first run may populate the interpreter cache
 
 
+def settings_files(root: Path) -> list[Path]:
+    """The settings files that can carry permission rules, from the project up to the machine."""
+    managed = {"win32": Path("C:/ProgramData/ClaudeCode/managed-settings.json"),
+               "darwin": Path("/Library/Application Support/ClaudeCode/managed-settings.json")}
+    return [root / ".claude" / "settings.json", root / ".claude" / "settings.local.json",
+            claudepaths.config_dir() / "settings.json",
+            managed.get(sys.platform, Path("/etc/claude-code/managed-settings.json"))]
+
+
+def read_denied(paths: list[Path]) -> set[str]:
+    """Every ``permissions.deny`` entry in the files that exist and parse (the others contribute nothing)."""
+    denied: set[str] = set()
+    for path in paths:
+        try:
+            rules = json.loads(path.read_text(encoding="utf-8")).get("permissions", {}).get("deny", [])
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(rules, list):
+            denied.update(r for r in rules if isinstance(r, str))
+    return denied
+
+
+def check_deny_rules(denied: set[str]) -> Check:
+    missing = [rule for rule in RECOMMENDED_DENY if rule not in denied]
+    if not missing:
+        return Check(DENY_RULES, "ok", f"all {len(RECOMMENDED_DENY)} recommended rules are set")
+    snippet = json.dumps({"permissions": {"deny": missing}}, indent=2)
+    return Check(DENY_RULES, "warn", f"{len(missing)} of {len(RECOMMENDED_DENY)} recommended deny rules are not set",
+                 "Claude Code applies deny rules before any hook, so they hold even if a shell command is spelled in a way "
+                 "the guard cannot read. Add them to .claude/settings.json (or managed settings for a team); "
+                 "the agent is not allowed to edit that file, so this has to be you:\n" + snippet)
+
+
 def run_checks() -> list[Check]:
     wrapper = Path(__file__).resolve().parents[1] / "bdd"
     samples, error = measure_wrapper(wrapper)
+    project = cfg.find_root()
+    deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
                    "Hooks need a POSIX sh. On Windows install Git for Windows (https://git-scm.com/download/win); without it greenlight runs in soft enforcement only.", False),
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
+        *deny,
     ]
 
 
@@ -101,7 +148,9 @@ def render(checks: list[Check]) -> str:
     for c in checks:
         lines.append(f"[{mark[c.status]}] {c.name}: {c.detail}")
         if c.fix and c.status != "ok":
-            lines.append(f"       fix: {c.fix}")
+            fix_lines = c.fix.splitlines()
+            lines.append(f"       fix: {fix_lines[0]}")
+            lines += [f"            {line}" for line in fix_lines[1:]]
     return "\n".join(lines)
 
 

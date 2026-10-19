@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `bdd doctor` inside a project checks the settings files (project, local, user and managed, read-only) for the recommended native deny rules and prints the exact JSON to add for the ones that are missing: no writes to `state.json`, `lock.json` or `.claude/settings*.json`, and no `claude plugin disable|uninstall` or `claude mcp add`. Claude Code applies these before any hook, so they hold against shell spellings the guard cannot read. Rule syntax was tried live. The `init` skill tells the model to relay the snippet rather than write it.
+
 - Tripwire: the baseline and its backup are validated; a malformed or corrupt backup is reported as a violation (and replaced by the next prompt) instead of crashing the check, and malformed integrity data exits 2 to the model.
 
 - Tripwire: a second copy of the integrity baseline is kept outside the project; while the project's copy is missing the tripwire still compares with the backup and checks the locked files, and restoring the baseline reports the differences found.
