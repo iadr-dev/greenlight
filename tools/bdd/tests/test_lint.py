@@ -29,6 +29,15 @@ pattern = "the shopper {verb}"
 '''
 
 
+MOON = '''
+[[steps]]
+id = "D.MOON"
+kind = "given"
+pattern = "the moon is full"
+composes = ["C.ENTITY.SEED"]
+'''
+
+
 def feature(body: str, header: str = "Feature: F") -> str:
     return textwrap.dedent(header).strip() + "\n" + textwrap.indent(textwrap.dedent(body).strip("\n"), "  ") + "\n"
 
@@ -43,7 +52,7 @@ class LintBase(unittest.TestCase):
         cls.vocab = vocabulary.load(vocab_file)
 
     def issues(self, text: str, profiles=config.ALL_PROFILES):
-        return lint.Linter(self.vocab, profiles).lint_text(text, "f.feature")
+        return lint.Linter(self.vocab, profiles, trace_tags=False).lint_text(text, "f.feature")
 
     def codes(self, text: str, **kw) -> list[str]:
         return [f"{i.code}:{i.line}" for i in self.issues(text, **kw)]
@@ -229,8 +238,9 @@ class CliTest(unittest.TestCase):
             os.chdir(cwd)
         return code, out.getvalue(), err.getvalue()
 
-    GOOD = "Feature: F\n  Scenario: S\n    Then the request succeeds\n"
-    BAD = "Feature: F\n  Scenario: S\n    Then the request is rejected\n"
+    HEAD = "@FEAT-1\nFeature: F\n  @R-1.1 @EX-1.1.1\n  Scenario: S\n"
+    GOOD = HEAD + "    Then the request succeeds\n"
+    BAD = HEAD + "    Then the request is rejected\n"
 
     def test_exit_codes_and_text_output(self):
         good = self.write("features/good.feature", self.GOOD)
@@ -239,12 +249,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual((code, out.strip()), (0, "1 file(s), 0 error(s), 0 warning(s)"))
         code, out, _ = self.run_lint(str(self.root / "features"))     # directory, recursive
         self.assertEqual(code, 1)
-        self.assertIn("bad.feature:3: error L002:", out)
+        self.assertIn("bad.feature:5: error L002:", out)
         self.assertIn("2 file(s), 1 error(s)", out)
         self.assertEqual(self.run_lint(str(bad))[0], 1)
 
     def test_warnings_alone_do_not_fail(self):
-        f = self.write("features/w.feature", "Feature: F\n  Scenario: S\n    # proposed-step\n    Then something new\n")
+        f = self.write("features/w.feature", self.HEAD + "    # proposed-step\n    Then something new\n")
         code, out, _ = self.run_lint(str(f))
         self.assertEqual(code, 0)
         self.assertIn("warning L011", out)
@@ -256,20 +266,55 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(data["summary"], {"files": 1, "errors": 1, "warnings": 0})
         self.assertEqual(data["issues"][0]["code"], "L002")
-        self.assertEqual(data["issues"][0]["line"], 3)
+        self.assertEqual(data["issues"][0]["line"], 5)
 
     def test_defaults_come_from_the_project_config(self):
         self.write(".bdd/config.toml", 'profiles = ["base"]\n[[adapters]]\nname = "x"\nfeatures = "features"\n')
-        self.write("features/ui.feature", "Feature: F\n  Scenario: S\n    When Alice opens the Home page\n")
+        self.write("features/ui.feature", self.HEAD + "    When Alice opens the Home page\n")
         code, out, _ = self.run_lint()                        # no paths: uses the configured feature dir
         self.assertEqual(code, 1)
         self.assertIn("L007", out)
         self.assertEqual(self.run_lint("--profiles", "base,ui")[0], 0)
 
     def test_project_vocabulary_is_picked_up(self):
-        self.write(".bdd/vocabulary.toml", '[[steps]]\nid = "D.MOON"\nkind = "given"\npattern = "the moon is full"\n')
-        f = self.write("features/m.feature", "Feature: F\n  Scenario: S\n    Given the moon is full\n")
+        self.write(".bdd/vocabulary.toml", MOON)
+        f = self.write("features/m.feature", self.HEAD + "    Given the moon is full\n")
         self.assertEqual(self.run_lint(str(f))[0], 0)
+
+    def test_trace_tags_are_required_unless_switched_off(self):
+        f = self.write("features/untagged.feature", "Feature: F\n  Scenario: S\n    Then the request succeeds\n")
+        code, out, _ = self.run_lint(str(f))
+        self.assertEqual(code, 1)
+        for expected in ("needs exactly one @FEAT-<n> tag", "needs exactly one @R-<feature>.<n> tag",
+                         "needs exactly one @EX-<feature>.<rule>.<n> tag"):
+            self.assertIn(expected, out)
+        self.assertEqual(self.run_lint("--no-trace-tags", str(f))[0], 0)
+
+    def test_implementation_details_in_steps_are_errors(self):
+        f = self.write("features/detail.feature", self.HEAD + "    Then the response is HTTP 404\n")
+        code, out, _ = self.run_lint(str(f))
+        self.assertEqual(code, 1)
+        self.assertIn("L004", out)
+        self.assertIn("HTTP status code", out)
+
+    def test_problems_in_the_project_vocabulary_are_reported_against_its_file(self):
+        self.write(".bdd/vocabulary.toml", '[[steps]]\nid = "D.LAZY"\nkind = "given"\npattern = "the moon is full"\n')
+        good = self.write("features/g.feature", self.GOOD)
+        code, out, _ = self.run_lint(str(good))
+        self.assertEqual(code, 1)
+        self.assertIn("vocabulary.toml:2: error L012: D.LAZY: a domain step must list the core instructions", out)
+
+    def test_similarity_threshold_comes_from_the_config(self):
+        steps = ('[[steps]]\nid = "D.A"\nkind = "given"\npattern = "{{actor}} has a cart worth {{n:int}}"\n'
+                 'composes = ["C.ENTITY.SEED"]\n\n[[steps]]\nid = "D.B"\nkind = "given"\n'
+                 'pattern = "{{actor}} has a large cart worth {{n:int}}"\ncomposes = ["C.ENTITY.SEED"]\n')
+        self.write(".bdd/vocabulary.toml", steps.format())
+        good = self.write("features/g.feature", self.GOOD)
+        self.assertEqual(self.run_lint(str(good))[0], 0)                       # 0.83 < the default 0.85
+        self.write(".bdd/config.toml", "[gates]\nnear_duplicate_step_similarity = 0.7\n")
+        code, out, _ = self.run_lint(str(good))
+        self.assertEqual(code, 1)
+        self.assertIn("L010", out)
 
     def test_lint_refuses_to_read_files_that_are_not_feature_files(self):
         secret = self.write("secret.txt", "Feature: F\nTOP-SECRET-TOKEN-123\n")
@@ -290,7 +335,7 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(code, 2)
                 self.assertIn("--vocabulary must be a .toml file inside", err)
                 self.assertNotIn("TOP-SECRET", out + err)
-        inside = self.write("custom.toml", '[[steps]]\nid = "D.X"\nkind = "given"\npattern = "x"\n')
+        inside = self.write("custom.toml", MOON)
         self.assertEqual(self.run_lint("--vocabulary", str(inside), str(good))[0], 0)
 
     def test_hidden_and_node_modules_directories_are_skipped(self):
