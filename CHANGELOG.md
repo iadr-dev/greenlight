@@ -14,6 +14,8 @@ versions follow [SemVer](https://semver.org/).
 
 - Gherkin parser (`bddlib/gherkin.py`): Feature, Rule, Background, Scenario, Scenario Outline, Examples, steps, data tables, doc strings, tags and comments, with localized keywords for 80 languages (`# language: zh-TW`), line-numbered errors, and tag inheritance helpers. The keyword table is a trimmed copy of Cucumber's `gherkin-languages.json` (MIT).
 
+- Core step vocabulary (`vocabulary/core.json`): 28 instructions in five profiles (`base`, `api`, `ui`, `cli`, `lib`) with English patterns and Traditional Chinese alternates, and `bddlib/vocabulary.py` to compile typed patterns (`{amount:int}`, `{state:enum(on,off)}`, `{duration}`), load a project's `vocabulary.toml` of domain steps that compose core instructions, and resolve step text to the instruction(s) it matches. Ambiguity is reported, never hidden.
+
 ### Added (tooling)
 - `evals/platform-probe/probe.py`: re-verifies the Claude Code behaviours the design depends on (hook shell, agent naming, approval-hook behaviour, transcript origin markers, `/loop` scheduling) against the installed CLI.
 

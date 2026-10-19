@@ -1,0 +1,495 @@
+{
+  "version": 1,
+  "profiles": {
+    "base": "every project",
+    "api": "HTTP/RPC services",
+    "ui": "web, mobile and desktop UIs",
+    "cli": "command-line tools and scripts",
+    "lib": "libraries, SDKs and pure domain modules (shares the file instructions with cli)"
+  },
+  "instructions": [
+    {
+      "id": "C.ENTITY.SEED",
+      "kind": "given",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the following {entity} exist:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "以下{entity}已存在:"
+        ]
+      },
+      "requires": "table",
+      "semantics": "Create records via the most realistic seam (API, then domain service, then repository, then raw DB). Columns map to fields; unknown columns are an error."
+    },
+    {
+      "id": "C.ACTOR.AUTH",
+      "kind": "given",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "{actor} is signed in as {role}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}以{role}身分登入"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Establish an authenticated session or token for a named actor."
+    },
+    {
+      "id": "C.CLOCK.SET",
+      "kind": "given",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the current time is {datetime}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "目前時間為{datetime}"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Freeze or inject time. All time-dependent steps use this clock."
+    },
+    {
+      "id": "C.STUB.RESPOND",
+      "kind": "given",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "{dependency} responds to {operation} with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{dependency}對{operation}的回應為:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Stub an external dependency deterministically. Unstubbed external calls fail the scenario."
+    },
+    {
+      "id": "C.FLAG.SET",
+      "kind": "given",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the {flag} feature flag is {state:enum(on,off)}"
+      ],
+      "requires": "none",
+      "semantics": "Configure a feature flag or setting for the scenario."
+    },
+    {
+      "id": "C.STATE.GLOBAL",
+      "kind": "given",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "the application state is:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "應用程式狀態為:"
+        ]
+      },
+      "requires": "table",
+      "semantics": "Initialize client-side global state or storage."
+    },
+    {
+      "id": "C.FILE.GIVEN",
+      "kind": "given",
+      "profiles": [
+        "cli",
+        "lib"
+      ],
+      "patterns": [
+        "the input file {file} contains:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "輸入檔{file}內容為:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Create an input file in an isolated temporary workspace. {file} is a logical name; the real path is mapped in the system map."
+    },
+    {
+      "id": "C.API.CALL",
+      "kind": "when",
+      "profiles": [
+        "api"
+      ],
+      "patterns": [
+        "{actor} calls {operation} with:",
+        "{actor} calls {operation}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}以下列內容呼叫{operation}:",
+          "{actor}呼叫{operation}"
+        ]
+      },
+      "requires": "table_or_docstring_optional",
+      "semantics": "Invoke an API operation by logical name (mapped in the driver) and store the response."
+    },
+    {
+      "id": "C.UI.OPEN",
+      "kind": "when",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "{actor} opens the {page} page"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}開啟{page}頁面"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Navigate to a logical page."
+    },
+    {
+      "id": "C.UI.ACT",
+      "kind": "when",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target}",
+        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target} with:"
+      ],
+      "requires": "table_or_docstring_optional",
+      "semantics": "Perform a user action on a logical component. Selectors live in drivers, never in features."
+    },
+    {
+      "id": "C.EVENT.RECEIVE",
+      "kind": "when",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the {event} event is received with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "收到{event}事件，內容為:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Deliver an inbound message or webhook."
+    },
+    {
+      "id": "C.JOB.RUN",
+      "kind": "when",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the {job} job runs"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{job}排程執行"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Execute a scheduled or background job synchronously."
+    },
+    {
+      "id": "C.CLOCK.ADVANCE",
+      "kind": "when",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "{duration} passes"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "經過{duration}"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Advance the injected clock."
+    },
+    {
+      "id": "C.CLI.RUN",
+      "kind": "when",
+      "profiles": [
+        "cli"
+      ],
+      "patterns": [
+        "{actor} runs {command}",
+        "{actor} runs {command} with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}執行{command}",
+          "{actor}以下列參數執行{command}:"
+        ]
+      },
+      "requires": "table_or_docstring_optional",
+      "semantics": "Run a logical command (args, env, stdin from the table) in the temporary workspace; capture exit code, stdout and stderr. Binary and flags are mapped in the driver."
+    },
+    {
+      "id": "C.LIB.CALL",
+      "kind": "when",
+      "profiles": [
+        "lib"
+      ],
+      "patterns": [
+        "{operation} is called with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "以下列參數呼叫{operation}:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Invoke a public function or method by logical name; capture the return value or the raised error."
+    },
+    {
+      "id": "C.API.STATUS",
+      "kind": "then",
+      "profiles": [
+        "api"
+      ],
+      "patterns": [
+        "the request succeeds",
+        "the request is rejected with {error}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "請求成功",
+          "請求被拒絕，錯誤為{error}"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Check the outcome by logical result, not raw HTTP codes (the driver maps them)."
+    },
+    {
+      "id": "C.API.BODY",
+      "kind": "then",
+      "profiles": [
+        "api"
+      ],
+      "patterns": [
+        "the response contains:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "回應包含:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Subset match on fields; table rows for lists."
+    },
+    {
+      "id": "C.ENTITY.VERIFY",
+      "kind": "then",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the {entity} records are:",
+        "the {entity} records include:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{entity}紀錄為:",
+          "{entity}紀錄包含:"
+        ]
+      },
+      "requires": "table",
+      "semantics": "Verify persisted state through a read seam. 'are' is the exact set, 'include' is a subset."
+    },
+    {
+      "id": "C.ENTITY.UNCHANGED",
+      "kind": "then",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "no {entity} records changed"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{entity}紀錄沒有變動"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Snapshot-compare."
+    },
+    {
+      "id": "C.UI.SEE",
+      "kind": "then",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "{actor} sees {target} showing:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}看到{target}顯示:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Visible state of a logical component (text, items, enabled or disabled)."
+    },
+    {
+      "id": "C.UI.NOT_SEE",
+      "kind": "then",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "{actor} does not see {target}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}沒有看到{target}"
+        ]
+      },
+      "requires": "none",
+      "semantics": "The logical component is not visible."
+    },
+    {
+      "id": "C.STATE.VERIFY",
+      "kind": "then",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "the application state includes:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "應用程式狀態包含:"
+        ]
+      },
+      "requires": "table",
+      "semantics": "Client-side state check."
+    },
+    {
+      "id": "C.EVENT.PUBLISHED",
+      "kind": "then",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "the {event} event is published with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "發布了{event}事件，內容為:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Outbound message or event captured by a test double."
+    },
+    {
+      "id": "C.STUB.CALLED",
+      "kind": "then",
+      "profiles": [
+        "base"
+      ],
+      "patterns": [
+        "{dependency} received {operation} with:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{dependency}收到{operation}，內容為:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Verify an outbound call to a stubbed dependency."
+    },
+    {
+      "id": "C.CLI.RESULT",
+      "kind": "then",
+      "profiles": [
+        "cli"
+      ],
+      "patterns": [
+        "the command succeeds",
+        "the command fails with {error}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "指令成功",
+          "指令失敗，錯誤為{error}"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Check the outcome by logical result; the driver maps exit codes and messages."
+    },
+    {
+      "id": "C.OUTPUT.CONTAINS",
+      "kind": "then",
+      "profiles": [
+        "cli"
+      ],
+      "patterns": [
+        "the {stream:enum(stdout,stderr)} output contains:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{stream:enum(stdout,stderr)}輸出包含:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Match stdout or stderr with normalized line endings and whitespace; no regular expressions in features."
+    },
+    {
+      "id": "C.FILE.VERIFY",
+      "kind": "then",
+      "profiles": [
+        "cli",
+        "lib"
+      ],
+      "patterns": [
+        "the output file {file} contains:"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "輸出檔{file}包含:"
+        ]
+      },
+      "requires": "table_or_docstring",
+      "semantics": "Check a produced file by logical name."
+    },
+    {
+      "id": "C.LIB.RESULT",
+      "kind": "then",
+      "profiles": [
+        "lib"
+      ],
+      "patterns": [
+        "the result is:",
+        "the result includes:",
+        "the call fails with {error}"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "結果為:",
+          "結果包含:",
+          "呼叫失敗，錯誤為{error}"
+        ]
+      },
+      "requires": "table_or_docstring_optional",
+      "semantics": "Check the return value (exact or subset) or the logical error raised."
+    }
+  ]
+}
