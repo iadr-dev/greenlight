@@ -1,0 +1,4 @@
+* text=auto
+# Hook entry points run under Git Bash on Windows: they must keep LF endings.
+tools/bdd/bdd text eol=lf
+*.sh text eol=lf
