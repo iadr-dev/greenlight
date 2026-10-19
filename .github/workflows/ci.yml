@@ -29,3 +29,22 @@ jobs:
         run: |
           sh tools/bdd/bdd --version
           sh tools/bdd/bdd doctor
+
+  manifests:
+    name: plugin manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate marketplace and skills (strict)
+        run: |
+          claude plugin validate . --strict
+          claude plugin validate skills --strict
+      - name: Validate plugin manifest
+        # A root CLAUDE.md (contributor instructions) triggers an informational warning that is
+        # expected, so this one is not run with --strict.
+        run: claude plugin validate .claude-plugin/plugin.json

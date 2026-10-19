@@ -73,6 +73,15 @@ class WrapperTest(unittest.TestCase):
         leaked = subprocess.run([SH, "-c", "[ -e /tmp/.cache/greenlight/python-path ]"])
         self.assertNotEqual(leaked.returncode, 0, "wrapper wrote its cache under shared /tmp")
 
+    def test_works_without_msys_path_conversion(self):
+        # Regression: with MSYS_NO_PATHCONV=1, a POSIX-style /c/... path handed to a native
+        # python.exe is read as C:\c\... and the wrapper could not find main.py.
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PLUGIN_DATA"}
+        env.update(MSYS_NO_PATHCONV="1", GREENLIGHT_CACHE_DIR=str(self.cache))
+        r = subprocess.run([SH, str(WRAPPER), "--version"], capture_output=True, text=True,
+                           env=env, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_stale_cache_is_reprobed(self):
         self.cache.mkdir()
         (self.cache / "python-path").write_text("/no/such/python\n")

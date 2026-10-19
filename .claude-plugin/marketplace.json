@@ -1,0 +1,22 @@
+{
+  "name": "greenlight",
+  "description": "AI x BDD spec-driven development for Claude Code, with human-approved gates.",
+  "owner": {
+    "name": "Ray Shen"
+  },
+  "plugins": [
+    {
+      "name": "greenlight",
+      "source": "./",
+      "description": "AI x BDD spec-driven development with human-approved gates.",
+      "version": "0.0.1",
+      "license": "MIT",
+      "keywords": [
+        "bdd",
+        "gherkin",
+        "spec-driven",
+        "testing"
+      ]
+    }
+  ]
+}

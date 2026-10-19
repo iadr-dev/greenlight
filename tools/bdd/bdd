@@ -10,7 +10,9 @@
 
 # $0 may use backslashes on Windows (e.g. a ${CLAUDE_PLUGIN_ROOT} path), so split on both.
 case "$0" in *[/\\]*) here=${0%[/\\]*} ;; *) here=. ;; esac
-here=$(cd "$here" && pwd)
+# `pwd -W` (Git Bash) yields a native C:/... path, so python.exe needs no MSYS path conversion
+# (users or tools may set MSYS_NO_PATHCONV=1). Other shells reject -W and fall back to plain pwd.
+here=$(cd "$here" && { pwd -W 2>/dev/null || pwd; })
 # Cache location: per-plugin data dir, else a private dir under $HOME. Never a shared
 # directory such as /tmp: another user could plant a path there and get it executed.
 # With none of these set, caching is skipped and the interpreter is probed on every run.
