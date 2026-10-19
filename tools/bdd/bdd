@@ -11,12 +11,20 @@
 # $0 may use backslashes on Windows (e.g. a ${CLAUDE_PLUGIN_ROOT} path), so split on both.
 case "$0" in *[/\\]*) here=${0%[/\\]*} ;; *) here=. ;; esac
 here=$(cd "$here" && pwd)
-cache_dir=${CLAUDE_PLUGIN_DATA:-${GREENLIGHT_CACHE_DIR:-${HOME:-/tmp}/.cache/greenlight}}
-cache_file="$cache_dir/python-path"
+# Cache location: per-plugin data dir, else a private dir under $HOME. Never a shared
+# directory such as /tmp: another user could plant a path there and get it executed.
+# With none of these set, caching is skipped and the interpreter is probed on every run.
+if [ -n "$CLAUDE_PLUGIN_DATA" ]; then cache_dir=$CLAUDE_PLUGIN_DATA
+elif [ -n "$GREENLIGHT_CACHE_DIR" ]; then cache_dir=$GREENLIGHT_CACHE_DIR
+elif [ -n "$HOME" ]; then cache_dir=$HOME/.cache/greenlight
+else cache_dir=""; fi
+cache_file=""
+[ -n "$cache_dir" ] && cache_file="$cache_dir/python-path"
 probe='import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
 
 py=""
-if [ -r "$cache_file" ]; then
+# Only trust a cache file that we own (not one planted by another user).
+if [ -n "$cache_file" ] && [ -r "$cache_file" ] && [ -O "$cache_file" ]; then
     read -r py < "$cache_file"
     [ -n "$py" ] && [ -x "$py" ] || py=""
 fi
@@ -29,7 +37,9 @@ if [ -z "$py" ]; then
             found=$($cand -I -c 'import sys; print(sys.executable.replace(chr(92), "/"))' 2>/dev/null)
             if [ -n "$found" ]; then
                 py=$found
-                mkdir -p "$cache_dir" 2>/dev/null && printf '%s\n' "$py" > "$cache_file" 2>/dev/null
+                if [ -n "$cache_file" ]; then
+                    ( umask 077; mkdir -p "$cache_dir" 2>/dev/null && printf '%s\n' "$py" > "$cache_file" 2>/dev/null )
+                fi
                 break
             fi
         fi

@@ -7,5 +7,5 @@ versions follow [SemVer](https://semver.org/).
 
 ### Added
 - Repository skeleton, decisions record and verified platform notes (M0.1).
-- `tools/bdd/bdd` interpreter wrapper: tries `python3`, `python`, `py -3` by executing each (skips the Microsoft Store stub), caches the result in `${CLAUDE_PLUGIN_DATA}`, runs `python -I`; actionable message and exit 127 when no Python 3.11+ (M0.5).
+- `tools/bdd/bdd` interpreter wrapper: tries `python3`, `python`, `py -3` by executing each (skips the Microsoft Store stub), caches the result in `${CLAUDE_PLUGIN_DATA}`, runs `python -I`; actionable message and exit 127 when no Python 3.11+. The cache lives in a private directory (never shared `/tmp`), is created with `umask 077`, and is trusted only if owned by the current user (M0.5).
 - `bdd doctor` (python, sh, git, hook-latency checks with fixes; `--json`) (M0.5).

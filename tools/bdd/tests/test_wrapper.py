@@ -64,6 +64,15 @@ class WrapperTest(unittest.TestCase):
         r2 = self.run_wrapper([self.fake], "--version")  # PATH has no usable python
         self.assertEqual(r2.returncode, 0, r2.stderr)
 
+    def test_no_home_and_no_cache_vars_never_uses_shared_tmp(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("CLAUDE_PLUGIN_DATA", "GREENLIGHT_CACHE_DIR", "HOME")}
+        r = subprocess.run([SH, str(WRAPPER), "--version"], capture_output=True, text=True,
+                           env=env, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)  # still works, just uncached
+        leaked = subprocess.run([SH, "-c", "[ -e /tmp/.cache/greenlight/python-path ]"])
+        self.assertNotEqual(leaked.returncode, 0, "wrapper wrote its cache under shared /tmp")
+
     def test_stale_cache_is_reprobed(self):
         self.cache.mkdir()
         (self.cache / "python-path").write_text("/no/such/python\n")
