@@ -58,8 +58,18 @@ SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
 _APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b", re.IGNORECASE)
-_HOOKISH = re.compile(r"hook|plugin|greenlight", re.IGNORECASE)
-_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|/\.claude/hooks/", re.IGNORECASE)
+_CLAUDE_MANAGEMENT = {"plugin", "plugins", "mcp", "config", "doctor", "update", "install", "--version", "-v",
+                      "--help", "-h"}
+# `claude ...` as a command: at the start of a command or pipeline segment, after optional env/sudo-style
+# prefixes and VAR=value assignments, possibly with a path in front. Captures the next word.
+_CLAUDE_CALL = re.compile(
+    r"(?:^|[;&|(`\n]|\$\()\s*(?:(?:env|sudo|command|exec|nohup|time|nice)\s+|[A-Za-z_]\w*=\S*\s+)*"
+    r"(?:\S*[\\/])?claude(?:\.exe|\.cmd)?(?:\s+(\S+))?", re.IGNORECASE)
+_CLAUDE_RUNNER = re.compile(r"\b(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec)\b[^;&|\n]*"
+                            r"(?:\bclaude\b|@anthropic-ai/claude-code)", re.IGNORECASE)
+_CLAUDE_FROM_CODE = re.compile(r"(?:subprocess|Popen|os\.system|os\.exec\w*|spawn\w*|execFile?|execa)\W[^\n]*"
+                               r"\bclaude\b", re.IGNORECASE)
+_SETTINGS_TEXT = re.compile(r"settings(?:\.local)?\.json|(?<![\w-])\.claude/hooks\b", re.IGNORECASE)
 _NOISE = re.compile(r"\d?>\s*/dev/null|\d>&\d|&>\s*/dev/null|2>\s*nul\b", re.IGNORECASE)
 _SHELL_WRITES = re.compile(
     r"(?:^|[\s;&|(])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
@@ -147,18 +157,21 @@ def enforcement_message(path: Path, what: str) -> str:
             "can change it themselves outside the agent.")
 
 
-def check_enforcement_files(path: Path, tool_input: dict) -> str | None:
-    """Protect what enforces greenlight: the plugin's own files and Claude Code's hook settings."""
+def check_enforcement_files(path: Path) -> str | None:
+    """Protect what enforces greenlight: the plugin's own files and Claude Code's settings.
+
+    Settings files are refused whatever the change says. Inspecting the new content for hook
+    settings can be dodged (JSON escapes such as ``"hoo\\u006bs"`` mean the same key), and the
+    person can still edit them, or use Claude Code's own /permissions and /hooks screens."""
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
     key = path_key(path)
     if plugin_root and key.startswith(path_key(plugin_root) + "/"):
         return enforcement_message(path, "is part of the greenlight plugin")
     if "/.claude/hooks/" in key:
         return enforcement_message(path, "is a Claude Code hook")
-    in_claude_dir = ".claude" in [part.casefold() for part in path.parts[:-1]]
-    if in_claude_dir and path.name.casefold() in SETTINGS_NAMES and _HOOKISH.search(
-            json.dumps(tool_input, ensure_ascii=False)):
-        return enforcement_message(path, "configures Claude Code hooks or plugins")
+    real_parts = [part.casefold() for part in Path(os.path.realpath(path)).parts]      # symlinks resolved
+    if ".claude" in real_parts[:-1] and real_parts[-1] in SETTINGS_NAMES:
+        return enforcement_message(path, "is a Claude Code settings file")
     return None
 
 
@@ -167,13 +180,13 @@ def agent_name(payload: dict) -> str | None:
     return agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else None
 
 
-def check_file_write(project: Project, path: Path, agent: str | None, tool_input: dict | None = None) -> str | None:
+def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
     if project.is_data(path):
         return managed_message(project, path)
-    protected = check_enforcement_files(path, tool_input or {})
+    protected = check_enforcement_files(path)
     if protected:
         return protected
     allowed = AGENT_WRITES.get(agent) if agent else None
@@ -210,18 +223,40 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
 def command_touches_enforcement(command: str) -> bool:
     """Does a (write-like) shell command target Claude Code's hook settings or the plugin itself?"""
     text = command.replace("\\", "/")
-    if _SETTINGS_TEXT.search(text) and _HOOKISH.search(text):
+    if _SETTINGS_TEXT.search(text):
         return True
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
     return bool(plugin_root) and path_key(plugin_root) in text.casefold().replace("\\", "/")
 
 
+def starts_claude_session(command: str) -> bool:
+    """Does the command start a (nested) Claude Code session?
+
+    A nested session is the one way for the agent to produce a prompt that *looks* typed. Matching
+    the approval text alone cannot be complete (it can be built from pieces), so the session itself
+    is refused. Subcommands that only manage Claude Code (``claude plugin list``, ``--version``)
+    are fine. This is friction, not the safeguard: the approval is still checked against the
+    transcript, and a prompt from a headless session is not accepted by default."""
+    for call in _CLAUDE_CALL.finditer(command):
+        if (call.group(1) or "").strip("\"'").casefold() not in _CLAUDE_MANAGEMENT:
+            return True
+    return bool(_CLAUDE_RUNNER.search(command) or _CLAUDE_FROM_CODE.search(command))
+
+
+NESTED_SESSION_MESSAGE = (
+    "greenlight: starting another Claude Code session from inside this one is not allowed in a greenlight "
+    "project: a prompt typed into a nested session could be used to approve work on the person's behalf. "
+    "`claude plugin ...`, `claude mcp ...` and `claude --version` are fine.")
+
+
 def check_bash(project: Project, command: str) -> str | None:
-    """Best effort: block a command that runs an approval, or that both names a protected file and
-    looks like it writes."""
+    """Best effort: block a command that runs an approval or a nested Claude session, or that both
+    names a protected file and looks like it writes."""
     injection = check_injection({"command": command})
     if injection:
         return injection
+    if starts_claude_session(command):
+        return NESTED_SESSION_MESSAGE
     scrubbed = _NOISE.sub(" ", command)
     if not _SHELL_WRITES.search(scrubbed):
         return None
@@ -252,7 +287,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     project = Project(root)
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
-        return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload), tool_input)
+        return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"])
     return None

@@ -363,25 +363,39 @@ class EnforcementFilesTest(GuardCase):
                 self.assertIsNone(self.call("Write", file_path=str(self.root / rel)))
         self.assertIsNone(self.call("Bash", command="echo x > .cargo/config.toml"))
 
-    def test_hook_and_plugin_settings_cannot_be_edited(self):
+    def test_claude_code_settings_cannot_be_edited_whatever_the_change_says(self):
         settings = str(self.root / ".claude" / "settings.json")
         local = str(self.root / ".claude" / "settings.local.json")
         home_settings = str(self.root / "home" / ".claude" / "settings.json")
-        for tool, path, text in [
-            ("Write", settings, json.dumps({"disableAllHooks": True})),
-            ("Write", local, json.dumps({"enabledPlugins": {"greenlight@greenlight": False}})),
-            ("Write", home_settings, json.dumps({"hooks": {}})),
-        ]:
-            with self.subTest(path=path):
-                reason = self.call(tool, file_path=path, content=text)
-                self.assertIn("configures Claude Code hooks or plugins", reason)
-        edit = self.call("Edit", file_path=settings, old_string='"hooks": {"PreToolUse": []}', new_string="{}")
-        self.assertIn("configures Claude Code hooks or plugins", edit)          # removing hooks mentions them too
+        contents = [
+            json.dumps({"disableAllHooks": True}),
+            json.dumps({"enabledPlugins": {"greenlight@greenlight": False}}),
+            json.dumps({"permissions": {"allow": ["Bash(ls)"]}}),            # no hook words at all
+            '{"hoo\\u006bs": {}, "disableAllHoo\\u006bs": true}',          # JSON escapes: the same keys, spelled differently
+            "",
+        ]
+        for path in (settings, local, home_settings):
+            for content in contents:
+                with self.subTest(path=Path(path).name, content=content[:30]):
+                    self.assertIn("is a Claude Code settings file", self.call("Write", file_path=path, content=content))
+        edit = self.call("Edit", file_path=settings, old_string="a", new_string="b")
+        self.assertIn("is a Claude Code settings file", edit)
+        multi = self.call("MultiEdit", file_path=local, edits=[{"old_string": "a", "new_string": "b"}])
+        self.assertIn("is a Claude Code settings file", multi)
 
-    def test_unrelated_settings_changes_are_allowed(self):
-        settings = str(self.root / ".claude" / "settings.json")
-        self.assertIsNone(self.call("Write", file_path=settings, content=json.dumps({"permissions": {"allow": ["Bash(ls)"]}})))
-        self.assertIsNone(self.call("Write", file_path=str(self.root / "settings.json"), content='{"hooks": 1}'))   # not under .claude
+    def test_a_symlinked_directory_does_not_hide_the_settings_folder(self):
+        (self.root / ".claude").mkdir()
+        link = self.root / "innocent"
+        try:
+            link.symlink_to(self.root / ".claude", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are not available here")
+        self.assertIn("is a Claude Code settings file", self.call("Write", file_path=str(link / "settings.json"), content="{}"))
+
+    def test_settings_json_files_elsewhere_are_ordinary_files(self):
+        for rel in ("settings.json", "src/settings.json", ".vscode/settings.json"):
+            with self.subTest(rel=rel):
+                self.assertIsNone(self.call("Write", file_path=str(self.root / rel), content='{"hooks": 1}'))
 
     def test_hook_scripts_directory_is_protected(self):
         self.assertIn("is a Claude Code hook", self.call("Write", file_path=str(self.root / ".claude" / "hooks" / "x.sh")))
@@ -398,16 +412,48 @@ class EnforcementFilesTest(GuardCase):
             self.assertIsNone(self.call("Bash", command=f"cat {target}"))
             self.assertIsNone(self.call("Write", file_path=str(self.root / "src" / "ok.py")))
 
-    def test_shell_commands_cannot_rewrite_hook_settings(self):
+    def test_shell_commands_cannot_write_claude_code_settings_whatever_they_contain(self):
         for command in ["echo '{\"disableAllHooks\": true}' > .claude/settings.json",
-                        "sed -i 's/hooks/nothing/' .claude/settings.local.json",
-                        "rm -r .claude/hooks/ && touch .claude/settings.json  # plugin hooks"]:
+                        "echo '{\"permissions\": {}}' > .claude/settings.json",
+                        "sed -i 's/a/b/' .claude/settings.local.json",
+                        "cp /tmp/x.json ~/.claude/settings.json",
+                        "rm -r .claude/hooks/"]:
             with self.subTest(command=command):
                 self.assertIn("what enforces greenlight", self.call("Bash", command=command))
         for command in ["cat .claude/settings.json", "jq .permissions .claude/settings.json",
-                        "echo '{\"permissions\": {}}' > .claude/settings.json"]:
+                        "grep hooks .claude/settings.json", "ls .claude"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.call("Bash", command=command))
+
+
+class NestedSessionTest(GuardCase):
+    """The approval text can be assembled from pieces, so the nested session itself is refused."""
+
+    def test_commands_that_start_a_claude_session_are_blocked(self):
+        for command in ['claude -p "build it"', "claude", "/usr/local/bin/claude --print x",
+                        "C:/Users/x/.local/bin/claude.exe -p x", "env FOO=1 claude -p x", "FOO=1 claude -p x",
+                        "sudo claude -p x", "cd src && claude -p y", "echo hi | claude -p", "(claude -p x)",
+                        "result=$(claude -p x)", "npx @anthropic-ai/claude-code -p x", "npx claude -p x",
+                        "python -c \"import subprocess; subprocess.run(['claude','-p','x'])\"",
+                        "node -e \"require('child_process').spawn('claude',['-p'])\"",
+                        "nohup claude --resume abc &", "x='green'; y='light:approve'; claude -p \"/$x$y FEAT-001 rules\""]:
+            with self.subTest(command=command):
+                self.assertTrue(guard.starts_claude_session(command), command)
+                self.assertIsNotNone(self.call("Bash", command=command))
+
+    def test_commands_that_only_manage_claude_code_or_mention_the_word_are_fine(self):
+        for command in ["claude plugin list", "claude --version", "claude mcp list", "claude config get theme",
+                        "git commit -m 'ask claude later'", "ls claude-notes", "cat claude.md", "echo claude",
+                        "cat .claude/settings.json", "ls ~/.claude/projects", "./.claude/hooks/run.sh",
+                        "grep -r claude src", "python -m unittest"]:
+            with self.subTest(command=command):
+                self.assertFalse(guard.starts_claude_session(command), command)
+                self.assertIsNone(self.call("Bash", command=command))
+
+    def test_the_reason_explains_what_is_allowed(self):
+        reason = self.call("Bash", command="claude -p hi")
+        self.assertIn("nested session", reason)
+        self.assertIn("`claude plugin ...`", reason)
 
 
 class PerformanceTest(unittest.TestCase):
