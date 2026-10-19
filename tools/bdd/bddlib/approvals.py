@@ -17,6 +17,7 @@ afterwards against the transcript, and the gates refuse an approval that is not 
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -30,6 +31,7 @@ GRADES = ("hook", "self-reported", "auto")
 PREREQUISITE_GATES = {"rules": ("discover",), "examples": ("test-design",)}
 PHASE_OF = {"rules": "specify", "examples": "examples"}
 PENDING_TIMEOUT = timedelta(minutes=10)
+TRANSCRIPT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
 
 
 # -- what is being approved ----------------------------------------------------------------
@@ -141,22 +143,41 @@ def auto_problem(root: Path, level: str | None) -> str | None:
 
 
 def check_grade(root: Path, data: dict, grade: str) -> None:
-    problem = auto_problem(root, data["autonomy"]["level"]) if grade == "auto" else (
-        self_reported_problem(root, data) if grade == "self-reported" else None)
+    if grade == "auto":
+        problem, label = auto_problem(root, data["autonomy"]["level"]), "an automatic"
+    elif grade == "self-reported":
+        problem, label = self_reported_problem(root, data), "a self-reported"
+    else:
+        return
     if problem:
-        raise UsageError(f"a{'n automatic' if grade == 'auto' else ' self-reported'} approval is not accepted: {problem}")
+        raise UsageError(f"{label} approval is not accepted: {problem}")
 
 
 # -- origin verification -------------------------------------------------------------------
+def find_transcript(transcript_path: str) -> Path | None:
+    """The transcript file named by ``transcript_path``, looked up *inside* the Claude Code projects folders.
+
+    Only the file name is taken from the recorded path, and only if it is a plain ``<session>.jsonl``;
+    the folders searched are our own (``claudepaths.transcript_roots``), so a forged path cannot make
+    this read anything else."""
+    name = Path(transcript_path.replace("\\", "/")).name
+    if not TRANSCRIPT_NAME.fullmatch(name):
+        raise UsageError(f"not a session transcript file name: {name!r}")
+    for root in claudepaths.transcript_roots():
+        folders = [root, *(p for p in sorted(root.iterdir()) if p.is_dir())] if root.is_dir() else []
+        for folder in folders:
+            if (folder / name).is_file():
+                return folder / name
+    return None
+
+
 def prompt_entries(transcript_path: str, prompt_id: str) -> list[dict]:
     """Every real (non-meta) user entry of the transcript carrying ``prompt_id``.
 
     Normally exactly one. They are all kept so that a second entry with the same id but another origin
     makes the approval invalid instead of being skipped."""
-    path = Path(transcript_path).resolve()
-    if path.suffix != ".jsonl" or not any(path.is_relative_to(root) for root in claudepaths.transcript_roots()):
-        raise UsageError(f"refusing to read a transcript outside the Claude Code projects folder: {path}")
-    if not path.is_file():
+    path = find_transcript(transcript_path)
+    if path is None:
         return []
     found = []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():

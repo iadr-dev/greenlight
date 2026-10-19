@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -145,14 +146,26 @@ class VerifyTest(ProjectCase):
         self.assertEqual(approvals.verify_origins(self.feature_dir), 1)
         self.assertEqual(self.origin(), "unverifiable")
 
-    def test_a_transcript_outside_the_projects_folder_is_never_read(self):
+    def test_only_transcripts_inside_the_projects_folders_are_ever_read(self):
         self.gate("discover")
         outside = self.root / "elsewhere.jsonl"
-        outside.write_text("{}\n", encoding="utf-8")
+        outside.write_text(json.dumps(typed("p")) + "\n", encoding="utf-8")
         self.approve("rules", grade="hook", session="s1", prompt_id="p", transcript_path=str(outside))
+        self.assertEqual(approvals.verify_origins(self.feature_dir), 0)      # not found, so still undecided
+        self.assertEqual(self.origin(), "pending")
+
+    def test_the_recorded_directory_is_ignored_and_odd_names_are_unverifiable(self):
+        self.gate("discover")
+        self.transcript(typed("p"), name="real.jsonl")
+        self.approve("rules", grade="hook", session="s1", prompt_id="p",
+                     transcript_path=str(self.root / "anywhere" / ".." / "real.jsonl"))
         approvals.verify_origins(self.feature_dir)
-        self.assertEqual(self.origin(), "unverifiable")
-        self.assertIn("outside the Claude Code projects folder", self.data()["approvals"][0]["evidence"])
+        self.assertEqual(self.origin(), "human")                   # found by file name inside our own folders
+        self.approve("rules", grade="hook", session="s1", prompt_id="p", transcript_path="../../etc/passwd")
+        approvals.verify_origins(self.feature_dir)
+        second = self.data()["approvals"][1]
+        self.assertEqual(second["origin"], "unverifiable")
+        self.assertIn("not a session transcript file name", second["evidence"])
 
     def test_missing_provenance_is_unverifiable(self):
         self.gate("discover")

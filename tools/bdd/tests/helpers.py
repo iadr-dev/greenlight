@@ -75,7 +75,7 @@ class ProjectCase(unittest.TestCase):
                 self.gate(step)
             if step == last:
                 return
-        raise AssertionError(f"unknown pipeline step {last}")
+        raise ValueError(f"unknown pipeline step {last}")
 
     # -- transcripts ---------------------------------------------------------------------
     def transcript(self, *entries: dict, name: str = "session.jsonl") -> Path:
