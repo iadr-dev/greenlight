@@ -17,6 +17,7 @@ been caught by then. The first run in a project records the baseline.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -78,6 +79,20 @@ def _load(root: Path, name: str, empty: dict) -> dict:
     return data
 
 
+def backup_path(root: Path) -> Path:
+    """A second copy of the baseline outside the project, so deleting the project's copy loses nothing."""
+    key = hashlib.sha256(root.resolve().as_posix().encode("utf-8")).hexdigest()[:16]
+    return claudepaths.config_dir() / "greenlight" / key / BASELINE
+
+
+def load_backup(root: Path) -> dict | None:
+    path = backup_path(root)
+    try:
+        return store.read_json(path, "the baseline backup") if path.is_file() else None
+    except StoreError:
+        return None
+
+
 def load_baseline(root: Path) -> dict[str, str] | None:
     data = _load(root, BASELINE, {})
     return data.get("files") if data else None
@@ -126,10 +141,13 @@ def check(root: Path, plugin_root: Path | None, tool: str | None = None) -> list
     A missing baseline is a violation, not a first run: the baseline is taken when the person submits a
     prompt, which happens before any tool call, so only deleting it makes it vanish."""
     baseline = load_baseline(root)
-    if baseline is None:
-        findings = [{"kind": "missing", "path": _path(root, BASELINE).as_posix(), "what": BASELINE_WHAT}]
+    findings = lock_findings(root)
+    if baseline is None:                                   # still compare with the backup, if there is one
+        findings.insert(0, {"kind": "missing", "path": _path(root, BASELINE).as_posix(), "what": BASELINE_WHAT})
+        backup = load_backup(root)
+        findings += baseline_findings(root, plugin_root, backup["files"]) if backup else []
     else:
-        findings = baseline_findings(root, plugin_root, baseline) + lock_findings(root)
+        findings += baseline_findings(root, plugin_root, baseline)
     current = {_key(f) for f in findings}
     items = violations(root)
     before = json.loads(json.dumps(items))
@@ -150,16 +168,21 @@ def accept(root: Path, plugin_root: Path | None) -> list[dict] | None:
 
     Returns what differed from the previous baseline (also kept in its ``accepted`` history, so a change
     that slipped past the tool-call checks is at least on record), or None if a violation is open and
-    nothing was accepted. A missing baseline does not stop this: restoring it is what this is for."""
+    nothing was accepted. A missing baseline does not stop this (restoring it is what this is for), but
+    the differences from the backup copy are reported and recorded like any other accepted change."""
     items = violations(root)
     if any(v["open"] and v["what"] != BASELINE_WHAT for v in items):
         return None
-    previous = load_baseline(root)
+    kept = _load(root, BASELINE, {}) or load_backup(root) or {}      # the project's copy, else the backup
     now = store.utc_now()
-    changes = [] if previous is None else [{**f, "at": now} for f in baseline_findings(root, plugin_root, previous)]
-    history = (_load(root, BASELINE, {}).get("accepted") or []) + changes
-    store.write_json(_path(root, BASELINE), {"schema": SCHEMA, "files": snapshot(root, plugin_root),
-                                             "accepted": history[-ACCEPTED_KEPT:]})
+    changes = [{**f, "at": now} for f in baseline_findings(root, plugin_root, kept["files"])] if kept else []
+    history = (kept.get("accepted") or []) + changes
+    data = {"schema": SCHEMA, "files": snapshot(root, plugin_root), "accepted": history[-ACCEPTED_KEPT:]}
+    store.write_json(_path(root, BASELINE), data)
+    try:
+        store.write_json(backup_path(root), data)
+    except OSError:
+        pass                                                         # the backup is a safeguard, not a requirement
     if any(v["open"] for v in items):
         for v in items:
             if v["open"]:

@@ -89,6 +89,33 @@ class MissingBaselineTest(TripwireCase):
         self.assertEqual(tripwire.open_violations(self.root), [])
         self.assertEqual(self.check(), [])
 
+    def test_a_change_made_with_the_baseline_deleted_is_still_found_from_the_backup(self):
+        self.baseline_file.unlink()
+        self.settings.write_text("{}\n", encoding="utf-8", newline="\n")
+        found = {(v["what"], v["kind"]) for v in self.check()}
+        self.assertEqual(found, {("integrity baseline", "missing"), ("enforcement file", "changed")})
+
+    def test_restoring_a_deleted_baseline_reports_what_changed_meanwhile(self):
+        self.baseline_file.unlink()
+        self.settings.write_text("{}\n", encoding="utf-8", newline="\n")
+        self.check()
+        self.assertIsNone(tripwire.accept(self.root, self.plugin))          # the change is an open violation
+        self.settings.write_text('{"permissions": {}}\n', encoding="utf-8", newline="\n")
+        self.check()
+        self.assertEqual(tripwire.accept(self.root, self.plugin), [])
+        self.baseline_file.unlink()
+        self.settings.write_text('{"model": "x"}\n', encoding="utf-8", newline="\n")
+        (change,) = [c for c in tripwire.accept(self.root, self.plugin)]
+        self.assertEqual(change["kind"], "changed")                         # reported, from the backup copy
+
+    def test_locked_files_are_still_checked_while_the_baseline_is_missing(self):
+        lockfile.lock(self.root, self.feature_dir, "FEAT-007", "spec", [self.spec])
+        self.baseline_file.unlink()
+        self.spec.write_text(self.spec.read_text(encoding="utf-8").replace("succeeds", "fails"), encoding="utf-8", newline="\n")
+        self.check()
+        self.assertIn("FEAT-007 spec lock", {v["what"] for v in tripwire.open_violations(self.root)})
+        self.assertIsNone(tripwire.accept(self.root, self.plugin))
+
     def test_deleting_the_baseline_to_hide_a_change_blocks_the_gates(self):
         self.walk_to("tasks")
         tripwire.accept(self.root, self.plugin)
