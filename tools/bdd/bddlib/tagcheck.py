@@ -62,6 +62,11 @@ def check_trace_tags(feature: gherkin.Feature, path: str) -> list[Issue]:
     return issues + duplicate_examples(feature, path)
 
 
+def wrong_feature(tag: re.Match, feat: re.Match) -> str:
+    return (f"{tag.group(0)} belongs to feature {tag.group(1)}, but this feature is {feat.group(0)} "
+            "(write the feature number exactly the same way, including leading zeros)")
+
+
 def check_rules(feature: gherkin.Feature, feat: re.Match | None, path: str) -> list[Issue]:
     issues = []
     for rule in (c for c in feature.children if isinstance(c, gherkin.Rule)):
@@ -70,7 +75,7 @@ def check_rules(feature: gherkin.Feature, feat: re.Match | None, path: str) -> l
         issues += problems + found
         if rule_tag and feat and rule_tag.group(1) != feat.group(1):
             issues.append(Issue(path, rule.line, ERROR, "L005",
-                                f"{rule_tag.group(0)} belongs to feature {rule_tag.group(1)}, not {feat.group(1)}"))
+                                wrong_feature(rule_tag, feat)))
     return issues
 
 
@@ -86,7 +91,7 @@ def check_scenario(feature: gherkin.Feature, scenario: gherkin.Scenario, rule: g
     issues += found
     if example and feat and example.group(1) != feat.group(1):
         issues.append(Issue(path, scenario.line, ERROR, "L005",
-                            f"{example.group(0)} belongs to feature {example.group(1)}, not {feat.group(1)}"))
+                            wrong_feature(example, feat)))
     if example and rule_tag and example.group(1, 2) != rule_tag.group(1, 2):
         issues.append(Issue(path, scenario.line, ERROR, "L005",
                             f"{example.group(0)} does not belong to {rule_tag.group(0)}"))

@@ -26,6 +26,8 @@ from pathlib import Path
 
 from . import config as cfg
 from . import denylist, gherkin, tagcheck, vocabcheck, vocabulary
+from .errors import UsageError
+from .featurefiles import collect_files
 from .issues import ERROR, WARNING, Issue
 
 _OUTLINE_PARAM = re.compile(r"<([^<>]+)>")
@@ -149,28 +151,6 @@ class Linter:
 
 
 # -- files and CLI -----------------------------------------------------------------------
-class UsageError(ValueError):
-    """The command line asked for something lint refuses to do."""
-
-
-def collect_files(paths: list[Path]) -> list[Path]:
-    """Expand directories to their .feature files. An explicit file must itself be a .feature:
-    lint is called by tools and agents, and parse errors quote the text they stumble on, so it
-    must not be usable to read arbitrary files."""
-    files: list[Path] = []
-    for p in paths:
-        if p.is_dir():
-            files += sorted(f for f in p.rglob("*.feature")
-                            if not any(part.startswith(".") or part == "node_modules" for part in f.relative_to(p).parts))
-        elif p.is_file() and p.suffix == ".feature":
-            files.append(p)
-        elif p.is_file():
-            raise UsageError(f"{p} is not a .feature file")
-        else:
-            raise FileNotFoundError(str(p))
-    return files
-
-
 def vocabulary_file(arg: Path | None, config: cfg.Config) -> Path | None:
     """--vocabulary must be a .toml file inside the project (or the working directory)."""
     if arg is None:
