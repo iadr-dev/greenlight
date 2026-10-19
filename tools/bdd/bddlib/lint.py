@@ -218,7 +218,8 @@ def report(issues: list[Issue], file_count: int, as_json: bool) -> None:
 
 
 def run(argv: list[str]) -> int:
-    args = build_parser().parse_args(argv)
+    # Intermixed: Python 3.11's argparse otherwise rejects `bdd lint a.feature --json`.
+    args = build_parser().parse_intermixed_args(argv)
     try:
         plan = prepare(args)
     except (cfg.ConfigError, vocabulary.VocabularyError, FileNotFoundError, UsageError) as exc:

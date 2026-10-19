@@ -92,7 +92,8 @@ def report_check(feature_id: str, data: dict, violations: list[lockfile.Violatio
 
 
 def run_lock(argv: list[str]) -> int:
-    args = lock_parser().parse_args(argv)
+    # Intermixed: Python 3.11's argparse otherwise rejects `bdd lock FEAT --scope bind PATH`.
+    args = lock_parser().parse_intermixed_args(argv)
     try:
         root = project_root()
         return do_check(args, root) if args.check else do_lock(args, root)

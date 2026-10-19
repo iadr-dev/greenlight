@@ -90,6 +90,12 @@ class LockCommandTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("[bind] steps/steps.py changed", out)
 
+    def test_paths_may_come_before_or_after_the_options(self):
+        self.assertEqual(self.lock("steps", "--scope", "bind")[0], 0)
+        self.assertEqual(self.lock("--check", "--scope", "bind")[0], 0)
+        self.run_cmd(lockcmd.run_unlock, "FEAT-007", "--scope", "bind", "--reason", "retry")
+        self.assertEqual(self.lock("--scope", "bind", "steps", "--check")[0], 0)   # --check ignores the paths
+
     def test_require_fails_when_a_scope_was_never_locked(self):
         self.lock("--scope", "spec")
         self.assertEqual(self.lock("--check")[0], 0)                       # nothing demanded

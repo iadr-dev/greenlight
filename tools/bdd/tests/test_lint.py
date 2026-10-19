@@ -259,6 +259,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("warning L011", out)
 
+    def test_options_may_come_after_the_paths(self):
+        f = self.write("features/bad.feature", self.BAD)
+        code, out, _ = self.run_lint(str(f), "--json", "--no-trace-tags")
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(out)["summary"]["errors"], 1)
+
     def test_json_output(self):
         f = self.write("features/bad.feature", self.BAD)
         code, out, _ = self.run_lint("--json", str(f))
