@@ -49,7 +49,8 @@ Git Bash. Without Git for Windows greenlight still works, but only with soft enf
 - [Quickstart](docs/quickstart.md): install to verified feature
 - [Concepts](docs/concepts.md): phases, gates, locks, autonomy levels, enforcement
 - [Vocabulary](docs/vocabulary.md): the step phrases scenarios are written from
-- [Adapters](docs/adapters.md): test stacks, which Python runs the tests, CI
+- [Adapters](docs/adapters.md): test stacks, which Python runs the tests
+- [CI](docs/ci.md): re-check locks, the green run and traceability in a pipeline
 - [Upgrading](docs/upgrading.md), [FAQ](docs/faq.md), [Troubleshooting](docs/troubleshooting.md)
 - [A filled-in example feature](docs/examples/order-discounts)
 - For contributors: [CLAUDE.md](CLAUDE.md), [design decisions](docs/dev/decisions.md), [platform notes](docs/dev/platform-notes.md)

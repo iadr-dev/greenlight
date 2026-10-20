@@ -42,7 +42,7 @@ install packages.
 
 ## Running in CI
 
-See `adapters/python-pytest-bdd/ci.md`. For the gates themselves (locks, approvals, valid red, green) a CI job can run,
+See [ci.md](ci.md) for a complete job and `adapters/python-pytest-bdd/ci.md` for the plain test run. The gates themselves (locks, valid red, green) can be re-checked, with the plugin's `tools/bdd/bdd` wrapper (Python 3.11+, nothing to install):
 with the plugin's `tools/bdd/bdd` wrapper (Python 3.11+, nothing to install):
 
 ```yaml
