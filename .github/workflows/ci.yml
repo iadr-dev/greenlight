@@ -52,5 +52,4 @@ jobs:
       - name: greenlight's own specs lint clean (dogfood)
         run: sh tools/bdd/bdd lint specs/features
       - name: greenlight's own specs pass (dogfood)
-        working-directory: specs
-        run: python -m pytest -q -p no:cacheprovider -W ignore
+        run: python specs/run_specs.py

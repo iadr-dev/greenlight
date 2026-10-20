@@ -3,13 +3,17 @@
 greenlight specifies its own behaviour the way it asks its users to: the features contain no paths, flags or exit
 codes; they say `alice runs lint` and `the command fails with violations found`, and this file knows what those
 mean. The command under test is `tools/bdd/bdd`, run in a fresh workspace per scenario.
+
+This is the one project-specific file: `run_specs.py` copies it over the adapter's `tests/drivers/operations.py` in a
+scaffold of the `python-pytest-bdd` adapter, which is exactly what a user's project does.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(os.environ["GREENLIGHT_REPO"])        # set by run_specs.py
 BDD = ["sh", str(REPO / "tools" / "bdd" / "bdd")]
 
 

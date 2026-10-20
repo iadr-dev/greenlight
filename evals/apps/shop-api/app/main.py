@@ -24,7 +24,7 @@ def list_products() -> list[dict]:
     return [{"sku": sku, "price": price} for sku, price in PRODUCTS.items()]
 
 
-@app.post("/orders", status_code=201)
+@app.post("/orders", status_code=201, responses={422: {"description": "an item names an unknown product"}})
 def place_order(order: OrderIn) -> dict:
     unknown = [item.sku for item in order.items if item.sku not in PRODUCTS]
     if unknown:
@@ -35,7 +35,7 @@ def place_order(order: OrderIn) -> dict:
     return ORDERS[order_id]
 
 
-@app.get("/orders/{order_id}")
+@app.get("/orders/{order_id}", responses={404: {"description": "no such order"}})
 def get_order(order_id: int) -> dict:
     if order_id not in ORDERS:
         raise HTTPException(status_code=404, detail="no such order")

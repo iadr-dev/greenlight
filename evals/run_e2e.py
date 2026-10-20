@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,15 @@ RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
 GIT = ["git", "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "-c", "commit.gpgsign=false",
        "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+
+
+SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*")      # a model id or a request name: never an option, never a path escape
+
+
+def checked(value: str, what: str) -> str:
+    if not SAFE_NAME.fullmatch(value) or ".." in value:
+        raise SystemExit(f"{what} {value!r} is not an acceptable name")
+    return value
 
 
 def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True) -> subprocess.CompletedProcess:
@@ -141,7 +151,8 @@ def main() -> int:
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
-    request = (REQUESTS / f"{args.request}.md").read_text(encoding="utf-8")
+    request = (REQUESTS / f"{checked(args.request, 'request')}.md").read_text(encoding="utf-8")
+    checked(args.model, "model")
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
         project, env = build_project(tmp)
