@@ -109,6 +109,13 @@ class QualityRules:
 
 
 @dataclass(frozen=True)
+class Member:
+    """Another repository that holds part of the same features (``[workspace]`` in config.toml)."""
+    name: str
+    path: Path                               # the directory that contains its .bdd/, symlinks resolved
+
+
+@dataclass(frozen=True)
 class Config:
     root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
@@ -128,6 +135,8 @@ class Config:
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
     mutation: MutationRules | None = None    # the first adapter that has an [adapters.mutation] table
     quality: QualityRules | None = None      # the first adapter that has an [adapters.quality] table
+    stability_runs: int = 0                  # [stability] runs: how often the verify gate wants the feature rerun (0: not asked)
+    workspace: tuple[Member, ...] = ()       # the other repositories of a feature that spans several
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -258,11 +267,48 @@ def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tupl
     return tuple(files), tuple(patterns)
 
 
+_MEMBER_NAME = re.compile(r"[a-z][a-z0-9_-]{0,30}")
+
+
+def _workspace(root: Path, data: dict, path: Path) -> tuple[Member, ...]:
+    """The ``[workspace]`` table: member name -> directory (relative to this repository or absolute)."""
+    table = data.get("workspace", {})
+    if not isinstance(table, dict):
+        raise ConfigError(f"{path}: [workspace] maps a name to the directory of another repository")
+    here = Path(os.path.realpath(root))
+    members: list[Member] = []
+    for name, value in table.items():
+        if not _MEMBER_NAME.fullmatch(name):
+            raise ConfigError(f"{path}: [workspace] {name!r} is not a name (lower case letters, digits, - and _)")
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"{path}: [workspace] {name} must be the directory of the other repository, as a string")
+        target = Path(os.path.realpath(root / value))
+        others = [here, *(m.path for m in members)]
+        if any(target == other or target in other.parents or other in target.parents for other in others):
+            raise ConfigError(f"{path}: [workspace] {name} must be a repository of its own, "
+                              "not this one, inside it, or containing it or another member")
+        members.append(Member(name, target))
+    return tuple(members)
+
+
 def _python(data: dict, path: Path) -> str:
     value = data.get("python", "")
     if not isinstance(value, str):
         raise ConfigError(f"{path}: python must be the path of an interpreter")
     return value
+
+
+MAX_STABILITY_RUNS = 50
+
+
+def _stability_runs(data: dict, path: Path) -> int:
+    table = data.get("stability")
+    if table is None:
+        return 0
+    runs = table.get("runs") if isinstance(table, dict) else None
+    if isinstance(runs, bool) or not isinstance(runs, int) or not 2 <= runs <= MAX_STABILITY_RUNS:
+        raise ConfigError(f"{path}: [stability] runs must be a whole number from 2 to {MAX_STABILITY_RUNS}")
+    return runs
 
 
 def _schema_version(data: dict, path: Path) -> int:
@@ -338,4 +384,6 @@ def load(root: Path | str | None) -> Config:
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
         mutation=next((r for r in (_mutation_rules(a, path) for a in data.get("adapters", [])) if r), None),
         quality=next((r for r in (_quality_rules(a, path) for a in data.get("adapters", [])) if r), None),
+        stability_runs=_stability_runs(data, path),
+        workspace=_workspace(root, data, path),
     )

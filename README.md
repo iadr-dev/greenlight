@@ -15,8 +15,9 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
   written; a broken test is not a red.
 - **Evidence is bound.** Approved specs, steps, drivers and the test runner's own settings are locked; the interpreter,
   environment and recorded runs are checked; a tripwire notices tampering whatever command caused it.
-- **Other agent tools too.** `bdd install-skills codex|agents-md` installs the instructions for Codex and anything
-  that reads `AGENTS.md`, in soft mode (detected, not prevented), with the same `bdd` checks.
+- **Other agent tools too.** `bdd install-skills claude|codex|agents-md` installs the instructions for Claude Code
+  without the plugin, for Codex, and for anything that reads `AGENTS.md`, in soft mode (detected, not prevented), with
+  the same `bdd` checks; `--uninstall` takes them away again.
 - **Deterministic work is code, not prompts.** Lint, trace, locks, gates and classification are the `bdd` command line
   (Python 3.11+, standard library only).
 - **Traceable.** `@FEAT-n`, `@R-n.m` and `@EX-n.m.k` tags tie every rule to its examples, tests and code.

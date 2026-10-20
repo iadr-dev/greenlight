@@ -45,6 +45,18 @@ Arguments: `$ARGUMENTS`
 The feature directory is `.bdd/features/FEAT-n-slug/`. Write the person's request word for word into the task you
 give the first agent.
 
+### Features that span several repositories
+
+If `.bdd/config.toml` has a `[workspace]` table (`bdd workspace list` shows the members), the repository you run in is the
+home: the brief, rules, state, approvals and report stay here, and every agent task names the repository each file belongs
+to (the home or a member) and tells the agent to run its commands for a member as `bdd --in NAME ...`. Create the feature
+once with `bdd state next-id` and `bdd state init` here, then in each member that takes part with
+`bdd --in NAME state init FEAT-n --title "<same title>"`; scenarios in a member carry the same `@FEAT-n`, `@R-` and `@EX-`
+ids. Check the members yourself before each gate (`bdd workspace check FEAT-n --gate bind|implement|verify`,
+`bdd lock FEAT-n --check --require --workspace`, `bdd trace FEAT-n --workspace`); the home's gates refuse while a member's
+evidence is missing, stale or broken. A member that is not on this machine is not observed: say so to the person and
+list it in the report; never mark it fine.
+
 ## 3. The loop
 
 Read where the feature stands (`bdd state show FEAT-n --json`: its `phase`) and run that phase. For each phase
@@ -64,7 +76,7 @@ this one needs. Tell it to read the playbook first.
 | bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you | write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
 | implement | implementer, one task at a time | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status`; if `.bdd/config.toml` has `[adapters.quality.NAME]` tables, `bdd check FEAT-n` after the last change (a failed check goes back to the implementer with its output) | `bdd gate FEAT-n implement --result pass` |
-| verify | spec-auditor | the report has evidence on every line (the Q items of the checklist included); if `.bdd/config.toml` has `[adapters.mutation]`, you ran `bdd mutate FEAT-n` before starting the auditor and told it the result | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
+| verify | spec-auditor | the report has evidence on every line (the Q items of the checklist included); if `.bdd/config.toml` has `[adapters.mutation]`, you ran `bdd mutate FEAT-n` before starting the auditor and told it the result; if it has `[stability]`, you ran `bdd stability FEAT-n` too | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
 
 Rules for the loop:
 
