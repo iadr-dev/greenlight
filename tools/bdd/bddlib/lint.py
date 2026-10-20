@@ -14,6 +14,8 @@ Every finding has a stable code so reports can refer to it:
     L010 error    two vocabulary patterns are nearly identical and neither is justified
     L011 warning  step is marked ``# proposed-step`` and still has to be added to the vocabulary
     L012 error    a domain step does not compose core instructions properly
+    L013 error    a shared vocabulary file is not pinned, or changed since it was pinned (`bdd vocabulary pin`)
+    L014 error    two project or shared steps define the very same pattern
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config as cfg
-from . import denylist, gherkin, tagcheck, vocabcheck, vocabulary
+from . import denylist, gherkin, sharedvocab, tagcheck, vocabcheck, vocabulary
 from .errors import UsageError
 from .featurefiles import collect_files
 from .issues import ERROR, WARNING, Issue
@@ -185,8 +187,12 @@ def check_project_vocabulary(vocab: vocabulary.Vocabulary, path: Path | None, co
     """Validate the project's own domain steps (if it has a vocabulary file)."""
     if path is None or not path.exists():
         return []
-    return vocabcheck.check_vocabulary(vocab, profiles, config.near_duplicate_similarity, path,
-                                       path.read_text(encoding="utf-8"))
+    root = sharedvocab.project_root(path)
+    shared = sharedvocab.closure(root, path)
+    texts = {str(f): f.read_text(encoding="utf-8") for f in shared}
+    issues = [Issue(str(path), 1, ERROR, "L013", message) for message in sharedvocab.pin_problems(root, shared)]
+    return issues + vocabcheck.check_vocabulary(vocab, profiles, config.near_duplicate_similarity, path,
+                                                path.read_text(encoding="utf-8"), texts)
 
 
 def prepare(args: argparse.Namespace) -> Plan:

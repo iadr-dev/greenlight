@@ -85,6 +85,11 @@ bdd install-skills agents-md     # any tool that reads AGENTS.md
 
 Add `--dry-run` to look first and `--uninstall` to take it all away again; see [concepts](concepts.md).
 
+## Hand the result to reviewers
+
+`bdd pr FEAT-001 --write` saves a pull-request description from the recorded facts (rules, examples, evidence,
+assumptions, the auditor's verdict). Paste it into the pull request; see [concepts](concepts.md).
+
 ## Starting from existing code
 
 To put code that already exists under greenlight before you change it, describe one area first:

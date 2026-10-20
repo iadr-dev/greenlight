@@ -39,7 +39,7 @@ from pathlib import Path
 
 from . import claudepaths
 from . import config as cfg
-from . import enforcement, lockfile, store
+from . import enforcement, lockfile, sharedvocab, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -58,7 +58,7 @@ AGENT_WRITES = {
     "implementer": {"data", "production"},
     "spec-auditor": set(),
 }
-MANAGED_NAMES = {"state.json", "lock.json"}
+MANAGED_NAMES = {"state.json", "lock.json", sharedvocab.LOCK_NAME}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
@@ -131,6 +131,7 @@ class Project:
         self.root = root.resolve()
         self.config = cfg.load(self.root)
         self.locked: dict[str, Locked] = {}
+        self.shared = {path_key(f): f for f in sharedvocab.protected_files(self.config.vocabulary_file)}   # included vocabularies
         self.load_locks()
         # The other repositories of a workspace are protected with their own locks and data, wherever the tool call
         # reaches them from. Which directories a session includes is not in the hook input, so a member that no tool
@@ -199,7 +200,7 @@ def locked_message(project: Project, path: Path, lock: Locked) -> str:
 
 def managed_message(project: Project, path: Path) -> str:
     return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals, "
-            "project configuration, engineering standards). Use the bdd commands instead of editing it; the person can edit it "
+            "project configuration, engineering standards, shared vocabularies). Use the bdd commands instead of editing it; the person can edit it "
             "themselves outside the agent.")
 
 
@@ -262,6 +263,14 @@ NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-ma
                 "read-only ones (run, test, ls, list, why, view, info, outdated, audit, --version), and may not use npx, pnpx, "
                 "bunx or corepack. Put the subcommand first and the flags after it (`npm run typecheck --prefix tests`). "
                 "Installing is the person's decision; report the missing requirement instead.")
+
+
+_PIN_COMMAND = re.compile(r"\bvocabulary\s+pin\b|--shared-vocabulary\b", re.IGNORECASE)
+PIN_MESSAGE = ("greenlight: pinning a shared vocabulary says that a person has read the included files, so it is the person's "
+               "act and no tool call may do it. Ask the person to read the files and run `bdd vocabulary pin` themselves "
+               "(in Claude Code, type `! ` followed by the command).")
+_PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
+PR_FILE = "PULL_REQUEST.md"
 
 
 def _last_segment(word: str) -> str:
@@ -337,7 +346,7 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
-    if project.is_data(path):
+    if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
     protected = check_enforcement_files(path)
     if protected:
@@ -432,6 +441,9 @@ def mentioned_protected(project: Project, command: str, cwd: Path | None = None)
         for managed in MANAGED_DIRS:
             if names_segment(text, managed) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
+        for shared in project.shared.values():                      # an included vocabulary, by its bare name or a glob
+            if names_segment(text, shared.name.casefold()):
+                return shared, None
     return None
 
 
@@ -543,6 +555,17 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
+def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
+    """What only an agent is refused: writing the pull-request description outside its write matrix, installing packages."""
+    if _PR_WRITE.search(scrubbed):                                 # `bdd pr --write` writes a file in the project root
+        written = check_file_write(project, project.root / PR_FILE, agent)
+        if written:
+            return written
+    if _INSTALL.search(scrubbed):
+        return INSTALL_MESSAGE
+    return NODE_MESSAGE if refuses_node_packages(scrubbed) else None
+
+
 def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
     """Best effort: block a command that runs an approval or a nested Claude session, or that both
     names a protected file and looks like it writes."""
@@ -552,10 +575,11 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     if starts_claude_session(command):
         return NESTED_SESSION_MESSAGE
     scrubbed = _NOISE.sub(" ", command)
-    if agent and _INSTALL.search(scrubbed):
-        return INSTALL_MESSAGE
-    if agent and refuses_node_packages(scrubbed):
-        return NODE_MESSAGE
+    if _PIN_COMMAND.search(scrubbed):
+        return PIN_MESSAGE
+    refused = check_agent_command(project, scrubbed, agent) if agent else None
+    if refused:
+        return refused
     if not _SHELL_WRITES.search(scrubbed):
         return None
     if agent and _ENVIRONMENT_PATH.search(scrubbed):
