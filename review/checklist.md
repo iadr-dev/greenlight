@@ -58,7 +58,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | E2 | The shuffled and the isolated runs are green | yes | `bdd run FEAT-n --shuffle`, `--isolated`, then the plain run last |
 | E3 | No fixed waits; where time, concurrency, network or UI are involved, repeated runs on one commit agree | no | `bdd scan` finding `E3`; the `stability-rerun` card |
 | E4 | Scenarios tagged `@existing` really passed before implementation | yes | the red classification and the git history |
-| E5 | Optional: the mutation check on the changed files, with survivors explained | no | the `mutation-check` card |
+| E5 | Optional: the mutation check on the changed files, with survivors explained. When `[adapters.mutation]` is configured the recorded result must be current and at or above the threshold; without the table this item is not applicable | yes when configured, otherwise no | `bdd mutate FEAT-n --check`; the `mutation-check` card |
 
 ## A - Assumptions (autopilot and any recorded assumption)
 

@@ -22,7 +22,8 @@ implementer's explanations, history or expected verdict. A missing input makes t
 4. The run that proved the red is kept: read it with `bdd classify FEAT-n --run red`. Your own reruns replace
    the latest run, so finish with a plain `bdd run FEAT-n`. Where it applies (time, concurrency, network, UI),
    run the stability rerun: `bdd run FEAT-n --shuffle` and
-   `--isolated`, several times. Mutation testing on the changed files is optional; follow `mutation-check`.
+   `--isolated`, several times. Mutation testing on the changed files is optional; follow `mutation-check`. Where the project configured it, read the
+   recorded result with `bdd mutate FEAT-n --check` (the orchestrator runs `bdd mutate`; you only read it).
 5. Write `report.md` from `templates/report.md`: the verdict, autonomy and enforcement level, the trace
    matrix, gates, locks and approvals (every human approval must be hook-grade or labelled self-reported, and
    its hashes must match the current files), the checklist with evidence for every line, and the cost.

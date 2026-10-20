@@ -34,6 +34,11 @@ is planned. The `bdd` tool itself is language independent and needs only Python 
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.
 
+**Can production code cheat the tests?**
+It runs inside the test process, so it could in principle detect that tests are running. The auditor reads the diff for
+that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to
+leave surviving mutants. See [adapters](adapters.md).
+
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.

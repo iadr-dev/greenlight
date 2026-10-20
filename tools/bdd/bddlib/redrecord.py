@@ -60,6 +60,14 @@ def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> l
     return [p for p in paths if is_production(p, excluded)]
 
 
+def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: str) -> list[str]:
+    """Production files added or modified since ``commit``, committed or not, that still exist."""
+    tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit).split("\0")
+    untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
+    excluded = excluded_prefixes(root, test_dirs)
+    return sorted(n for n in {*tracked, *untracked} if n and is_production(n, excluded) and (root / n).is_file())
+
+
 def source_digest(root: Path, test_dirs: tuple[Path, ...]) -> str:
     h = hashlib.sha256()
     for name in production_files(root, test_dirs):
