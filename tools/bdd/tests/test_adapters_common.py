@@ -11,6 +11,8 @@ from bddlib import config as cfg
 REPO = Path(__file__).resolve().parents[3]
 ADAPTERS = REPO / "adapters"
 STEP_COMMENT = re.compile(r"(?:#|//) (C\.[A-Z_.]+)")
+# Adapters whose steps the project writes in its own runner: they bind no core instruction and have no step scan.
+PROJECT_BOUND = {"generic-junit"}
 CORE = json.loads((REPO / "vocabulary" / "core.json").read_text(encoding="utf-8"))["instructions"]
 
 
@@ -31,11 +33,14 @@ def bound_instructions(path: Path) -> set[str]:
 class EveryAdapterTest(unittest.TestCase):
     def test_there_are_adapters_to_check(self):
         names = {p.name for p in adapters_with_settings()}
-        self.assertTrue({"python-pytest-bdd", "ts-playwright-bdd"} <= names, names)
+        self.assertLessEqual({"python-pytest-bdd", "ts-playwright-bdd"}, names)
 
     def test_every_instruction_of_the_declared_profiles_is_bound_and_no_other(self):
         for path in adapters_with_settings():
             with self.subTest(adapter=path.name):
+                if path.name in PROJECT_BOUND:
+                    self.assertEqual(bound_instructions(path), set(), "a project-bound adapter ships no core steps")
+                    continue
                 profiles = set(adapter.load(path)["profiles"])
                 wanted = {i["id"] for i in CORE if set(i["profiles"]) <= profiles}
                 bound = bound_instructions(path)
@@ -56,9 +61,11 @@ class EveryAdapterTest(unittest.TestCase):
                 (root / ".bdd").mkdir()
                 (root / ".bdd" / "config.toml").write_text(adapter.config_block(adapter.load(path)), encoding="utf-8")
                 config = cfg.load(root)
-                (scan,), (run,) = config.scans, config.runs
+                (run,) = config.runs
                 self.assertEqual(run.adapter, path.name)
-                self.assertTrue(scan.assert_patterns and scan.sleep_patterns and scan.stub_patterns)
+                if path.name not in PROJECT_BOUND:
+                    (scan,) = config.scans
+                    self.assertTrue(scan.assert_patterns and scan.sleep_patterns and scan.stub_patterns)
                 self.assertIn("BDD_EXPECTED_MISSING", run.expected_fail)
                 self.assertIn("NotMapped", run.test_defect)
                 self.assertTrue(config.feature_dirs and config.step_dirs)

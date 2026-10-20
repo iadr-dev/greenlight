@@ -3,11 +3,14 @@
   <head><meta charset="utf-8" /><title>Shop</title></head>
   <body>
     <p data-testid="result">waiting</p>
-    <script>
-      fetch('https://payments.test/v1/charges', { method: 'POST', body: JSON.stringify({ amount: 5 }) })
-        .then((response) => response.json())
-        .then((body) => { document.querySelector('[data-testid="result"]').textContent = body.status; })
-        .catch(() => { document.querySelector('[data-testid="result"]').textContent = 'error'; });
+    <script type="module">
+      const result = document.querySelector('[data-testid="result"]');
+      try {
+        const response = await fetch('https://payments.test/v1/charges', { method: 'POST', body: JSON.stringify({ amount: 5 }) });
+        result.textContent = (await response.json()).status;
+      } catch {
+        result.textContent = 'error';
+      }
     </script>
   </body>
 </html>

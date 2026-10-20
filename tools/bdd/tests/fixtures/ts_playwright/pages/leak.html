@@ -3,10 +3,14 @@
   <head><meta charset="utf-8" /><title>Leak</title></head>
   <body>
     <p data-testid="result">waiting</p>
-    <script>
-      fetch('https://tracker.test/collect')
-        .then(() => { document.querySelector('[data-testid="result"]').textContent = 'sent'; })
-        .catch(() => { document.querySelector('[data-testid="result"]').textContent = 'blocked'; });
+    <script type="module">
+      const result = document.querySelector('[data-testid="result"]');
+      try {
+        await fetch('https://tracker.test/collect');
+        result.textContent = 'sent';
+      } catch {
+        result.textContent = 'blocked';
+      }
     </script>
   </body>
 </html>

@@ -113,6 +113,35 @@ class AgentCommandsTest(ProjectCase):
                 self.assertIn("may not install packages", self.bash(command, "implementer"))
                 self.assertIsNone(self.bash(command, None))
 
+    def test_node_package_commands_are_found_after_flags_and_prefixes(self):
+        spellings = ("npm --prefix tests install", "npm -g i left-pad", "npm --silent ci", "npm uninstall x", "npm update",
+                     "npm rebuild", "npm link ../x", "npm exec some-tool", "npx playwright install", "bunx create-thing",
+                     "pnpm dlx create-thing", "pnpm --filter app add zod", "yarn", "yarn --frozen-lockfile", "yarn add zod",
+                     "sudo npm i", "FOO=1 npm install", "cd tests && npm ci", "echo done; npm remove x", "(npm install)",
+                     "C:\\Tools\\npm.cmd install", "./node_modules/.bin/npx tsc")
+        for command in spellings:
+            with self.subTest(command=command):
+                self.assertIn("may not install packages", self.bash(command, "step-engineer"))
+                self.assertIsNone(self.bash(command, None))
+
+    def test_node_commands_that_only_run_things_are_left_alone(self):
+        for command in ("npm run build", "npm run install-docs", "npm test -- --update", "npm --silent run lint",
+                        "npm --prefix tests run typecheck", "yarn run build", "yarn test", "pnpm test", "npm run build -- add",
+                        "node tests/run.mjs --tag FEAT-1 --out r.xml"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command, "implementer"))
+
+    def test_an_environment_folder_is_a_whole_path_segment_with_or_without_a_separator(self):
+        for command in ("rm -rf node_modules", "rm -rf tests/node_modules", "cp evil.js tests/node_modules/pkg/index.js",
+                        "cd tests/node_modules && cp evil.js x.js", "cd .venv && rm -rf lib", "mv thing venv",
+                        "echo x > node_modules", "Remove-Item -Recurse tests\\node_modules"):
+            with self.subTest(command=command):
+                self.assertIn("may not install packages", self.bash(command, "implementer"))
+                self.assertIsNone(self.bash(command, None))
+        for command in ("rm -rf node_modules_old", "cp a.md venv_notes.md", "ls node_modules", "cat .venv/pyvenv.cfg"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command, "implementer"))
+
     def test_an_agent_may_not_write_into_the_environment_from_a_shell(self):
         reason = self.bash("cp evil.py .venv/Lib/site-packages/sitecustomize.py", "step-engineer")
         self.assertIn("may not install packages", reason)

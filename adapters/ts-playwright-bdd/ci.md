@@ -9,7 +9,7 @@ Playwright version, and runs the suite the same way `bdd run` does. Pin the acti
     node-version: "22"
     cache: npm
     cache-dependency-path: tests/package-lock.json
-- run: npm ci --prefix tests
+- run: npm ci --ignore-scripts --prefix tests
 - run: node tests/node_modules/@playwright/test/cli.js install --with-deps chromium
 - run: node tests/run.mjs --tag FEAT-007 --out bdd-report.xml
 - uses: actions/upload-artifact@v4

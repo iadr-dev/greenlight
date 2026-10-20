@@ -29,11 +29,12 @@ The test tooling lives in `tests/` and is installed on its own, from the lockfil
 application's dependencies:
 
 ```sh
-npm ci --prefix tests
+npm ci --ignore-scripts --prefix tests
 node tests/node_modules/@playwright/test/cli.js install chromium
 ```
 
-Agents may not install packages; the person does, and chooses when to change the pinned versions.
+`--ignore-scripts` keeps the packages' install scripts from running; the browser is downloaded by the second command,
+not by a script. Agents may not install packages; the person does, and chooses when to change the pinned versions.
 
 ## The red phase
 

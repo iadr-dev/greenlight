@@ -30,10 +30,9 @@ export class World {
   /** Called before the first action: remember what every tracked entity looks like. */
   async act(): Promise<void> {
     if (this.before === undefined) {
-      this.before = new Map();
-      for (const entity of [...this.tracked].sort()) {
-        this.before.set(entity, structuredClone(await this.system.records(entity)));
-      }
+      const entities = [...this.tracked].sort((a, b) => a.localeCompare(b));
+      const records = await Promise.all(entities.map(async (entity) => [entity, structuredClone(await this.system.records(entity))] as const));
+      this.before = new Map(records);
     }
   }
 

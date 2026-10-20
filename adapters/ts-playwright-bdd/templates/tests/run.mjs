@@ -37,7 +37,7 @@ if (!tag || !out) {
 }
 
 // A tag matches whole: FEAT-7 must not select FEAT-70. Tags are part of the title Playwright searches.
-const wanted = [`(?=.*@${escapeRegExp(tag)}(?![\\w.-]))`];
+const wanted = [String.raw`(?=.*@${escapeRegExp(tag)}(?![\w.-]))`];
 const scenario = option('scenario');
 if (scenario) {
   wanted.push(`(?=.*${escapeRegExp(scenario)})`);

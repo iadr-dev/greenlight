@@ -99,9 +99,7 @@ export async function assertShows(world: World, actor: string, target: string, d
   if (expected.visible !== false) {
     await expect(locator).toBeVisible();
   }
-  for (const [column, value] of Object.entries(expected)) {
-    await expectColumn(locator, column, value);
-  }
+  await Promise.all(Object.entries(expected).map(([column, value]) => expectColumn(locator, column, value)));
 }
 
 async function expectColumn(locator: Locator, column: string, value: unknown): Promise<void> {
@@ -142,12 +140,12 @@ export function storageItems(table: Data): StorageItem[] {
 /** Checks the browser storage of the page that is open against the `key`/`value` rows. */
 export async function assertState(world: World, table: Data): Promise<void> {
   const page = world.current();
-  for (const item of storageItems(table)) {
+  await Promise.all(storageItems(table).map(async (item) => {
     const stored = await page.evaluate(
       ({ storage, key }) => (storage === 'session' ? window.sessionStorage : window.localStorage).getItem(key),
       { storage: item.storage, key: item.key },
     );
     assert.notEqual(stored, null, `the application state has no ${item.storage} storage entry '${item.key}'`);
     assertSubset(parseValue(stored as string), parseValue(item.value), `the ${item.storage} storage entry '${item.key}'`);
-  }
+  }));
 }

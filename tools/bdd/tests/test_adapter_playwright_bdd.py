@@ -141,7 +141,7 @@ class ContractTest(unittest.TestCase):
 
     @classmethod
     def install_tooling(cls):
-        for command in ([NPM, "ci", "--prefix", "tests", "--no-audit", "--no-fund"],
+        for command in ([NPM, "ci", "--ignore-scripts", "--prefix", "tests", "--no-audit", "--no-fund"],
                         [NODE, "tests/node_modules/@playwright/test/cli.js", "install", "chromium"]):
             done = subprocess.run(command, cwd=cls.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if done.returncode != 0:

@@ -52,40 +52,51 @@ export function assertSubset(actual: unknown, expected: unknown, what: string): 
 }
 
 function subsetProblem(actual: unknown, expected: unknown, path: string): string | null {
-  const here = path || 'value';
   if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) {
-      return `${here} should be a list`;
-    }
-    const missing = expected.find((item) => !actual.some((candidate) => subsetProblem(candidate, item, path) === null));
-    return missing === undefined ? null : `${here} has no item matching ${JSON.stringify(missing)}`;
+    return listProblem(actual, expected, path);
   }
   if (expected && typeof expected === 'object') {
-    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) {
-      return `${here} should be an object`;
-    }
-    for (const [key, value] of Object.entries(expected)) {
-      const where = path ? `${path}.${key}` : key;
-      if (!(key in actual)) {
-        return `${where} is missing`;
-      }
-      const problem = subsetProblem((actual as Row)[key], value, where);
-      if (problem) {
-        return problem;
-      }
-    }
-    return null;
+    return objectProblem(actual, expected as Row, path);
   }
-  return Object.is(actual, expected) ? null : `${here} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`;
+  return Object.is(actual, expected) ? null : `${path || 'value'} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`;
 }
 
-const UNITS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
-const DURATION = /(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w)\b/gi;
+function listProblem(actual: unknown, expected: unknown[], path: string): string | null {
+  if (!Array.isArray(actual)) {
+    return `${path || 'value'} should be a list`;
+  }
+  const missing = expected.find((item) => !actual.some((candidate) => subsetProblem(candidate, item, path) === null));
+  return missing === undefined ? null : `${path || 'value'} has no item matching ${JSON.stringify(missing)}`;
+}
+
+function objectProblem(actual: unknown, expected: Row, path: string): string | null {
+  if (!actual || typeof actual !== 'object' || Array.isArray(actual)) {
+    return `${path || 'value'} should be an object`;
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    const where = path ? `${path}.${key}` : key;
+    const problem = key in actual ? subsetProblem((actual as Row)[key], value, where) : `${where} is missing`;
+    if (problem) {
+      return problem;
+    }
+  }
+  return null;
+}
+
+const SECONDS: Record<string, number> = {
+  s: 1, sec: 1, secs: 1, second: 1, seconds: 1,
+  m: 60, min: 60, mins: 60, minute: 60, minutes: 60,
+  h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600,
+  d: 86400, day: 86400, days: 86400,
+  w: 604800, week: 604800, weeks: 604800,
+};
+const AMOUNT_AND_UNIT = /(\d+(?:\.\d+)?)\s*([a-z]+)/gi;
 
 /** '2 days', '30 minutes', '1h 30m' as milliseconds. */
 export function durationMs(text: string): number {
-  const found = [...text.matchAll(DURATION)];
-  const rest = text.replace(DURATION, '').replace(/[\s,]|and/g, '');
-  assert.ok(found.length > 0 && rest === '', `cannot read the duration '${text}'`);
-  return found.reduce((total, [, amount, unit]) => total + Number(amount) * (UNITS[(unit ?? 's').charAt(0).toLowerCase()] ?? 1) * 1000, 0);
+  const found = [...text.matchAll(AMOUNT_AND_UNIT)];
+  const rest = text.replaceAll(AMOUNT_AND_UNIT, '').replaceAll(/[\s,]|and/g, '');
+  const unknown = found.find(([, , unit]) => SECONDS[(unit ?? '').toLowerCase()] === undefined);
+  assert.ok(found.length > 0 && rest === '' && unknown === undefined, `cannot read the duration '${text}'`);
+  return found.reduce((total, [, amount, unit]) => total + Number(amount) * (SECONDS[(unit ?? '').toLowerCase()] ?? 0) * 1000, 0);
 }

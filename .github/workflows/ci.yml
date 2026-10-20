@@ -76,7 +76,7 @@ jobs:
       - name: Browser system libraries (Linux), from the pinned tooling
         if: runner.os == 'Linux'
         run: |
-          npm ci --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
+          npm ci --ignore-scripts --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v

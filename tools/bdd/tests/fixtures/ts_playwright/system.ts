@@ -21,55 +21,62 @@ export class System {
     throw new ExpectedMissing('a running application to open pages of (System.baseUrl)');
   }
 
-  async seed(entity: string, rows: Row[]): Promise<void> {
+  seed(entity: string, rows: Row[]): Promise<void> {
     this.stored.set(entity, [...(this.stored.get(entity) ?? []), ...rows]);
+    return Promise.resolve();
   }
 
-  async authenticate(actor: string, role: string): Promise<Login> {
+  authenticate(actor: string, role: string): Promise<Login> {
     this.signedIn.push({ actor, role });
-    return { headers: { 'x-role': role } };
+    return Promise.resolve({ headers: { 'x-role': role } });
   }
 
-  async setFlag(flag: string, enabled: boolean): Promise<void> {
+  setFlag(flag: string, enabled: boolean): Promise<void> {
     this.flags.set(flag, enabled);
+    return Promise.resolve();
   }
 
-  async setTime(moment: Date): Promise<void> {
+  setTime(moment: Date): Promise<void> {
     this.times.push(moment.toISOString());
+    return Promise.resolve();
   }
 
-  async deliverEvent(event: string, payload: unknown): Promise<void> {
+  deliverEvent(event: string, payload: unknown): Promise<void> {
     this.events.set(event, [...(this.events.get(event) ?? []), payload]);
     if (event === 'order placed') {
       const order = payload as Row;
       this.stored.set('order', [...(this.stored.get('order') ?? []), { id: order.id, status: 'placed' }]);
     }
+    return Promise.resolve();
   }
 
-  async runJob(job: string): Promise<void> {
+  runJob(job: string): Promise<void> {
     this.jobsRun.push({ job });
     if (job === 'nightly') {
-      this.stored.set('order', (this.stored.get('order') ?? []).map((order) => ({ ...order, status: 'archived' })));
-      this.events.set('orders archived', [...(this.events.get('orders archived') ?? []), { count: (this.stored.get('order') ?? []).length }]);
+      const archived = (this.stored.get('order') ?? []).map((order) => ({ ...order, status: 'archived' }));
+      this.stored.set('order', archived);
+      this.events.set('orders archived', [...(this.events.get('orders archived') ?? []), { count: archived.length }]);
     }
+    return Promise.resolve();
   }
 
-  async records(entity: string): Promise<Row[]> {
+  records(entity: string): Promise<Row[]> {
     const own: Record<string, Row[]> = {
       login: this.signedIn,
       job: this.jobsRun,
       flag: [...this.flags].map(([flag, enabled]) => ({ flag, enabled })),
       time: this.times.map((time) => ({ time })),
     };
-    return own[entity] ?? this.stored.get(entity) ?? [];
+    return Promise.resolve(own[entity] ?? this.stored.get(entity) ?? []);
   }
 
-  async published(event: string): Promise<unknown[]> {
-    return this.events.get(event) ?? [];
+  published(event: string): Promise<unknown[]> {
+    return Promise.resolve(this.events.get(event) ?? []);
   }
 
-  async reset(): Promise<void> {
+  reset(): Promise<void> {
     this.stored.clear();
     this.events.clear();
+    return Promise.resolve();
   }
 }

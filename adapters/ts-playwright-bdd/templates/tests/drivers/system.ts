@@ -1,8 +1,9 @@
 // The seams into the system under test. This is the one file of drivers that is specific to the project.
 //
-// Every method says what it does and throws ExpectedMissing until the project implements the seam: during the
+// Every method says what it does and fails with ExpectedMissing until the project implements the seam: during the
 // red phase that is the right failure. Use the most realistic seam available: the application's own API or a
-// test endpoint first, then a domain service, then a repository, then the raw database.
+// test endpoint first, then a domain service, then a repository, then the raw database. Implement a seam as an
+// `async` method (or return a promise); the steps wait for it.
 import type { BrowserContextOptions } from '@playwright/test';
 import { ExpectedMissing } from './errors';
 
@@ -22,42 +23,46 @@ export class System {
   }
 
   /** Create `rows` of `entity`. An unknown column is an error. */
-  async seed(entity: string, _rows: Row[]): Promise<void> {
-    throw new ExpectedMissing(`a way to create ${entity} records`);
+  seed(entity: string, _rows: Row[]): Promise<void> {
+    return Promise.reject(new ExpectedMissing(`a way to create ${entity} records`));
   }
 
   /** Sign `actor` in with `role` and return what the browser needs to be signed in. */
-  async authenticate(_actor: string, role: string): Promise<Login> {
-    throw new ExpectedMissing(`a way to sign in as ${role}`);
+  authenticate(_actor: string, role: string): Promise<Login> {
+    return Promise.reject(new ExpectedMissing(`a way to sign in as ${role}`));
   }
 
-  async setFlag(flag: string, _enabled: boolean): Promise<void> {
-    throw new ExpectedMissing(`the ${flag} feature flag`);
+  setFlag(flag: string, _enabled: boolean): Promise<void> {
+    return Promise.reject(new ExpectedMissing(`the ${flag} feature flag`));
   }
 
   /** The browser's clock is set by the scenario already. Override this if the server needs the same time. */
-  async setTime(_moment: Date): Promise<void> {}
-
-  // -- When ----------------------------------------------------------------------------------
-  async deliverEvent(event: string, _payload: unknown): Promise<void> {
-    throw new ExpectedMissing(`a way to deliver the ${event} event`);
+  setTime(_moment: Date): Promise<void> {
+    return Promise.resolve();
   }
 
-  async runJob(job: string): Promise<void> {
-    throw new ExpectedMissing(`the ${job} job`);
+  // -- When ----------------------------------------------------------------------------------
+  deliverEvent(event: string, _payload: unknown): Promise<void> {
+    return Promise.reject(new ExpectedMissing(`a way to deliver the ${event} event`));
+  }
+
+  runJob(job: string): Promise<void> {
+    return Promise.reject(new ExpectedMissing(`the ${job} job`));
   }
 
   // -- Then ----------------------------------------------------------------------------------
   /** Every stored `entity` record, read through a seam that does not change anything. */
-  async records(entity: string): Promise<Row[]> {
-    throw new ExpectedMissing(`a way to read ${entity} records`);
+  records(entity: string): Promise<Row[]> {
+    return Promise.reject(new ExpectedMissing(`a way to read ${entity} records`));
   }
 
   /** The payloads of `event` that the application published (a test double of the broker). */
-  async published(event: string): Promise<unknown[]> {
-    throw new ExpectedMissing(`a captured ${event} event`);
+  published(event: string): Promise<unknown[]> {
+    return Promise.reject(new ExpectedMissing(`a captured ${event} event`));
   }
 
   /** Called after every scenario: drop data, close clients. */
-  async reset(): Promise<void> {}
+  reset(): Promise<void> {
+    return Promise.resolve();
+  }
 }

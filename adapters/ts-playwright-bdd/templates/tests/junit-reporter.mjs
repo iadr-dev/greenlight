@@ -40,7 +40,8 @@ function render(test, result) {
   const message = (result.errors[0]?.message ?? result.status).trim();
   const summary = stripVTControlCharacters(message).split('\n')[0] ?? result.status;
   // `bdd` shows the first line of a failure, so the type attribute carries the summary rather than the status.
-  return `${open}><failure type="${escapeXml(summary)}">${escapeXml(`${result.status}\n${text}`)}</failure></testcase>`;
+  const detail = escapeXml(`${result.status}\n${text}`);
+  return `${open}><failure type="${escapeXml(summary)}">${detail}</failure></testcase>`;
 }
 
 export default class JunitReporter {

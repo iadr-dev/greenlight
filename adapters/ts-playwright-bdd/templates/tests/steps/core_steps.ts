@@ -26,7 +26,7 @@ Given('the current time is {datetime}', async ({ world }, moment: string) => { /
   await world.system.setTime(await world.clock.set(moment));
 });
 
-Given('{dependency} responds to {operation} with:', async ({ world }, dependency: string, operation: string, data: Data) => { // C.STUB.RESPOND
+Given('{dependency} responds to {operation} with:', ({ world }, dependency: string, operation: string, data: Data) => { // C.STUB.RESPOND
   world.stubs.respond(dependency, operation, payload(data));
 });
 
@@ -34,7 +34,7 @@ Given('the {flag} feature flag is {state}', async ({ world }, flag: string, stat
   await world.system.setFlag(flag, state === 'on');
 });
 
-Given('the application state is:', async ({ world }, table: DataTable) => { // C.STATE.GLOBAL
+Given('the application state is:', ({ world }, table: DataTable) => { // C.STATE.GLOBAL
   world.initialState.push(...ui.storageItems(table));
 });
 
@@ -101,7 +101,7 @@ Then('the {event} event is published with:', async ({ world }, event: string, da
   assertSubset(await world.system.published(event), [payload(data)], `the ${event} events`);
 });
 
-Then('{dependency} received {operation} with:', async ({ world }, dependency: string, operation: string, data: Data) => { // C.STUB.CALLED
+Then('{dependency} received {operation} with:', ({ world }, dependency: string, operation: string, data: Data) => { // C.STUB.CALLED
   world.stubs.assertReceived(dependency, operation, payload(data));
 });
 
