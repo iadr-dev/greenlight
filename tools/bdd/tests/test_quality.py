@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import cli, doctor, gates, guard, initcmd, quality, redrecord, state, tripwire
+from bddlib import cli, doctor, gates, guard, initcmd, quality, redrecord, runner, state, tripwire
 from bddlib import config as cfg
 from bddlib.errors import UsageError
 
@@ -255,6 +255,18 @@ class StandardsFileTest(ProjectCase):
                                  "tool_input": {"command": "echo 'Status: APPROVED' > .bdd/standards.md"}})
         self.assertIn("managed by", reason)
 
+    def test_a_shell_command_that_changes_directory_first_is_refused(self):
+        for name in ("standards.md", "config.toml"):
+            with self.subTest(name=name):
+                reason = guard.evaluate({"tool_name": "Bash", "cwd": str(self.root),
+                                         "tool_input": {"command": f"cd .bdd && echo x > {name}"}})
+                self.assertIn("managed by", reason)
+
+    def test_a_config_file_of_another_folder_is_not_mistaken_for_it(self):
+        reason = guard.evaluate({"tool_name": "Bash", "cwd": str(self.root),
+                                 "tool_input": {"command": "cd src && echo x > config.toml"}})
+        self.assertIsNone(reason)
+
     def test_the_tripwire_watches_it(self):
         self.write(".bdd/standards.md", "Status: DRAFT\n")
         watched = {p.name for p in tripwire.watched_files(self.root, None)}
@@ -294,6 +306,82 @@ class InitTest(unittest.TestCase):
                     self.assertEqual(cli.main(["init", "--standards"]), 2)
             finally:
                 os.chdir(here)
+
+
+class ProgramResolutionTest(unittest.TestCase):
+    """A bare tool name is found on PATH only; a file planted in the project cannot stand in for the tool."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name).resolve() / "project"
+        self.tools = Path(self.dir.name).resolve() / "tools"
+        self.root.mkdir()
+        self.tools.mkdir()
+        self.suffixes = runner.executable_suffixes()
+
+    def make(self, folder: Path, name: str) -> Path:
+        path = folder / (name + (".exe" if self.suffixes else ""))
+        path.write_text("x", encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def test_a_bare_name_is_found_on_the_search_path(self):
+        tool = self.make(self.tools, "mytool")
+        self.assertEqual(runner.resolve_program("mytool", self.root, str(self.tools), self.suffixes), str(tool))
+
+    def test_a_file_planted_in_the_project_is_not_found_by_its_bare_name(self):
+        self.make(self.root, "ruff")
+        self.assertIsNone(runner.resolve_program("ruff", self.root, str(self.tools), self.suffixes))
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.dict(os.environ, {"PATH": str(self.tools)}), self.assertRaises(UsageError) as cm:
+                runner.execute(["ruff", "check"], self.root, 30)
+        finally:
+            os.chdir(here)
+        self.assertIn("not on PATH", str(cm.exception))
+
+    def test_relative_and_empty_search_path_entries_are_ignored(self):
+        self.make(self.root, "ruff")
+        search = os.pathsep.join(["", ".", "project", str(self.root.parent / "nothing")])
+        here = os.getcwd()
+        os.chdir(self.root.parent)
+        try:
+            self.assertIsNone(runner.resolve_program("ruff", self.root, search, self.suffixes))
+        finally:
+            os.chdir(here)
+
+    def test_a_word_with_a_separator_is_a_path_relative_to_the_project(self):
+        tool = self.make(self.root, "gradlew")
+        found = runner.resolve_program("./gradlew", self.root, "", self.suffixes)
+        self.assertEqual(Path(found), tool)
+        self.assertIsNone(runner.resolve_program("./missing", self.root, "", self.suffixes))
+
+    def test_pathext_decides_what_runs_on_windows(self):
+        self.assertEqual(runner.executable_suffixes({"PATHEXT": ".EXE;.BAT;nonsense"}) if os.name == "nt" else (),
+                         (".exe", ".bat") if os.name == "nt" else ())
+
+
+class BatchFileTest(unittest.TestCase):
+    def test_arguments_with_shell_syntax_are_refused_for_a_batch_file(self):
+        for argument in ('a"b', "a&b", "a|b", "a<b", "a>b", "a^b", "%PATH%", "a!b", "a\nb", "a\rb"):
+            with self.subTest(argument=argument):
+                self.assertIn("batch file", runner.batch_problem("C:\\tools\\npm.cmd", ["install", argument]))
+
+    def test_plain_arguments_and_real_executables_are_fine(self):
+        self.assertIsNone(runner.batch_problem("C:\\tools\\gradlew.bat", ["build", "--info", "-Pname=value"]))
+        self.assertIsNone(runner.batch_problem("C:\\tools\\ruff.exe", ['a"b', "a&b"]))
+        self.assertIsNone(runner.batch_problem("/usr/bin/ruff", ["a&b"]))
+
+    def test_the_check_applies_before_anything_is_started(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shim = Path(tmp) / "tool.cmd"
+            shim.write_text("@exit /b 0\r\n", encoding="utf-8")
+            with mock.patch.object(runner, "resolve_program", return_value=str(shim)), \
+                    self.assertRaises(UsageError) as cm:
+                runner.execute(["tool", "a&b"], Path(tmp), 30)
+            self.assertIn("batch file", str(cm.exception))
 
 
 class GuardResultTest(ProjectCase):

@@ -217,6 +217,7 @@ def check_enforcement_files(path: Path) -> str | None:
     return None
 
 
+_BDD_SEGMENT = re.compile(r"(?<![\w.-])\.bdd(?![\w.-])")
 _INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
                       r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
 _ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv|node_modules)(?![\w.-])", re.IGNORECASE)   # a whole path segment
@@ -344,7 +345,7 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
     command that ``cd``s first or builds the path in a script is still recognised. A false alarm
     only produces a clear refusal; a miss would defeat the point."""
     by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
-    names = sorted(set(by_name) | MANAGED_NAMES, key=len, reverse=True)
+    names = sorted(set(by_name) | MANAGED_NAMES | {"standards.md"}, key=len, reverse=True)
     pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
     for reading in shell_readings(command):
         text = reading.casefold()
@@ -353,8 +354,9 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
             name = match.group(0)
             lock = by_name.get(name)
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
+        in_bdd = _BDD_SEGMENT.search(text) is not None                  # `cd .bdd && echo x > config.toml` names the file bare
         for person_file in PERSON_FILES:
-            if f".bdd/{person_file}" in text:
+            if f".bdd/{person_file}" in text or (in_bdd and re.search(rf"(?<![\w.-]){re.escape(person_file)}(?![\w-])", text)):
                 return project.root / cfg.BDD_DIR / person_file, None
         for managed in MANAGED_DIRS:
             if f"/{managed}/" in text:
