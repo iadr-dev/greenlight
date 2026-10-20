@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, runner, state, store, tripwire
+from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, runner, state, store, tripwire
 from . import config as cfg
 from .errors import UsageError
 
@@ -74,8 +74,11 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
         if gate == "implement":                     # there is no implementation to wait for: the existing code must already pass
             raw = runner.latest_bytes(root, data["feature"]) if cfg.load(root).runs else None
             problems += run_problems(root, data["feature"], "verify", raw)
-    if gate == "verify" and data["gates"].get("implement", {}).get("result") != "pass":
-        problems.append("the implement gate has not passed")
+    if gate == "verify":
+        if data.get("kind") != "adopt":             # an adopted feature has no red to measure a change from
+            problems += mutation.problems(root, data["feature"])
+        if data["gates"].get("implement", {}).get("result") != "pass":
+            problems.append("the implement gate has not passed")
     return problems
 
 

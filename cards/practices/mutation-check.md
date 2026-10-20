@@ -16,8 +16,9 @@ implementation?".
 ## How to apply
 
 1. Run the project's mutation tool on the production files this feature changed, not on the whole code base
-   (mutmut, Stryker, PIT, cargo-mutants, go-mutesting or the stack's equivalent). Record the tool and the
-   command in `system.md`.
+   (mutmut, Stryker, PIT, cargo-mutants, go-mutesting or the stack's equivalent). Where the adapter has an
+   `[adapters.mutation]` table, `bdd mutate FEAT-n` does exactly this and records the result; otherwise record the
+   tool and the command in `system.md`.
 2. Read the score. A low kill rate on tests that were written together with the code means they mirror it
    and do not check it; treat that as a finding for the auditor.
 3. Go through the survivors. For each: is it a real behaviour the rules care about (add an example and

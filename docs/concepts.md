@@ -36,6 +36,13 @@ test (import error, unmapped step) is a *test defect* and blocks the gate. A sce
 implementation must be tagged `@existing` (the behaviour is already there) or it blocks. The run that proved the red
 is kept as evidence and later runs cannot replace it.
 
+## Mutation check (optional)
+
+Green tests prove that code and tests agree, not that the tests would notice a wrong change. A project can enable a
+mutation tool (`[adapters.mutation]`, see [adapters](adapters.md)); `bdd mutate FEAT-n` then mutates only the production
+files the feature changed and the verify gate requires a current result at or above the threshold. It is the check that
+answers code written to satisfy the tests instead of the rules. Off by default.
+
 ## Locks
 
 Approving the examples locks the feature files; passing the bind gate locks the steps, drivers and the adapter's

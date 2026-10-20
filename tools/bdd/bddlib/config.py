@@ -76,6 +76,21 @@ class RunRules:
 
 
 @dataclass(frozen=True)
+class MutationRules:
+    """The optional mutation check of an adapter (``[adapters.mutation]``).
+
+    ``command`` is split into words before ``{root}``, ``{python}``, ``{project_python}`` and ``{out}`` are filled in;
+    a word that is exactly ``{files}`` becomes one word per changed production file. The tool writes a JSON object
+    with whole numbers ``killed`` and ``survived`` (and optionally ``timeout``, ``suspicious``, ``skipped``) to
+    ``{out}``; at least ``threshold`` percent of ``killed + survived`` must be killed."""
+    adapter: str
+    command: str
+    threshold: float = 80.0
+    timeout: int = 1800
+    extensions: tuple[str, ...] = ()         # only changed files with one of these suffixes are mutated (blank: all)
+
+
+@dataclass(frozen=True)
 class Config:
     root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
@@ -93,6 +108,7 @@ class Config:
     support_patterns: tuple[str, ...] = ()   # patterns (relative, with * and ?) for plumbing files that may not exist yet
     python: str = ""                         # the interpreter the project's tests run with (blank: .venv, venv, or bdd's own)
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
+    mutation: MutationRules | None = None    # the first adapter that has an [adapters.mutation] table
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -158,6 +174,27 @@ def _run_rules(adapter: dict, path: Path) -> RunRules | None:
     return RunRules(str(adapter.get("name", "")), table["by_tag"], table["report"], table.get("shuffle", ""),
                     table.get("isolated", ""), timeout, _patterns(classify, "test_defect", path),
                     _patterns(classify, "expected_fail", path), _prefixes(table, path))
+
+
+def _mutation_rules(adapter: dict, path: Path) -> MutationRules | None:
+    table = adapter.get("mutation")
+    if table is None:
+        return None
+    command = table.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ConfigError(f"{path}: [adapters.mutation] needs command, the command words as one string")
+    if "{files}" not in command.split() or "{out}" not in command:
+        raise ConfigError(f"{path}: [adapters.mutation] command needs {{files}} as a word of its own and {{out}}")
+    threshold = table.get("threshold", 80)
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0 < threshold <= 100:
+        raise ConfigError(f"{path}: [adapters.mutation] threshold must be a percentage above 0 and at most 100")
+    timeout = table.get("timeout", 1800)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+        raise ConfigError(f"{path}: [adapters.mutation] timeout must be a whole number of seconds")
+    extensions = table.get("extensions", [])
+    if not isinstance(extensions, list) or not all(isinstance(e, str) and e.startswith(".") for e in extensions):
+        raise ConfigError(f"{path}: [adapters.mutation] extensions must be a list of suffixes such as \".py\"")
+    return MutationRules(str(adapter.get("name", "")), command, float(threshold), timeout, tuple(extensions))
 
 
 def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
@@ -257,4 +294,5 @@ def load(root: Path | str | None) -> Config:
         support_patterns=_support(root, data, path)[1],
         python=_python(data, path),
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
+        mutation=next((r for r in (_mutation_rules(a, path) for a in data.get("adapters", [])) if r), None),
     )

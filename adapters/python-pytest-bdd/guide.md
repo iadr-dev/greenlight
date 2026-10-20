@@ -105,3 +105,23 @@ python -m pytest -q --bdd-shuffle-seed 42              # random order, repeatabl
   the step function (pytest-bdd leaves them out when the step has none).
 - Scenario Outlines produce one test per example row; the scenario name in the report is the outline's name.
 - On Windows run from the project root so that `tests` imports resolve (`python -m pytest`, not `pytest`).
+
+## Mutation check (opt-in)
+
+Nothing here is installed or enabled by default. A project that wants to know whether its tests would notice a change
+in the code adds an `[adapters.mutation]` table to `.bdd/config.toml` and installs a mutation tool itself (for example
+`mutmut`; it is a development tool, never a requirement of greenlight):
+
+```toml
+[adapters.mutation]
+command    = '{project_python} -m your_mutation_wrapper {files} --report {out}'
+threshold  = 80
+extensions = [".py"]
+```
+
+`bdd mutate FEAT-n` runs the command, without a shell, on the production files that changed since the red was proven
+(only those ending in `extensions`), and records the result. The tool must leave a JSON report at `{out}` with whole
+numbers `killed` and `survived` (optionally `timeout`, `suspicious`, `skipped`). Most tools do not write exactly this
+format: put a few lines of your own (standard library only) around the tool that run it on `{files}` and translate its
+results into the two counts, and exit 0 when it has finished. The format and the placeholders are described in `docs/adapters.md`. Once the table
+exists, the verify gate requires a result that is current and at or above the threshold.

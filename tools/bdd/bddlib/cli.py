@@ -27,6 +27,7 @@ COMMANDS = {
     "design": ("design", "run"),
     "install-skills": ("installskills", "run"),
     "adopt": ("adopt", "run"),
+    "mutate": ("mutation", "run"),
     "migrate": ("migrate", "run"),
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),
