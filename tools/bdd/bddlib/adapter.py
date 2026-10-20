@@ -19,7 +19,8 @@ from .errors import UsageError
 from .statecmd import guarded, project_root
 
 NAME_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
-REQUIRED = ("adapter.toml", "guide.md", "templates")
+ADAPTER_FILE = "adapter.toml"
+REQUIRED = (ADAPTER_FILE, "guide.md", "templates")
 
 
 def adapters_dir() -> Path:
@@ -29,7 +30,7 @@ def adapters_dir() -> Path:
 
 def available() -> list[str]:
     base = adapters_dir()
-    return sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "adapter.toml").is_file()) if base.is_dir() else []
+    return sorted(p.name for p in base.iterdir() if p.is_dir() and (p / ADAPTER_FILE).is_file()) if base.is_dir() else []
 
 
 def find(name: str) -> Path:
@@ -46,11 +47,11 @@ def find(name: str) -> Path:
 
 def load(path: Path) -> dict:
     try:
-        data = tomllib.loads((path / "adapter.toml").read_text(encoding="utf-8"))
+        data = tomllib.loads((path / ADAPTER_FILE).read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        raise UsageError(f"{path / 'adapter.toml'}: {exc}") from exc
+        raise UsageError(f"{path / ADAPTER_FILE}: {exc}") from exc
     if data.get("name") != path.name:
-        raise UsageError(f"{path / 'adapter.toml'}: name must be {path.name!r}")
+        raise UsageError(f"{path / ADAPTER_FILE}: name must be {path.name!r}")
     return data
 
 
