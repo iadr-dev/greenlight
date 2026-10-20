@@ -1,6 +1,6 @@
 """Metrics of one finished run, read from the project's own records (never from the conversation), and the summary table.
 
-    python evals/collect.py [evals/results/*.jsonl]      print the summary table of the stored rows
+    python evals/collect.py [NAME.jsonl ...]      print the summary table of stored rows (files in evals/results/)
 
 `collect_row` takes a *reader*: a callable that runs one `bdd` command in the project and returns (exit code, stdout).
 The harness passes a real one; the tests pass canned output, so nothing here needs a model.
@@ -200,10 +200,20 @@ def read_rows(paths: list[Path]) -> list[dict]:
     return rows
 
 
+RESULTS = Path(__file__).resolve().parent / "results"
+ROW_FILE = re.compile(r"[\w.-]+\.jsonl")
+
+
 def main(argv: list[str]) -> int:
-    paths = [Path(a) for a in argv] or sorted((Path(__file__).parent / "results").glob("*.jsonl"))
-    if not paths:
-        print("no result files (run evals/run_e2e.py first)")
+    """Summarise result files by name; they are looked up in evals/results/ only, never by a path."""
+    bad = [a for a in argv if not ROW_FILE.fullmatch(a)]
+    if bad:
+        print(f"not a result file name: {', '.join(bad)} (give names of files in evals/results/)")
+        return 2
+    paths = [RESULTS / a for a in argv] or sorted(RESULTS.glob("*.jsonl"))
+    missing = [p.name for p in paths if not p.is_file()]
+    if not paths or missing:
+        print("no result files (run evals/run_e2e.py first)" if not paths else f"not found in evals/results/: {', '.join(missing)}")
         return 2
     print(summary_table(read_rows(paths)))
     return 0

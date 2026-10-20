@@ -155,6 +155,21 @@ class TargetsAndTableTest(unittest.TestCase):
             self.assertEqual([r["arm"] for r in collect.read_rows([path])], ["plugin", "baseline"])
 
 
+class CommandLineTest(unittest.TestCase):
+    def test_only_names_of_result_files_are_accepted(self):
+        for argument in ("../secret.jsonl", "C:\\x\\rows.jsonl", "rows.txt", "a/b.jsonl"):
+            with self.subTest(argument=argument):
+                self.assertEqual(collect.main([argument]), 2)
+        self.assertEqual(collect.main(["no-such-rows.jsonl"]), 2)
+
+    def test_stored_rows_are_summarised_by_name(self):
+        collect.RESULTS.mkdir(exist_ok=True)
+        path = collect.RESULTS / "unit-test-rows.jsonl"
+        path.write_text(json.dumps({"arm": "plugin", "model": "m"}) + "\n", encoding="utf-8")
+        self.addCleanup(path.unlink)
+        self.assertEqual(collect.main(["unit-test-rows.jsonl"]), 0)
+
+
 class HarnessHelpersTest(unittest.TestCase):
     def test_usage_of_follow_up_prompts_is_added_up(self):
         total = {"total_cost_usd": 0.5, "num_turns": 3, "seconds": 10, "usage": {"input_tokens": 100}, "session_id": "s1"}

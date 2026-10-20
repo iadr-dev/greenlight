@@ -7,7 +7,7 @@ happened. It reads the project's own records (`bdd status`, `state show`, `trace
 ```sh
 python evals/run_e2e.py --request discounts --model sonnet-5.5 --autonomy standard,autopilot --runs 3 --arms plugin,baseline
 python evals/run_e2e.py --request discounts --model sonnet-5.5 --hooks off      # soft enforcement
-python evals/collect.py evals/results/*.jsonl                                   # the summary table of stored rows
+python evals/collect.py [NAME.jsonl ...]                                        # summary table of stored rows (names in evals/results/)
 ```
 
 Rows go to `evals/results/<time>-<request>-<model>.jsonl` (ignored by git), one line per run.
