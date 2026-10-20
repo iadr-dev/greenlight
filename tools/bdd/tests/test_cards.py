@@ -132,5 +132,30 @@ class RepositoryCardsTest(unittest.TestCase):
         self.assertTrue({"boundary-value", "decision-table", "state-transition"} <= {c["id"] for c in index["cards"]})
 
 
+class InstructionCardsTest(unittest.TestCase):
+    """The instruction cards describe the vocabulary: none missing for the profiles that have an adapter, none invented."""
+
+    ADAPTED_PROFILES = {"base", "api", "cli", "lib"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.core = {i["id"]: i for i in json.loads((REPO / "vocabulary" / "core.json").read_text(encoding="utf-8"))["instructions"]}
+        cls.found = {p.stem: p for p in (REPO / "cards" / "instructions").glob("C.*.md")}
+
+    def test_every_instruction_of_an_adapted_profile_has_a_card(self):
+        wanted = {i for i, spec in self.core.items() if set(spec["profiles"]) <= self.ADAPTED_PROFILES}
+        self.assertEqual(wanted - set(self.found), set())
+
+    def test_no_card_is_for_an_instruction_that_does_not_exist(self):
+        self.assertEqual(set(self.found) - set(self.core), set())
+
+    def test_each_card_lists_exactly_the_patterns_of_its_instruction(self):
+        for iid, path in self.found.items():
+            with self.subTest(card=iid):
+                _, body = cards.frontmatter.parse(path.read_text(encoding="utf-8"))
+                listed = [line[3:-1] for line in cards.sections(body)["Patterns"].splitlines() if line.startswith("- `")]
+                self.assertEqual(listed, self.core[iid]["patterns"])
+
+
 if __name__ == "__main__":
     unittest.main()

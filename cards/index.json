@@ -1,6 +1,138 @@
 {
   "cards": [
     {
+      "apply_when": "a rule depends on who is asking: roles, permissions, ownership",
+      "id": "C.ACTOR.AUTH",
+      "kind": "instruction",
+      "path": "instructions/C.ACTOR.AUTH.md"
+    },
+    {
+      "apply_when": "checking what a response contains",
+      "id": "C.API.BODY",
+      "kind": "instruction",
+      "path": "instructions/C.API.BODY.md"
+    },
+    {
+      "apply_when": "the action under test is a request to a service",
+      "id": "C.API.CALL",
+      "kind": "instruction",
+      "path": "instructions/C.API.CALL.md"
+    },
+    {
+      "apply_when": "checking whether an API call worked or was refused",
+      "id": "C.API.STATUS",
+      "kind": "instruction",
+      "path": "instructions/C.API.STATUS.md"
+    },
+    {
+      "apply_when": "checking whether a command worked or failed",
+      "id": "C.CLI.RESULT",
+      "kind": "instruction",
+      "path": "instructions/C.CLI.RESULT.md"
+    },
+    {
+      "apply_when": "the thing under test is a command-line tool or script",
+      "id": "C.CLI.RUN",
+      "kind": "instruction",
+      "path": "instructions/C.CLI.RUN.md"
+    },
+    {
+      "apply_when": "the outcome depends on time passing: expiry, timeouts, retries, reminders",
+      "id": "C.CLOCK.ADVANCE",
+      "kind": "instruction",
+      "path": "instructions/C.CLOCK.ADVANCE.md"
+    },
+    {
+      "apply_when": "the outcome depends on the current date or time: expiry, schedules, age, cut-offs",
+      "id": "C.CLOCK.SET",
+      "kind": "instruction",
+      "path": "instructions/C.CLOCK.SET.md"
+    },
+    {
+      "apply_when": "a scenario needs records to exist before the action: customers, orders, products, accounts",
+      "id": "C.ENTITY.SEED",
+      "kind": "instruction",
+      "path": "instructions/C.ENTITY.SEED.md"
+    },
+    {
+      "apply_when": "a refusal or a no-op must leave the data exactly as it was",
+      "id": "C.ENTITY.UNCHANGED",
+      "kind": "instruction",
+      "path": "instructions/C.ENTITY.UNCHANGED.md"
+    },
+    {
+      "apply_when": "checking what was stored: records created or changed by the action",
+      "id": "C.ENTITY.VERIFY",
+      "kind": "instruction",
+      "path": "instructions/C.ENTITY.VERIFY.md"
+    },
+    {
+      "apply_when": "the system must emit a message or event for others to consume",
+      "id": "C.EVENT.PUBLISHED",
+      "kind": "instruction",
+      "path": "instructions/C.EVENT.PUBLISHED.md"
+    },
+    {
+      "apply_when": "the system reacts to an inbound message, webhook or queue event",
+      "id": "C.EVENT.RECEIVE",
+      "kind": "instruction",
+      "path": "instructions/C.EVENT.RECEIVE.md"
+    },
+    {
+      "apply_when": "a command or library reads an input file",
+      "id": "C.FILE.GIVEN",
+      "kind": "instruction",
+      "path": "instructions/C.FILE.GIVEN.md"
+    },
+    {
+      "apply_when": "checking a file that a command or function produced",
+      "id": "C.FILE.VERIFY",
+      "kind": "instruction",
+      "path": "instructions/C.FILE.VERIFY.md"
+    },
+    {
+      "apply_when": "behaviour is switched by a feature flag or a setting",
+      "id": "C.FLAG.SET",
+      "kind": "instruction",
+      "path": "instructions/C.FLAG.SET.md"
+    },
+    {
+      "apply_when": "behaviour is driven by a scheduled or background job",
+      "id": "C.JOB.RUN",
+      "kind": "instruction",
+      "path": "instructions/C.JOB.RUN.md"
+    },
+    {
+      "apply_when": "the unit of behaviour is a public function or method of a library or domain module",
+      "id": "C.LIB.CALL",
+      "kind": "instruction",
+      "path": "instructions/C.LIB.CALL.md"
+    },
+    {
+      "apply_when": "checking what a library call returned or the error it raised",
+      "id": "C.LIB.RESULT",
+      "kind": "instruction",
+      "path": "instructions/C.LIB.RESULT.md"
+    },
+    {
+      "apply_when": "checking what a command printed",
+      "id": "C.OUTPUT.CONTAINS",
+      "kind": "instruction",
+      "path": "instructions/C.OUTPUT.CONTAINS.md"
+    },
+    {
+      "apply_when": "the request sent to an external dependency matters, not only its answer",
+      "id": "C.STUB.CALLED",
+      "kind": "instruction",
+      "path": "instructions/C.STUB.CALLED.md"
+    },
+    {
+      "apply_when": "the system calls something outside it: a payment provider, an email service, another team's API",
+      "id": "C.STUB.RESPOND",
+      "kind": "instruction",
+      "path": "instructions/C.STUB.RESPOND.md"
+    },
+    {
       "apply_when": "the brief has gaps that would change a rule, and the person is available to answer",
       "id": "blocking-questions",
       "kind": "practice",
