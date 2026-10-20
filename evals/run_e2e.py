@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Run a whole feature through greenlight with real agents, and measure what happened.
 
-    python evals/run_e2e.py [--request discounts] [--model haiku] [--autonomy standard,autopilot]
+    python evals/run_e2e.py [--request discounts|adopt-billing|csv-report|money-convert] [--model haiku] [--autonomy standard,autopilot]
                             [--runs 3] [--arms plugin,baseline] [--hooks on|off] [--keep]
 
-For every combination of arm, autonomy level and run number it copies the request's reference app (evals/apps/: shop-api,
-csv-tool or money-lib) into a temporary project (with its own virtual environment for the Python app), sets greenlight up
-(`bdd init`, proves the sample green),
-then asks Claude Code, headless, to run `/greenlight:feature "<request>"`. Afterwards it reads the project's own
+For every combination of arm, autonomy level and run number it copies the request's reference app (evals/apps/shop-api
+for a feature, evals/apps/legacy-billing for an adoption, evals/apps/csv-tool and money-lib for the generic-junit adapter)
+into a temporary project (with its own virtual environment for a Python app), sets greenlight up (`bdd init`, proves the sample green), then asks Claude Code, headless, to run
+`/greenlight:feature "<request>"` (`/greenlight:adopt "<area>"` for an adoption request). An adoption row also says
+whether the adoption invariants hold (see adoption_invariants); it has no baseline arm. Afterwards it reads the project's own
 records with the `bdd` CLI and git, never the conversation (evals/collect.py), and appends one metrics row per run to
 a JSON-lines file in evals/results/. The summary table compares the means with the release targets (evals/README.md).
 
@@ -23,7 +24,7 @@ commands as follow-up prompts in the same session (`--resume`) when the project 
 approvals arrive as headless prompts, which greenlight grades below a keyboard-typed one; the row records the grade, so
 a standard row measures the pipeline given scripted human decisions, not provenance of a real person.
 
-Needs `claude`, `uv`, `git` and `sh` on PATH, working credentials, and some money: a run makes many model calls. Not
+Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
@@ -43,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect  # noqa: E402  (a sibling module; the script directory is on the path when it is run directly)
 
 REPO = Path(__file__).resolve().parents[1]
+APPS = REPO / "evals" / "apps"
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
@@ -53,30 +55,33 @@ ARMS = ("plugin", "baseline")
 WAITING = re.compile(r"/greenlight:approve (FEAT-\d+) (rules|examples)")
 MAX_FOLLOW_UPS = 6
 
+# What each request needs: its reference app, the skill that runs it, the adapter, the tools it builds with on PATH and how
+# the no-plugin arm runs the app's own tests. A Python app also lists the packages it and its tests import; a generic-junit
+# app has the run line the person would write into .bdd/config.toml after `bdd init` and the files that decide how
+# scenarios run (they are bound with the steps). Go test names carry the marker ending in "_"; the node script `bdd`
+# (package.json) compiles the TypeScript and runs node's own test runner with a JUnit reporter. A feature request is judged
+# by reaching `done`, an adoption request also by the invariants in adoption_invariants.
+PYTEST = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+REQUEST_KINDS = {
+    "discounts": {"app": "shop-api", "skill": "feature", "adapter": "python-pytest-bdd", "tools": ("uv",),
+                  "packages": ["fastapi", "httpx"], "baseline": PYTEST},
+    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "adapter": "python-pytest-bdd", "tools": ("uv",),
+                      "packages": ["flask", "flask-wtf"], "baseline": PYTEST},
+    "csv-report": {"app": "csv-tool", "skill": "feature", "adapter": "generic-junit", "tools": ("go",),
+                   "baseline": ["go", "test", "./..."],
+                   "run": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
+                           "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
+                           ["tests/run_junit.py", "go.mod"])},
+    "money-convert": {"app": "money-lib", "skill": "feature", "adapter": "generic-junit", "tools": ("node", "npm"),
+                      "baseline": ["npm", "test", "--silent"],
+                      "run": ("{python} -I tests/run_junit.py --reports node-report.xml --command "
+                              "\"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
+                              ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"])},
+}
+
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
 MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us.anthropic.claude-haiku-5-5",
           "sonnet-5.5": "us.anthropic.claude-sonnet-5-5", "opus-5.5": "us.anthropic.claude-opus-5-5"}
-
-
-# Each request runs on one reference app with one adapter (its scripted answers are in evals/requests/<request>.answers.json).
-# A fixed table, so nothing typed on the command line reaches a command.
-CASES = {"discounts": ("shop-api", "python-pytest-bdd"), "csv-report": ("csv-tool", "generic-junit"),
-         "money-convert": ("money-lib", "generic-junit")}
-TOOLCHAINS = {"shop-api": ("uv",), "csv-tool": ("go",), "money-lib": ("node", "npm")}
-# How the no-plugin arm runs the app's own tests ("python" is the project's interpreter).
-BASELINE_TESTS = {"shop-api": ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"], "csv-tool": ["go", "test", "./..."],
-                  "money-lib": ["npm", "test", "--silent"]}
-
-# What the person does after `bdd init --adapter generic-junit`: the run line for the app's own runner and the files that
-# decide how scenarios run (they are bound with the steps). Go test names carry the marker ending in "_"; the node
-# script `bdd` (package.json) compiles the TypeScript and runs node's own test runner with a JUnit reporter.
-GENERIC_RUNS = {
-    "csv-tool": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
-                 "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
-                 ["tests/run_junit.py", "go.mod"]),
-    "money-lib": ("{python} -I tests/run_junit.py --reports node-report.xml --command \"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
-                  ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"]),
-}
 
 
 def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True,
@@ -96,21 +101,20 @@ def base_environment(tmp: Path) -> dict:
     return env
 
 
-def build_project(tmp: Path, case: str = "discounts") -> tuple[Path, dict, str]:
-    app, adapter = CASES[case]
+def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
     project = tmp / "project"
-    shutil.copytree(REPO / "evals" / "apps" / app, project,
+    shutil.copytree(APPS / kind["app"], project,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", "dist"))
-    if adapter != "python-pytest-bdd":
+    if kind["adapter"] != "python-pytest-bdd":                      # the app brings its own runner; bdd runs under this Python
         env = base_environment(tmp)
-        if app == "money-lib":
+        if kind["app"] == "money-lib":
             run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], project, env, timeout=900)
         return project, env, sys.executable
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
     python = bin_dir / ("python.exe" if os.name == "nt" else "python")
-    run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
+    run(["uv", "pip", "install", "--python", str(python), *kind["packages"], "pytest", "pytest-bdd"], tmp, os.environ.copy())
     env = base_environment(tmp)
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
     return project, env, str(python)
@@ -133,11 +137,11 @@ def commit_all(project: Path, env: dict, message: str) -> None:
     run([*GIT, "commit", "-q", "-m", message], project, env)
 
 
-def swap_run_line(project: Path, case: str) -> None:
+def swap_run_line(project: Path, kind: dict) -> None:
     """Act as the person: point the generic-junit adapter at the app's own runner, as its guide says to do.
 
     The sample runner and its feature are removed, and the runner's own files are bound with the steps."""
-    by_tag, support = GENERIC_RUNS[CASES[case][0]]
+    by_tag, support = kind["run"]
     config = project / ".bdd" / "config.toml"
     text = config.read_text(encoding="utf-8")
     text = re.sub(r"(?m)^by_tag = .*$", lambda _: "by_tag = " + json.dumps(by_tag), text, count=1)
@@ -148,15 +152,14 @@ def swap_run_line(project: Path, case: str) -> None:
         (project / sample).unlink(missing_ok=True)
 
 
-def set_up(project: Path, env: dict, autonomy: str, python: str, case: str = "discounts") -> None:
+def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> None:
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
-    adapter = CASES[case][1]
-    bdd(project, env, "init", "--adapter", adapter, "--autonomy", autonomy,
-        *(["--python", python] if adapter == "python-pytest-bdd" else []))
+    python_adapter = kind["adapter"] == "python-pytest-bdd"
+    bdd(project, env, "init", "--adapter", kind["adapter"], "--autonomy", autonomy, *(["--python", python] if python_adapter else []))
     print(bdd(project, env, "init", "--smoke").stdout.strip())
-    if adapter == "generic-junit":
-        swap_run_line(project, case)
+    if not python_adapter:
+        swap_run_line(project, kind)
     commit_all(project, env, "greenlight set up")
 
 
@@ -219,9 +222,9 @@ def next_human_step(project: Path, env: dict) -> str | None:
     return None
 
 
-def drive(project: Path, env: dict, request: str, model: str, level: str, minutes: int, plugin: Path) -> dict:
+def drive(project: Path, env: dict, request: str, skill: str, model: str, level: str, minutes: int, plugin: Path) -> dict:
     """Run the orchestrator; at standard/guided, deliver the scripted approvals until none is awaited."""
-    total = claude(project, env, f'/greenlight:feature "{request.strip()}" --autonomy {level}', model, minutes, plugin)
+    total = claude(project, env, f'/greenlight:{skill} "{request.strip()}" --autonomy {level}', model, minutes, plugin)
     if level in ("autopilot", "auto"):
         return total
     for _ in range(MAX_FOLLOW_UPS):
@@ -263,32 +266,67 @@ def git_changes(project: Path, env: dict) -> dict:
     return {"files_changed": changed[-1] if changed else "", "new_files": len(untracked)}
 
 
+NOT_PRODUCTION = (".bdd/", "tests/", ".gitignore", ".claude/")
+# What Python writes next to a module when it imports it. Only an untracked file of exactly this shape is skipped: a
+# .py under __pycache__ or a .pyc elsewhere can be imported, so it is source (the same rule as the red record).
+GENERATED_BYTECODE = re.compile(r"(?:.*/)?__pycache__/[^/]+\.cpython-\d+(?:\.opt-[12])?\.pyc")
+
+
+def production_changes(porcelain: list[str]) -> list[str]:
+    """The paths in `git status --porcelain --untracked-files=all` output that are production code: everything except
+    greenlight's own data, the test folder, ignore files and generated bytecode. An adoption must leave this empty."""
+    paths = []
+    for line in porcelain:
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        generated = line.startswith("??") and GENERATED_BYTECODE.fullmatch(path) is not None
+        if path and not generated and not path.startswith(NOT_PRODUCTION):
+            paths.append(path)
+    return paths
+
+
+def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
+    """What an adoption must satisfy, read from the project and never from the conversation: `bdd adopt --check` is
+    clean (every scenario is @existing, the bind gate pinned the production source and it is unchanged), the recorded
+    run is a valid green, and git sees no production file touched since greenlight was set up."""
+    check = bdd(project, env, "adopt", feature, "--check", check=False)
+    porcelain = run([*GIT, "status", "--porcelain", "--untracked-files=all"], project, env, check=False).stdout.splitlines()
+    touched = production_changes(porcelain)
+    classified = collect.load_json(bdd(project, env, "classify", feature, "--json", check=False).stdout)
+    green = (classified.get("green") or {}).get("valid")
+    return {"adopt_check_clean": check.returncode == 0, "adopt_check_output": (check.stdout + check.stderr).strip()[:600],
+            "production_files_touched": touched, "green_valid": green,
+            "holds": check.returncode == 0 and not touched and green is True}
+
+
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
-    project, env, python = build_project(tmp, args.request)
-    set_up(project, env, level, python, args.request)
-    output = drive(project, env, request, MODELS[args.model], level, args.minutes, plugin_directory(tmp, args.hooks))
+    kind = REQUEST_KINDS[args.request]
+    project, env, python = build_project(tmp, kind)
+    set_up(project, env, level, python, kind)
+    output = drive(project, env, request, kind["skill"], MODELS[args.model], level, args.minutes, plugin_directory(tmp, args.hooks))
     row = collect.collect_row(reader(project, env), project, answers, transcript_of(output, project))
     marker = project / ".bdd" / ".enforcement" / "_seen"
     row.update(git_changes(project, env))
+    if kind["skill"] == "adopt" and row.get("feature"):
+        row["adoption"] = adoption_invariants(project, env, row["feature"])
     row.update({"hooks_active": marker.is_file(), "claude": claude_summary(output)})
     if args.hooks == "on" and not row["hooks_active"]:
         row["warning"] = "hooks were requested but did not run; this row is not a hard-enforcement result"
     if row.get("phase") not in (None, "discover") and not row.get("cost_recorded"):
         row["cost_warning"] = "the orchestrator recorded no cost with `bdd cost`; the totals above are claude's own"
-    row["completed"] = row.get("phase") == "done"
+    row["completed"] = row.get("phase") == "done" and (row["adoption"]["holds"] if "adoption" in row else kind["skill"] != "adopt")
     return row
 
 
 def baseline_row(tmp: Path, args: argparse.Namespace, request: str) -> dict:
     """The same request without the plugin: what plain Claude Code leaves behind, judged by the app's own tests."""
-    project, env, python = build_project(tmp, args.request)
+    kind = REQUEST_KINDS[args.request]
+    project, env, python = build_project(tmp, kind)
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
     prompt = (f"{request.strip()}\n\nImplement this in the project in the current directory. Write tests for it and run "
               "the project's tests. Do not ask questions; decide and state your assumptions.")
     output = claude(project, env, prompt, MODELS[args.model], args.minutes, None)
-    command = [python if word == "{python}" else word for word in BASELINE_TESTS[CASES[args.request][0]]]
-    tests = run(command, project, env, check=False)
+    tests = run([python if word == "{python}" else word for word in kind["baseline"]], project, env, check=False)
     row = {"features": 0, "tests_pass": tests.returncode == 0, "claude": claude_summary(output), **git_changes(project, env)}
     row["completed"] = row["tests_pass"]
     return row
@@ -311,8 +349,7 @@ def parse_list(value: str, allowed: tuple[str, ...], what: str) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
-    ap.add_argument("--request", default="discounts", choices=sorted(set(requests) & set(CASES)),
-                    help="a file in evals/requests/ (each runs on its own reference app)")
+    ap.add_argument("--request", default="discounts", choices=sorted(REQUEST_KINDS), help="a file in evals/requests/")
     ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
     ap.add_argument("--autonomy", default="autopilot", type=lambda v: parse_list(v, LEVELS, "autonomy"),
                     help="one level or a comma-separated list, e.g. standard,autopilot")
@@ -322,10 +359,13 @@ def main() -> int:
     ap.add_argument("--minutes", type=int, default=45, help="give up on one run after this long")
     ap.add_argument("--keep", action="store_true", help="keep the temporary projects and print their paths")
     args = ap.parse_args()
-    for tool in ("claude", "git", "sh", *TOOLCHAINS[CASES[args.request][0]]):
+    for tool in ("claude", "git", "sh", *REQUEST_KINDS[args.request]["tools"]):
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
+    if REQUEST_KINDS[args.request]["skill"] == "adopt" and "baseline" in args.arms:
+        print("an adoption request has no baseline arm: plain Claude Code has nothing to adopt against")
+        return 2
     request = requests[args.request].read_text(encoding="utf-8")
     answers_file = REQUESTS / f"{args.request}.answers.json"
     answers = json.loads(answers_file.read_text(encoding="utf-8")) if answers_file.is_file() else []

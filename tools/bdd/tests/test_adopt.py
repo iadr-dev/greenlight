@@ -120,6 +120,47 @@ class AdoptGateTest(AdoptCase):
         self.assertEqual(self.gate("implement")["gates"]["implement"]["result"], "pass")
 
 
+QUALITY_TABLE = "\n[adapters.quality.lint]\ncommand = '{python} -c \"raise SystemExit(1)\"'\n"      # would fail if it were run
+MUTATION_TABLE = "\n[adapters.mutation]\ncommand = '{python} fake_mutator.py --report {out} {files}'\nthreshold = 80\n"
+
+
+class AdoptIsNotHeldToChangeChecksTest(AdoptCase):
+    """The code of an adoption already exists, so a quality check on it is not the adoption's business, and there is no
+    red to measure a change from, so there is nothing to mutate."""
+
+    def adopt_to_verify(self) -> None:
+        self.spec.write_text(EXISTING_SPEC, encoding="utf-8", newline="\n")
+        self.to_tasks()
+        self.gate("implement", detail={"adopt": "true"})
+
+    def test_quality_checks_do_not_stop_an_adopted_feature(self):
+        self.config(tail=QUALITY_TABLE)
+        self.adopt_to_verify()
+        self.assertEqual(self.gate("verify")["phase"], "done")
+
+    def test_the_same_quality_checks_stop_a_normal_feature(self):
+        self.config(tail=QUALITY_TABLE)
+        state.update(self.feature_dir, lambda data: data.__setitem__("kind", "feature"))
+        self.to_tasks()
+        with self.assertRaises(UsageError) as cm:
+            self.gate("implement")
+        self.assertIn("quality checks are configured but have not been run", str(cm.exception))
+
+    def test_a_mutation_check_does_not_stop_an_adopted_feature(self):
+        self.config(tail=MUTATION_TABLE)
+        self.adopt_to_verify()
+        self.assertEqual(self.gate("verify")["phase"], "done")
+
+    def test_the_same_mutation_check_stops_a_normal_feature_at_verify(self):
+        self.config(tail=MUTATION_TABLE)
+        state.update(self.feature_dir, lambda data: data.__setitem__("kind", "feature"))
+        self.to_tasks()
+        self.gate("implement")
+        with self.assertRaises(UsageError) as cm:
+            self.gate("verify")
+        self.assertIn("the mutation check is configured but has not been run", str(cm.exception))
+
+
 class AdoptCommandTest(AdoptCase):
     def test_the_command_reports_and_sets_the_exit_code(self):
         self.bind()

@@ -64,30 +64,31 @@ class HarnessTablesTest(unittest.TestCase):
         cls.harness = load_harness()
 
     def test_every_request_has_an_app_an_answers_file_and_a_toolchain(self):
-        for request, (app, adapter_name) in self.harness.CASES.items():
+        for request, kind in self.harness.REQUEST_KINDS.items():
             with self.subTest(request=request):
                 self.assertTrue((REPO / "evals" / "requests" / f"{request}.md").is_file())
                 self.assertTrue((REPO / "evals" / "requests" / f"{request}.answers.json").is_file())
-                self.assertTrue((REPO / "evals" / "apps" / app).is_dir())
-                self.assertIn(app, self.harness.TOOLCHAINS)
-                self.assertEqual(app in self.harness.GENERIC_RUNS, adapter_name == "generic-junit")
-                self.assertTrue((REPO / "adapters" / adapter_name / "adapter.toml").is_file())
+                self.assertTrue((REPO / "evals" / "apps" / kind["app"]).is_dir())
+                self.assertTrue(kind["tools"] and kind["baseline"])
+                self.assertEqual("run" in kind, kind["adapter"] == "generic-junit")
+                self.assertEqual("packages" in kind, kind["adapter"] == "python-pytest-bdd")
+                self.assertTrue((REPO / "adapters" / kind["adapter"] / "adapter.toml").is_file())
 
     def test_every_request_file_is_known_to_the_harness(self):
         files = {p.stem for p in (REPO / "evals" / "requests").glob("*.md")}
-        self.assertEqual(files, set(self.harness.CASES))
+        self.assertEqual(files, set(self.harness.REQUEST_KINDS))
 
     def test_swapping_the_run_line_leaves_a_valid_configuration(self):
         from bddlib import config as cfg
-        for request, (app, adapter_name) in self.harness.CASES.items():
-            if adapter_name != "generic-junit":
+        for request, kind in self.harness.REQUEST_KINDS.items():
+            if kind["adapter"] != "generic-junit":
                 continue
             with self.subTest(request=request), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp).resolve()
-                shutil.copytree(REPO / "evals" / "apps" / app, root, ignore=IGNORED, dirs_exist_ok=True)
+                shutil.copytree(REPO / "evals" / "apps" / kind["app"], root, ignore=IGNORED, dirs_exist_ok=True)
                 (root / ".bdd").mkdir()
                 adapter.apply(root, "generic-junit")
-                self.harness.swap_run_line(root, request)
+                self.harness.swap_run_line(root, kind)
                 (run,) = cfg.load(root).runs
                 self.assertIn("run_junit.py", run.by_tag)
                 self.assertIn("{marker}", run.by_tag)
@@ -103,13 +104,13 @@ class AppCase:
     @classmethod
     def setUpClass(cls):
         harness = load_harness()
-        app = harness.CASES[cls.request][0]
+        kind = harness.REQUEST_KINDS[cls.request]
         cls.dir = tempfile.TemporaryDirectory()
         cls.root = Path(cls.dir.name).resolve()
-        shutil.copytree(REPO / "evals" / "apps" / app, cls.root, ignore=IGNORED, dirs_exist_ok=True)
+        shutil.copytree(REPO / "evals" / "apps" / kind["app"], cls.root, ignore=IGNORED, dirs_exist_ok=True)
         (cls.root / ".bdd").mkdir()
         adapter.apply(cls.root, "generic-junit")
-        harness.swap_run_line(cls.root, cls.request)
+        harness.swap_run_line(cls.root, kind)
         state.create(cls.root, "FEAT-001", "Counting", "standard")
         (cls.root / "tests" / "features").mkdir(parents=True, exist_ok=True)
         (cls.root / "tests" / "features" / "counting.feature").write_text(FEATURE, encoding="utf-8", newline="\n")
