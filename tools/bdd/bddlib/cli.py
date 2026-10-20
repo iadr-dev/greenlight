@@ -4,7 +4,7 @@ from __future__ import annotations
 import importlib
 import sys
 
-from . import __version__
+from . import __version__, config
 
 # command -> (module, function). Modules are imported on demand to keep start-up fast: hooks
 # run this on every tool call.
@@ -24,6 +24,7 @@ COMMANDS = {
     "status": ("reportcmd", "run_status"),
     "trace": ("reportcmd", "run_trace"),
     "scan": ("reportcmd", "run_scan"),
+    "migrate": ("migrate", "run"),
 }
 
 
@@ -45,6 +46,10 @@ def main(argv: list[str]) -> int:
         print(f"bdd {__version__}")
         return 0
     if argv and argv[0] in COMMANDS:
+        problem = config.version_problem(argv[0], argv[1:])
+        if problem:
+            print(f"bdd {argv[0]}: {problem}", file=sys.stderr)
+            return 2
         module, function = COMMANDS[argv[0]]
         return getattr(importlib.import_module(f"{__package__}.{module}"), function)(argv[1:])
     print(f"usage: bdd <command> [options]   (commands: {', '.join(sorted(COMMANDS))}, --version)", file=sys.stderr)
