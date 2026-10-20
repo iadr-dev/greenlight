@@ -12,7 +12,8 @@ GIT = shutil.which("git")
 
 def run_git(root: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@example.com",
-                    "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+                    "-c", "commit.gpgsign=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false", *args],
+                   check=True, capture_output=True)       # no background gc: it can still be writing when the folder is removed
 
 
 @unittest.skipUnless(GIT, "needs git")

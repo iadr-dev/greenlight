@@ -133,7 +133,8 @@ class StateCommandTest(unittest.TestCase):
     def test_record_red_captures_the_git_position(self):
         self.init()
         self.write("src/app.py", "x = 1\n")
-        git = ["git", "-C", str(self.root), "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"]
+        git = ["git", "-C", str(self.root), "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false",
+               "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
         subprocess.run([*git, "init", "-q"], check=True, capture_output=True)
         subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
         subprocess.run([*git, "commit", "-q", "-m", "init"], check=True, capture_output=True)
