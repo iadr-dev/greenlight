@@ -45,7 +45,7 @@ def find(root: Path, name: str) -> cfg.Member:
     raise UsageError(f"{name!r} is not a member of this workspace (members: {known})")
 
 
-def _inside(base: Path, target: Path) -> bool:
+def inside(base: Path, target: Path) -> bool:
     real_base, real_target = Path(os.path.realpath(base)), Path(os.path.realpath(target))
     return real_target == real_base or real_base in real_target.parents
 
@@ -61,7 +61,7 @@ def unobserved(member: cfg.Member) -> str | None:
     if not (path / cfg.BDD_DIR / "config.toml").is_file():
         return f"{path} is not a greenlight project (no .bdd/config.toml)"
     for relative in (cfg.BDD_DIR, f"{cfg.BDD_DIR}/features", f"{cfg.BDD_DIR}/.runs", f"{cfg.BDD_DIR}/.integrity"):
-        if (path / relative).exists() and not _inside(path, path / relative):
+        if (path / relative).exists() and not inside(path, path / relative):
             return f"{relative} leads out of the repository through a link"
     return None
 

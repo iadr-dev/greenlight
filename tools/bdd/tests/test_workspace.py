@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import cli, guard, lockfile, state, store, tripwire, workspace
+from bddlib import approvals, cli, guard, lockfile, state, store, tripwire, workspace
 from bddlib import config as cfg
 from bddlib.errors import UsageError
 
@@ -276,6 +276,87 @@ class ProtectionTest(WorkspaceCase):
         (self.api / "steps" / "steps.py").write_text("def then_ok():\n    assert 2\n", encoding="utf-8")
         found = tripwire.lock_findings(self.root)
         self.assertEqual([(f["kind"], f["what"]) for f in found], [("changed", "api: FEAT-007 bind lock")])
+
+
+class ApprovalBindingTest(WorkspaceCase):
+    """The examples approved at home cover what the members contribute, so their specs cannot be swapped quietly."""
+
+    def approved(self) -> dict:
+        self.walk_to("examples")
+        return self.data()
+
+    def problems(self) -> list[str]:
+        return approvals.effective_problems(self.root, self.data(), "examples")
+
+    def test_the_approval_covers_each_members_feature_files_and_configuration(self):
+        last = self.approved()["approvals"][-1]
+        self.assertEqual(sorted(k for k in last["artifacts"] if k.startswith("@")),
+                         ["@api/.bdd/config.toml", "@api/features/spec.feature",
+                          "@web/.bdd/config.toml", "@web/features/spec.feature"])
+        self.assertEqual(self.problems(), [])
+
+    def test_a_member_spec_that_is_unlocked_edited_and_locked_again_needs_a_new_approval(self):
+        self.approved()
+        feature_dir = store.find_feature_dir(self.web, "FEAT-007")
+        self.lock_member(self.web)
+        lockfile.unlock(feature_dir, "FEAT-007", "spec", "swap the scenario")
+        (self.web / "features" / "spec.feature").write_text(SPEC.format(title="Web", scenario="Something else", n=1),
+                                                            encoding="utf-8", newline="\n")
+        lockfile.lock(self.web, feature_dir, "FEAT-007", "spec", [self.web / "features" / "spec.feature"])
+        self.assertEqual(self.problems(), ["@web/features/spec.feature changed after the examples approval; "
+                                           "it has to be approved again"])
+
+    def test_a_changed_member_configuration_needs_a_new_approval(self):
+        self.approved()
+        with (self.api / ".bdd" / "config.toml").open("a", encoding="utf-8") as handle:
+            handle.write("\n# quietly loosened\n")
+        self.assertIn("@api/.bdd/config.toml changed after the examples approval", self.problems()[0])
+
+    def test_a_member_dropped_from_the_workspace_invalidates_the_approval(self):
+        self.approved()
+        self.config(tail=f'\n[workspace]\nweb = {json.dumps(str(self.web))}\n')
+        self.assertTrue(any("@api/" in p for p in self.problems()))
+
+    def test_examples_cannot_be_approved_while_a_member_is_not_observed(self):
+        shutil.rmtree(self.api)
+        with self.assertRaises(UsageError) as cm:
+            self.walk_to("examples")
+        self.assertIn("api is not observed here", str(cm.exception))
+
+
+class FailClosedTest(WorkspaceCase):
+    def payload(self, path: Path, agent: str | None = None) -> dict:
+        payload = {"tool_name": "Write", "cwd": str(self.root), "tool_input": {"file_path": str(path)}}
+        if agent:
+            payload["agent_type"] = f"greenlight:{agent}"
+        return payload
+
+    def test_a_member_that_does_not_exist_yet_is_protected_all_the_same(self):
+        shutil.rmtree(self.web)
+        for name in ("config.toml", "standards.md", "features/FEAT-007-x/state.json"):
+            with self.subTest(name=name):
+                self.assertIn("greenlight", guard.evaluate(self.payload(self.web / ".bdd" / name)))
+        self.assertIsNotNone(guard.evaluate(self.payload(self.web / "src" / "app.py", "product-analyst")))
+
+    def test_a_member_without_a_data_folder_is_protected_the_same_way(self):
+        shutil.rmtree(self.api / ".bdd")
+        self.assertIn("greenlight", guard.evaluate(self.payload(self.api / ".bdd" / "config.toml")))
+
+    def test_a_member_whose_feature_has_no_state_backs_no_gate(self):
+        self.walk_to("refine")
+        lockfile.lock(self.root, self.feature_dir, "FEAT-007", "bind", [self.step])
+        self.red_members()
+        state.path_of(store.find_feature_dir(self.web, "FEAT-007")).unlink()
+        self.assertIn("[web]", self.refused("bind"))
+
+    def test_the_tripwire_watches_every_members_configuration(self):
+        baseline = tripwire.snapshot(self.root, None)
+        configs = {(m / ".bdd" / "config.toml").resolve().as_posix() for m in (self.web, self.api)}
+        self.assertTrue(configs <= set(baseline))
+        with (self.web / ".bdd" / "config.toml").open("a", encoding="utf-8") as handle:
+            handle.write("\n# changed\n")
+        found = tripwire.baseline_findings(self.root, None, baseline)
+        self.assertEqual([(f["kind"], Path(f["path"]).name) for f in found], [("changed", "config.toml")])
 
 
 if __name__ == "__main__":

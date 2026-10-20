@@ -8,7 +8,8 @@ An approval is a record in the feature's ``state.json``:
                 self-reported   recorded by a skill from the person's answer (sessions without hooks)
                 auto            recorded by the orchestrator under the auto / autopilot levels
     origin      pending | human | headless | invalid | unverifiable | self-reported | auto
-    artifacts   SHA-256 of what was approved (rules.md, or the feature files)
+    artifacts   SHA-256 of what was approved (rules.md, or the feature files; for the examples of a feature that spans
+                several repositories also each member's feature files and config.toml, keyed ``@member/path``)
 
 A hook-grade approval starts as ``pending``: when the hook runs, the person's prompt is not yet in
 the session transcript, so who wrote it cannot be checked yet. ``verify_origins`` checks it
@@ -22,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config as cfg
-from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store
+from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store, workspace
 from .errors import UsageError
 
 GATES = state.HUMAN_GATES
@@ -44,9 +45,45 @@ def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -
         files = [rules]
     else:
         files = featurefiles.spec_files(root, feature_id)
+    hashes = {lockfile.relative(root, f): lockfile.file_digest(f) for f in files}
+    if gate == "examples":
+        members = member_artifacts(root, feature_id)
+        hashes.update(members)
+        files = files or [key for key in members if key.endswith(".feature")]
         if not files:
             raise UsageError(f"there is nothing to approve: no .feature file is tagged @{feature_id}")
-    return {lockfile.relative(root, f): lockfile.file_digest(f) for f in files}
+    return hashes
+
+
+MEMBER_PREFIX = "@"
+
+
+def member_artifacts(root: Path, feature_id: str) -> dict[str, str]:
+    """Digests of what each other repository of a workspace contributes to the examples: its feature files for the
+    feature and its ``config.toml``. Approving the examples covers them, so a member's specs cannot be unlocked, edited and
+    locked again (or its configuration changed) without the person approving again. A member that cannot be read here
+    cannot be approved."""
+    found: dict[str, str] = {}
+    for member in cfg.load(root).workspace:
+        why = workspace.unobserved(member)
+        if why:
+            raise UsageError(f"cannot approve the examples: {member.name} is not observed here ({why})")
+        files = [member.path / cfg.BDD_DIR / "config.toml", *featurefiles.spec_files(member.path, feature_id)]
+        found.update({f"{MEMBER_PREFIX}{member.name}/{lockfile.relative(member.path, f)}": lockfile.file_digest(f) for f in files})
+    return found
+
+
+def artifact_path(root: Path, rel: str) -> Path | None:
+    """Where an artifact key points: a path in this repository, or ``@member/path`` in a member (None when the member is
+    no longer part of the workspace or the path leaves it)."""
+    if not rel.startswith(MEMBER_PREFIX):
+        return root / rel
+    name, _, inner = rel[len(MEMBER_PREFIX):].partition("/")
+    for member in cfg.load(root).workspace:
+        target = member.path / inner
+        if member.name == name and workspace.inside(member.path, target):
+            return target
+    return None
 
 
 def prerequisite_problems(data: dict, gate: str) -> list[str]:
@@ -95,7 +132,8 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
             raise UsageError(f"cannot approve {gate}: " + "; ".join(problems))
         artifacts = artifact_hashes(root, feature_dir, feature_id, gate)
         if gate == "examples":
-            ensure_spec_locked(root, feature_dir, feature_id, artifacts)
+            ensure_spec_locked(root, feature_dir, feature_id,
+                               {k: v for k, v in artifacts.items() if not k.startswith(MEMBER_PREFIX)})
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
@@ -287,8 +325,8 @@ def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
         return [f"the {gate} approval was revoked by a change ({last['revoked']}); it has to be approved again"]
     problems = grade_problems(root, data, gate, last)
     for rel, digest in last["artifacts"].items():
-        target = root / rel
-        if not target.is_file() or lockfile.file_digest(target) != digest:
+        target = artifact_path(root, rel)
+        if target is None or not target.is_file() or lockfile.file_digest(target) != digest:
             problems.append(f"{rel} changed after the {gate} approval; it has to be approved again")
     return problems
 

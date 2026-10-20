@@ -102,6 +102,7 @@ def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
     candidates += _files_under(root / ".claude" / "hooks")
     candidates += environment_files(root) + node_environment_files(root)
+    candidates += [m.path / cfg.BDD_DIR / "config.toml" for m in cfg.load(root).workspace]      # the rules a member runs by
     if plugin_root is not None:
         candidates += [plugin_root / rel for rel in PLUGIN_FILES]
         for tree in PLUGIN_TREES:

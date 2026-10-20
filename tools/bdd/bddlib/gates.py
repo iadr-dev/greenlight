@@ -103,6 +103,7 @@ def workspace_problems(root: Path, feature_id: str, gate: str, raws: dict[str, b
 def _member_problems(member: cfg.Member, feature_id: str, gate: str, raws: dict[str, bytes | None] | None,
                      kept: dict | None) -> list[str]:
     feature_dir = store.find_feature_dir(member.path, feature_id)
+    state.load(feature_dir)                         # a member whose feature has no readable state backs nothing
     problems: list[str] = []
     has_runs = bool(cfg.load(member.path).runs)
     if gate in ("implement", "verify"):

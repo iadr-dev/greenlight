@@ -134,9 +134,9 @@ class Project:
         self.load_locks()
         # The other repositories of a workspace are protected with their own locks and data, wherever the tool call
         # reaches them from. Which directories a session includes is not in the hook input, so a member that no tool
-        # call touches is simply not seen here.
-        self.members = [Project(m.path, follow_workspace=False) for m in self.config.workspace
-                        if follow_workspace and m.path.is_dir() and (m.path / cfg.BDD_DIR).is_dir()]
+        # call touches is simply not seen here. Every configured member is protected, whether or not its directory or its
+        # .bdd exists yet: a missing folder is not a way round the rules.
+        self.members = [Project(m.path, follow_workspace=False) for m in self.config.workspace if follow_workspace]
         for member in self.members:
             self.locked.update(member.locked)
 
