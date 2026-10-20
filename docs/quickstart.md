@@ -72,10 +72,18 @@ checks it against the session transcript. Once the examples are approved, the fe
 When the report says `Verdict: PASS`, every rule has examples, every example has a passing test, nothing approved or
 bound changed afterwards, and the evidence is in `.bdd/features/FEAT-001-*/report.md`.
 
-## Using another tool than Claude Code
+## Without the plugin, or from another tool
 
-`bdd install-skills codex` (or `agents-md`) installs greenlight's instructions for Codex and other agent tools. They
-run without hooks, so enforcement is soft; see [concepts](concepts.md).
+The plugin gives hard enforcement. Where it is not an option, `bdd install-skills` installs the same skills as plain
+files and the project runs in soft mode (violations are detected, not prevented):
+
+```sh
+bdd install-skills claude        # Claude Code without the plugin: /greenlight-feature, /greenlight-status, ...
+bdd install-skills codex         # Codex: $greenlight-feature, ...
+bdd install-skills agents-md     # any tool that reads AGENTS.md
+```
+
+Add `--dry-run` to look first and `--uninstall` to take it all away again; see [concepts](concepts.md).
 
 ## Starting from existing code
 

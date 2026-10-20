@@ -1,30 +1,14 @@
 # Running the scenarios in CI
 
 CI runs the same command `bdd run` does, from `.bdd/config.toml`, so nothing is configured twice. The job needs your
-runner's toolchain and the greenlight plugin's wrapper (Python 3.11 or newer, nothing to install):
+runner's toolchain and the greenlight plugin's wrapper (Python 3.11 or newer, nothing to install). The complete workflow,
+with every action pinned to a commit, is `ci/github-actions.yml` next to this file; copy it to
+`.github/workflows/greenlight.yml` and add your runner's setup step (JDK, Node, Go or .NET) where it says so.
 
-```yaml
-- uses: actions/setup-python@v5
-  with:
-    python-version: "3.12"
-- run: git clone --depth 1 --branch v0.1.0 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
-# ... set up your runner's toolchain here (JDK, Node, Go, .NET) ...
-- name: Check every finished feature
-  run: |
-    bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
-    for dir in .bdd/features/FEAT-*; do
-      [ -d "$dir" ] || continue
-      id=$(basename "$dir" | grep -o '^FEAT-[0-9]*')
-      "$bdd" lock "$id" --check --require
-      "$bdd" run "$id"
-      "$bdd" classify "$id" --expect green
-    done
-- uses: actions/upload-artifact@v4
-  if: always()
-  with:
-    name: bdd-runs
-    path: .bdd/.runs/
-```
+It checks, for every finished feature, the approvals in the committed record, the locks, a fresh green run, the
+traceability, and the optional stability, quality and mutation checks; `docs/ci.md` explains each step and what the
+approval check can and cannot tell.
 
-`bdd run` keeps the JUnit file of each run under `.bdd/.runs/FEAT-n/`; the artifact above makes it available when a job
-fails. If your runner is not installed on the CI machine, `bdd run` stops with "not on PATH" before any scenario runs.
+`bdd run` keeps the JUnit file of each run under `.bdd/.runs/FEAT-n/`; the workflow uploads that folder as an artifact so
+a failed job can be read afterwards. If your runner is not installed on the CI machine, `bdd run` stops with "not on PATH"
+before any scenario runs.

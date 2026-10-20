@@ -17,4 +17,5 @@ checks that they are reported as questions, not turned into rules that endorse t
 - the volume discount applies from the **eleventh** unit although its docstring says ten;
 - a balance more than 90 days overdue pays **no** fee, after a growing fee up to day 90.
 
-The scripted answers for the evaluation are in `evals/requests/adopt-billing.answers.txt`.
+The scripted answers the evaluation scores the recorded assumptions against are in
+`evals/requests/adopt-billing.answers.json`.

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "the volume discount starts after ten units, as observed",
+    "about": ["discount"],
+    "expect": ["10"]
+  },
+  {
+    "id": "no late fee beyond ninety days, as observed",
+    "about": ["90"],
+    "expect": ["fee"]
+  },
+  {
+    "id": "tax rounds half up",
+    "about": ["round"],
+    "expect": ["half"]
+  },
+  {
+    "id": "negative input is refused",
+    "about": ["negative"],
+    "expect": ["refus"]
+  }
+]

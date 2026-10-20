@@ -24,6 +24,9 @@ implementer's explanations, history or expected verdict. A missing input makes t
    run the stability rerun: `bdd run FEAT-n --shuffle` and
    `--isolated`, several times. Mutation testing on the changed files is optional; follow `mutation-check`. Where the project configured it, read the
    recorded result with `bdd mutate FEAT-n --check` (the orchestrator runs `bdd mutate`; you only read it).
+   Where the project asks for the stability check (`[stability] runs = N`), read the recorded result with
+   `bdd stability FEAT-n --check` (the orchestrator runs `bdd stability`); a scenario that changed outcome is flaky and a
+   green run of it proves little.
 5. Judge the code quality (checklist section Q): read `.bdd/standards.md`, check the changed production code against it,
    read the recorded quality result with `bdd check FEAT-n --check` where checks are configured (the orchestrator runs
    `bdd check`; you only read it), and for each non-trivial call into a library in the diff compare it with the library's
