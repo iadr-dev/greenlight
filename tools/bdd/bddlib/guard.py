@@ -127,11 +127,26 @@ class Locked:
 class Project:
     """What the guard needs to know about the project: locked files, data files, directories."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, follow_workspace: bool = True):
         self.root = root.resolve()
         self.config = cfg.load(self.root)
         self.locked: dict[str, Locked] = {}
         self.load_locks()
+        # The other repositories of a workspace are protected with their own locks and data, wherever the tool call
+        # reaches them from. Which directories a session includes is not in the hook input, so a member that no tool
+        # call touches is simply not seen here.
+        self.members = [Project(m.path, follow_workspace=False) for m in self.config.workspace
+                        if follow_workspace and m.path.is_dir() and (m.path / cfg.BDD_DIR).is_dir()]
+        for member in self.members:
+            self.locked.update(member.locked)
+
+    def owner_of(self, path: Path) -> Project:
+        """The project (this one or a member) whose files include ``path``."""
+        key = path_key(path)
+        for member in self.members:
+            if key == path_key(member.root) or key.startswith(path_key(member.root) + "/"):
+                return member
+        return self
 
     def load_locks(self) -> None:
         for feature_dir in sorted(store.features_dir(self.root).glob("FEAT-*")):
@@ -573,7 +588,8 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     enforcement.touch(root, payload.get("session_id"))      # evidence that hooks ran in this session
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
-        return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
+        target = raw if raw.is_absolute() else cwd / raw
+        return check_file_write(project.owner_of(target), target, agent_name(payload))
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None

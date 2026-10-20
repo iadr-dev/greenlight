@@ -179,15 +179,20 @@ def baseline_findings(root: Path, plugin_root: Path | None, baseline: dict[str, 
     return [{**f, "what": "enforcement file"} for f in found]
 
 
-def lock_findings(root: Path) -> list[dict]:
+def lock_findings(root: Path, label: str = "") -> list[dict]:
+    """Locks that no longer match the disk, here and in every member repository of a workspace (named by ``label``)."""
     found = []
+    if not label:
+        for member in cfg.load(root).workspace:
+            if member.path.is_dir() and (member.path / cfg.BDD_DIR).is_dir():
+                found += lock_findings(member.path, f"{member.name}: ")
     features = store.features_dir(root)
     for feature_dir in sorted(p for p in features.glob("FEAT-*") if p.is_dir()) if features.is_dir() else []:
         match = _FEATURE_DIR.fullmatch(feature_dir.name)
         if match is None or not (feature_dir / lockfile.LOCK_FILE).is_file():
             continue
         for v in lockfile.check(root, feature_dir, match.group(1)):
-            found.append({"kind": v.kind, "path": v.path, "what": f"{match.group(1)} {v.scope} lock"})
+            found.append({"kind": v.kind, "path": v.path, "what": f"{label}{match.group(1)} {v.scope} lock"})
     return found
 
 
