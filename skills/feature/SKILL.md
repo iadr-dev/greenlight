@@ -58,7 +58,7 @@ this one needs. Tell it to read the playbook first.
 | examples | qa-designer | `bdd lint` clean, `bdd trace` no gaps | **human gate: examples** (step 4) |
 | system-map | system-analyst | every step mapped, or listed as a seam | `bdd gate FEAT-n system-map --result pass` |
 | refine | step-engineer | `bdd lint` clean | `bdd gate FEAT-n refine --result pass` |
-| bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind <the adapter's steps and drivers>`; `bdd gate FEAT-n bind --result pass --record-red` |
+| bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you | write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
 | implement | implementer, one task at a time | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status` | `bdd gate FEAT-n implement --result pass` |
 | verify | spec-auditor | the report has evidence on every line | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |

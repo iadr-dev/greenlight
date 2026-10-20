@@ -24,7 +24,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import claudepaths, config as cfg, lockfile, store
+from . import claudepaths, config as cfg, lockfile, runner, store
 from .errors import StoreError
 
 INTEGRITY_DIR = ".integrity"
@@ -54,6 +54,9 @@ def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     """Every existing file whose change would weaken enforcement."""
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
     candidates += _files_under(root / ".claude" / "hooks")
+    interpreter = Path(runner.project_python(root))
+    if interpreter.is_file() and root.resolve() in interpreter.resolve().parents:
+        candidates.append(interpreter)                       # the program that produces the test evidence
     if plugin_root is not None:
         candidates += [plugin_root / rel for rel in PLUGIN_FILES]
         for tree in PLUGIN_TREES:

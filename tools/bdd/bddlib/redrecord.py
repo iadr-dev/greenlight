@@ -32,7 +32,7 @@ def is_production(name: str, excluded: list[str]) -> bool:
 
 def excluded_prefixes(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:
     """Folders that are not production source: greenlight's own data and the test directories."""
-    return [BDD_DIR + "/"] + [lockfile.relative(root, d) + "/" for d in test_dirs]
+    return [BDD_DIR + "/"] + [lockfile.relative(root, d) + ("/" if d.is_dir() or not d.suffix else "") for d in test_dirs]
 
 
 def production_files(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:

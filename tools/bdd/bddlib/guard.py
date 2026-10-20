@@ -56,6 +56,7 @@ AGENT_WRITES = {
 MANAGED_NAMES = {"state.json", "lock.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
+ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
@@ -155,6 +156,10 @@ class Project:
         key = path_key(path)
         if key.startswith(path_key(self.root / cfg.BDD_DIR) + "/"):
             return "data"
+        if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS):
+            return "environment"
+        if key in {path_key(f) for f in self.config.support_files}:
+            return "steps"
         for category, dirs in (("features", self.config.feature_dirs), ("steps", self.config.step_dirs)):
             if any(key.startswith(path_key(d) + "/") for d in dirs):
                 return category

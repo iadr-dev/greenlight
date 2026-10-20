@@ -30,7 +30,7 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    `bdd run FEAT-n --shuffle` and `bdd run FEAT-n --isolated` (they must not depend on each other); run
    `bdd run FEAT-n` again last so the recorded run is the plain one.
 8. Report that the red is valid; after checking it, the orchestrator locks the bound files with `bdd lock FEAT-n
-   --scope bind tests/steps tests/drivers` (the paths the adapter uses).
+   --scope bind --bound` (the adapter's step, driver and support files named in the configuration).
 
 ## Output files
 

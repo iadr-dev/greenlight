@@ -29,6 +29,12 @@ A scenario must fail for the right reason before any production code exists:
 - Import errors, undefined steps, fixture errors and syntax errors are defects too. Anything the patterns in
   `adapter.toml` do not recognise is `unknown` and blocks the gate.
 
+## What is bound
+
+The bind lock covers `tests/steps/`, `tests/drivers/` and the plumbing files `tests/conftest.py`,
+`tests/test_features.py` and `tests/__init__.py` (the adapter's `support` paths), so nothing that decides how the
+scenarios run can be changed once the red is proven. `bdd lock FEAT-n --scope bind --bound` locks exactly these.
+
 ## Do not edit the core drivers
 
 `api.py`, `cli.py`, `lib.py`, `compare.py`, `world.py`, `clock.py`, `stubs.py`, `files.py`, `sockets.py` and

@@ -14,6 +14,7 @@ optional = ["time-machine", "respx", "httpx"]
 features = "tests/features"
 steps = "tests/steps"
 drivers = "tests/drivers"
+support = ["tests/conftest.py", "tests/test_features.py", "tests/__init__.py"]
 
 [run]
 # {project_python} is the project's own environment (GREENLIGHT_PYTHON, the active or a .venv/venv one), so the tests
