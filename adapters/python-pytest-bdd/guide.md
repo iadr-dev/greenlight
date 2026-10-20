@@ -171,19 +171,31 @@ scenario about a collection, or the problem cannot show.
 ## Mutation check (opt-in)
 
 Nothing here is installed or enabled by default. A project that wants to know whether its tests would notice a change
-in the code adds an `[adapters.mutation]` table to `.bdd/config.toml` and installs a mutation tool itself (for example
-`mutmut`; it is a development tool, never a requirement of greenlight):
+in the code installs [mutmut](https://github.com/boxed/mutmut) itself (a development tool, never a requirement of
+greenlight) and adds an `[adapters.mutation]` table to `.bdd/config.toml`:
+
+```sh
+uv pip install "mutmut==3.8.0"        # the version this wrapper was run against; Linux or macOS (on Windows use WSL)
+```
 
 ```toml
 [adapters.mutation]
-command    = '{project_python} -m your_mutation_wrapper {files} --report {out}'
+command    = '{project_python} -I tests/tools/mutate_python.py --report {out} -- {files}'
 threshold  = 80
 extensions = [".py"]
 ```
 
-`bdd mutate FEAT-n` runs the command, without a shell, on the production files that changed since the red was proven
-(only those ending in `extensions`), and records the result. The tool must leave a JSON report at `{out}` with whole
-numbers `killed` and `survived` (optionally `timeout`, `suspicious`, `skipped`). Most tools do not write exactly this
-format: put a few lines of your own (standard library only) around the tool that run it on `{files}` and translate its
-results into the two counts, and exit 0 when it has finished. The format and the placeholders are described in `docs/adapters.md`. Once the table
-exists, the verify gate requires a result that is current and at or above the threshold.
+`tests/tools/mutate_python.py` is copied into the project with the other plumbing and is bound like it (standard
+library only). `bdd mutate FEAT-n` starts it, without a shell, with the production files that changed since the red was
+proven (only those ending in `extensions`). It copies the project to a scratch folder, tells mutmut to mutate only those
+files there, runs the project's tests against every mutant with the same settings `bdd run` uses (`tests/pytest.ini`),
+and writes the counts mutmut reached to `{out}`; your project never gains a `mutants/` folder or a mutmut setting. It
+exits 0 whenever mutmut ran to the end, survivors or not; non-zero means the arguments were refused (2) or mutmut itself
+failed (3), and the check fails with the tool's output. A mutant no test reaches counts as survived; a mutant that
+crashes the interpreter counts as suspicious, and neither is counted as a kill. mutmut runs the whole test suite per
+mutant, so give the check a generous `timeout` on a large project. Once the table exists, the verify gate requires a
+result that is current and at or above the threshold. The format and the placeholders are described in
+`docs/adapters.md`.
+
+Verified: a weak test (`assert discount(5000) is not None`) scored 0% killed (5 survived) and failed a 70% threshold; the
+boundary tests scored 80% (4 killed, 1 survived) and passed, on Linux and macOS with mutmut 3.8.0.

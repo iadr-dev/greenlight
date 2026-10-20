@@ -98,7 +98,7 @@ class PackageTest(unittest.TestCase):
             adapter.apply(root, "ts-playwright-bdd")
             bound = {p.relative_to(root).as_posix() for p in cfg.load(root).support_files}
             self.assertEqual(bound, {"tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "tests/tsconfig.json",
-                                     "tests/package.json", "tests/package-lock.json"})
+                                     "tests/package.json", "tests/package-lock.json", "tests/tools/mutate-ts.mjs"})
 
 
 class FixtureFeaturesTest(unittest.TestCase):

@@ -14,7 +14,8 @@ optional = []
 features = "tests/features"
 steps = "tests/steps"
 drivers = "tests/drivers"
-support = ["tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "tests/tsconfig.json", "tests/package.json", "tests/package-lock.json"]
+support = ["tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "tests/tsconfig.json", "tests/package.json", "tests/package-lock.json",
+           "tests/tools/mutate-ts.mjs"]
 
 [run]
 # One bound script, tests/run.mjs, generates the test files from the features (bddgen) and runs Playwright with the
