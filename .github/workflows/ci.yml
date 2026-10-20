@@ -30,6 +30,26 @@ jobs:
           sh tools/bdd/bdd --version
           sh tools/bdd/bdd doctor
 
+  coverage:
+    name: coverage (tools/bdd, ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+      - name: Install the pinned, hashed development requirements (wheels only)
+        run: uv pip install --system --require-hashes --no-build -r requirements-dev.txt
+      - name: Unit tests under coverage
+        working-directory: tools/bdd
+        run: python -m coverage run -m unittest discover -s tests -t .
+      - name: Report the line and branch coverage (the build fails below the target in tools/bdd/.coveragerc)
+        working-directory: tools/bdd
+        run: |
+          python -m coverage report | tee coverage.txt
+          { echo "### Coverage of tools/bdd"; echo; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   adapter-python-pytest-bdd:
     name: adapter contract (python-pytest-bdd, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

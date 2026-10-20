@@ -4,6 +4,7 @@
     bdd approve FEAT-007 examples --auto            automatic approval (autonomy auto / autopilot)
     bdd approve FEAT-007 rules --self-reported --reject --reason "..."
     bdd approve FEAT-007 --verify                   check pending approvals against the transcript
+    bdd approve FEAT-007 --check                    CI: judge the committed record alone (no session needed)
 
 Approvals typed by the person in a session with hooks are recorded by the UserPromptSubmit hook
 (``bdd approve --from-hook``, input on stdin), not by the other forms; ``--self-reported`` is
@@ -28,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="record the person's answer when no hooks are active in this session")
     how.add_argument("--auto", action="store_true", help="automatic approval under autonomy auto / autopilot")
     how.add_argument("--verify", action="store_true", help="verify pending approvals against the session transcript")
+    how.add_argument("--check", action="store_true",
+                     help="CI check from the committed record alone: exit 1 unless every required approval is valid")
     ap.add_argument("--reject", action="store_true", help="record a rejection instead of an approval")
     ap.add_argument("--reason", default="", help="why (kept with the record)")
     return ap
@@ -41,6 +44,19 @@ def do_verify(feature_dir) -> int:
         if a["grade"] == "hook":
             print(f"  #{a['id']} {a['gate']} {a['decision']}: {a['origin']}" + (f" ({a['evidence']})" if a.get("evidence") else ""))
     return 0 if all(a["origin"] != "pending" for a in data["approvals"] if a["grade"] == "hook") else 1
+
+
+def do_check(root, feature_dir) -> int:
+    """Judge the approvals from what is committed (``state.json`` and the approved files), with no session: usable in CI."""
+    data = state.load(feature_dir)
+    found = approvals.recorded_problems(root, data)
+    for gate, problems in found.items():
+        last = approvals._last(data, gate)
+        how = f"{last['grade']}, origin {last['origin']}" if last else "no record"
+        print(f"{data['feature']}: {gate}: {'NOT valid' if problems else 'valid'} ({how})")
+        for problem in problems:
+            print(f"  - {problem}")
+    return 1 if any(found.values()) else 0
 
 
 def do_record(root, feature_dir, args: argparse.Namespace) -> int:
@@ -68,6 +84,8 @@ def run(argv: list[str]) -> int:
     try:
         root = project_root()
         feature_dir = store.find_feature_dir(root, args.feature)
+        if args.check:
+            return do_check(root, feature_dir)
         return do_verify(feature_dir) if args.verify else do_record(root, feature_dir, args)
     except (UsageError, StoreError) as exc:
         print(f"bdd approve: {exc}", file=sys.stderr)

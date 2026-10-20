@@ -43,6 +43,16 @@ mutation tool (`[adapters.mutation]`, see [adapters](adapters.md)); `bdd mutate 
 files the feature changed and the verify gate requires a current result at or above the threshold. It is the check that
 answers code written to satisfy the tests instead of the rules. Off by default.
 
+## Stability check (optional)
+
+A scenario that passes in one run and fails in the next is flaky, and a green run of it proves little. A project can ask
+for the check with `[stability] runs = 3` in `.bdd/config.toml` (2 to 50). `bdd stability FEAT-n` then reruns the feature
+that many times (the first in the usual order, the others shuffled with fresh seeds when the adapter can), records every
+run, and flags any scenario whose result changed. The verify gate requires a current result without a flaky scenario;
+without the table nothing changes. The runs leave the last `bdd run` alone, so the gates still read the run they always
+did. It shows that scenarios behave the same in the orders and repetitions tried; a rare race can still hide, and more runs
+only make that less likely.
+
 ## Engineering standards and quality checks
 
 Languages, frameworks and conventions differ too much for greenlight to carry rules of its own, so it leaves them to the

@@ -1,6 +1,7 @@
 """`bdd status` and `bdd trace`: read-only reports.
 
     bdd status [--brief] [--json]       every feature in this project and what it is waiting for
+    bdd status --done                   the ids of the finished features, one per line
     bdd trace FEAT-007 [--json]         rule -> example -> scenario -> task matrix and its gaps
     bdd scan FEAT-007 [--json]          assertion-free then steps, fixed waits, stubs of undeclared dependencies
 
@@ -97,10 +98,21 @@ def run_status(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd status", description="Where every feature stands.")
     ap.add_argument("--brief", action="store_true", help="one line for a session start; silent when nothing is in progress")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--done", action="store_true", help="only print the ids of the finished features, one per line (for CI loops)")
     args = ap.parse_args(argv)
     if args.brief:
         return run_brief()
+    if args.done:
+        return guarded("status", lambda: print_done(project_root()))
     return guarded("status", lambda: do_status(project_root(), args.json))
+
+
+def print_done(root: Path) -> int:
+    for feature_dir in feature_dirs(root):
+        data = state.load(feature_dir)
+        if data["phase"] == "done":
+            print(data["feature"])
+    return 0
 
 
 def run_brief() -> int:
