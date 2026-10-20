@@ -1,14 +1,14 @@
 # Phase 10: Verify
 
 Agent: **spec-auditor** (read-only, fresh context). Cards: every card cited in `test-design.md`, `mutation-check`,
-`stability-rerun`. Checklist: `review/checklist.md`.
+`stability-rerun`, and the practice card of the project's language. Checklist: `review/checklist.md`.
 
 Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
 
 ## Inputs
 
 Artifacts only: rules, assumptions, test design, features, step definitions and drivers, system map, tasks, the
-code diff, the recorded runs, `state.json` and `lock.json`, the cited cards and the checklist. Not the
+`.bdd/standards.md` of the project, the code diff, the recorded runs, `state.json` and `lock.json`, the cited cards and the checklist. Not the
 implementer's explanations, history or expected verdict. A missing input makes the related items
 `UNVERIFIABLE`; the auditor never guesses, and when two inputs conflict it reports the conflict.
 
@@ -24,10 +24,14 @@ implementer's explanations, history or expected verdict. A missing input makes t
    run the stability rerun: `bdd run FEAT-n --shuffle` and
    `--isolated`, several times. Mutation testing on the changed files is optional; follow `mutation-check`. Where the project configured it, read the
    recorded result with `bdd mutate FEAT-n --check` (the orchestrator runs `bdd mutate`; you only read it).
-5. Write `report.md` from `templates/report.md`: the verdict, autonomy and enforcement level, the trace
+5. Judge the code quality (checklist section Q): read `.bdd/standards.md`, check the changed production code against it,
+   read the recorded quality result with `bdd check FEAT-n --check` where checks are configured (the orchestrator runs
+   `bdd check`; you only read it), and for each non-trivial call into a library in the diff compare it with the library's
+   current documentation (the project's docs or a documentation tool such as context7) to find deprecated or removed APIs.
+6. Write `report.md` from `templates/report.md`: the verdict, autonomy and enforcement level, the trace
    matrix, gates, locks and approvals (every human approval must be hook-grade or labelled self-reported, and
    its hashes must match the current files), the checklist with evidence for every line, and the cost.
-6. Under `autopilot` the report begins with the assumptions and the rules, and is labelled UNREVIEWED.
+7. Under `autopilot` the report begins with the assumptions and the rules, and is labelled UNREVIEWED.
 
 ## Output files
 

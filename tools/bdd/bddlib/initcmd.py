@@ -4,6 +4,7 @@
     bdd init [--adapter NAME] [--autonomy LEVEL]
                                             create .bdd/ (config, glossary, ignore file) and apply the adapter
     bdd init --smoke                        prove the adapter's sample feature runs green, leaving nothing behind
+    bdd init --standards                    add .bdd/standards.md (engineering standards) to a project that has none
 
 Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none).
 """
@@ -55,6 +56,15 @@ def config_text(autonomy: str, profiles: list[str] | None, python: str | None = 
     return "\n".join(lines) + "\n"
 
 
+def add_standards(root: Path) -> str | None:
+    """Copy the standards template to .bdd/standards.md unless the file exists. Returns the path made, or None."""
+    target = root / cfg.BDD_DIR / "standards.md"
+    if target.exists():
+        return None
+    shutil.copyfile(adapter.adapters_dir().parent / "templates" / "standards.md", target)
+    return f"{cfg.BDD_DIR}/standards.md"
+
+
 def write_project(root: Path, autonomy: str, profiles: list[str] | None, python: str | None = None) -> list[str]:
     if autonomy not in state.AUTONOMY:
         raise UsageError(f"autonomy must be one of {', '.join(state.AUTONOMY)}")
@@ -70,6 +80,7 @@ def write_project(root: Path, autonomy: str, profiles: list[str] | None, python:
     if not glossary.exists():
         shutil.copyfile(adapter.adapters_dir().parent / "templates" / "glossary.md", glossary)
         created.append(f"{cfg.BDD_DIR}/glossary.md")
+    created += [made for made in (add_standards(root),) if made]
     return created
 
 
@@ -118,6 +129,8 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--autonomy", default="guided", choices=state.AUTONOMY, help="default autonomy level (default: guided)")
     ap.add_argument("--python", help="the interpreter the project's tests run with (default: .venv or venv in the project)")
     ap.add_argument("--smoke", action="store_true", help="run the adapter's sample feature and clean up")
+    ap.add_argument("--standards", action="store_true",
+                    help="add .bdd/standards.md (the engineering standards template) to a project that has none")
     args = ap.parse_args(argv)
 
     def action() -> int:
@@ -125,6 +138,13 @@ def run(argv: list[str]) -> int:
         if args.detect:
             found = detect(here)
             print("\n".join(f"{name}: {why}" for name, why in found) or "no adapter matched this repository")
+            return 0
+        if args.standards:
+            root = cfg.find_root(here)
+            if root is None:
+                raise UsageError("not inside a greenlight project; run bdd init first")
+            made = add_standards(root)
+            print(f"  + {made}" if made else f"{cfg.BDD_DIR}/standards.md already exists; nothing changed")
             return 0
         if args.smoke:
             root = cfg.find_root(here)

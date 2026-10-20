@@ -19,6 +19,9 @@ Arguments: `$ARGUMENTS`
   If the arguments name a `FEAT-n`, continue that feature from its current phase (step 3). Otherwise it is a new
   request.
 - `--phase PHASE FEAT-n` runs a single phase (for debugging); `--quick` uses `phases/quick.md`.
+- Look at `.bdd/standards.md`: if it is missing or still says `Status: DRAFT`,
+  tell the person once that the language, style and deprecation rules are not stated (`bdd init --standards` adds the
+  template; only they can edit and approve it) and go on; the agents then follow the code base's own conventions.
 
 ## 1. Settle the autonomy level (once, before discover)
 
@@ -60,8 +63,8 @@ this one needs. Tell it to read the playbook first.
 | refine | step-engineer | `bdd lint` clean | `bdd gate FEAT-n refine --result pass` |
 | bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you | write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
-| implement | implementer, one task at a time | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status` | `bdd gate FEAT-n implement --result pass` |
-| verify | spec-auditor | the report has evidence on every line; if `.bdd/config.toml` has `[adapters.mutation]`, you ran `bdd mutate FEAT-n` before starting the auditor and told it the result | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
+| implement | implementer, one task at a time | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status`; if `.bdd/config.toml` has `[adapters.quality.NAME]` tables, `bdd check FEAT-n` after the last change (a failed check goes back to the implementer with its output) | `bdd gate FEAT-n implement --result pass` |
+| verify | spec-auditor | the report has evidence on every line (the Q items of the checklist included); if `.bdd/config.toml` has `[adapters.mutation]`, you ran `bdd mutate FEAT-n` before starting the auditor and told it the result | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
 
 Rules for the loop:
 

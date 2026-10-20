@@ -64,6 +64,7 @@ MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, inte
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
 INSTALLED_PACKAGES = "node_modules"             # installed packages of a node project, wherever the folder is
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
+PERSON_FILES = (MANAGED_CONFIG, "standards.md")   # in .bdd/, edited by the person only
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
@@ -156,7 +157,7 @@ class Project:
         inside = key[len(data_root) + 1:]
         name = inside.rsplit("/", 1)[-1]
         return (inside.startswith(tuple(d + "/" for d in MANAGED_DIRS)) or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
-                or inside == MANAGED_CONFIG)
+                or inside in PERSON_FILES)
 
     def category(self, path: Path) -> str:
         key = path_key(path)
@@ -183,7 +184,7 @@ def locked_message(project: Project, path: Path, lock: Locked) -> str:
 
 def managed_message(project: Project, path: Path) -> str:
     return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals, "
-            "project configuration). Use the bdd commands instead of editing it; the person can edit it "
+            "project configuration, engineering standards). Use the bdd commands instead of editing it; the person can edit it "
             "themselves outside the agent.")
 
 
@@ -335,7 +336,61 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     return None
 
 
-def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | None] | None:
+_TOKEN_BREAKS = re.compile(r"[\s;&|()`<>=\"']+")          # a path starts after whitespace, a redirection, an assignment, a quote
+_WILDCARDS_ONLY = re.compile(r"[*?\[\]]*")
+
+
+def glob_matches(name: str, segment: str) -> bool:
+    """Would the shell glob ``segment`` match the file name ``name`` (which starts with a dot)? A glob that starts with a
+    dot matches it as it is; one that does not matches it only when the shell's dotglob option is on, so it is tried
+    against the name without its dot, but only if it has a literal character (`b*`, `ru?s`): a bare `*` is everywhere.
+    `[^x]` means `[!x]` to a shell."""
+    pattern = segment.casefold().replace("[^", "[!")
+    if pattern.startswith("."):
+        return fnmatch.fnmatchcase(name, pattern)
+    return not _WILDCARDS_ONLY.fullmatch(pattern) and fnmatch.fnmatchcase(name.lstrip("."), pattern)
+
+
+def segment_glob_reaches(text: str, name: str) -> bool:
+    """Could a glob in the command expand to the folder or file ``name`` (a name that starts with a dot)?
+
+    Decided by matching the glob against the real name: `.b*`, `.?dd`, `.[^a]dd` and `.*` reach `.bdd`; `.gitignore*` and
+    `src/*` do not."""
+    for token in _TOKEN_BREAKS.split(text):
+        if any(_GLOB.search(segment) and glob_matches(name, segment) for segment in token.split("/")):
+            return True
+    return False
+
+
+def names_segment(text: str, name: str) -> bool:
+    """Does ``name`` appear in the command as a whole path segment, spelled out or reached by a glob?"""
+    return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None or segment_glob_reaches(text, name)
+
+
+STANDARDS_NAME = "standards.md"
+
+
+def clearly_elsewhere(before: str) -> bool:
+    """Is the file name that follows ``before`` written with a folder in front of it that is not .bdd and cannot lead to it
+    (`docs/standards.md`, `src/*/standards.md`)? A bare name, `./name` or `../name` could be anywhere, `.bdd` included."""
+    folder = re.search(r"[^\s;&|()`<>=\"']*/$", before)
+    if folder is None:
+        return False
+    segments = [part for part in folder.group(0).split("/") if part not in ("", ".", "..")]
+    return bool(segments) and not names_segment(folder.group(0), cfg.BDD_DIR)
+
+
+def cwd_inside(project: Project, cwd: Path | None, folder: str = "") -> bool:
+    """Is the working directory of the call at or below ``.bdd`` (or ``.bdd/<folder>``)? A command that starts there
+    can name a file in it by its bare name."""
+    if cwd is None:
+        return False
+    base = path_key(project.root / cfg.BDD_DIR / folder) if folder else path_key(project.root / cfg.BDD_DIR)
+    key = path_key(cwd)
+    return key == base or key.startswith(base + "/")
+
+
+def mentioned_protected(project: Project, command: str, cwd: Path | None = None) -> tuple[Path, Locked | None] | None:
     """A locked or managed file that the command names, if there is one.
 
     Matches on the file name anywhere in the command text, whatever the quoting or slash style
@@ -343,19 +398,24 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
     command that ``cd``s first or builds the path in a script is still recognised. A false alarm
     only produces a clear refusal; a miss would defeat the point."""
     by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
-    names = sorted(set(by_name) | MANAGED_NAMES, key=len, reverse=True)
+    names = sorted(set(by_name) | MANAGED_NAMES | {STANDARDS_NAME}, key=len, reverse=True)
     pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
     for reading in shell_readings(command):
         text = reading.casefold()
-        match = pattern.search(text)
-        if match:
+        for match in pattern.finditer(text):
             name = match.group(0)
+            if name == STANDARDS_NAME and clearly_elsewhere(text[:match.start()]):
+                continue
             lock = by_name.get(name)
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
-        if ".bdd/config.toml" in text:
-            return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
+        # `cd .bdd && echo x > config.toml`, a call that already runs inside .bdd, and `.b*/config.toml` all name a person
+        # file by its bare name or through a glob
+        in_bdd = names_segment(text, cfg.BDD_DIR) or cwd_inside(project, cwd)
+        for person_file in PERSON_FILES:
+            if f".bdd/{person_file}" in text or (in_bdd and re.search(rf"(?<![\w.-]){re.escape(person_file)}(?![\w-])", text)):
+                return project.root / cfg.BDD_DIR / person_file, None
         for managed in MANAGED_DIRS:
-            if f"/{managed}/" in text:
+            if names_segment(text, managed) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
     return None
 
@@ -468,7 +528,7 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
-def check_bash(project: Project, command: str, agent: str | None = None) -> str | None:
+def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
     """Best effort: block a command that runs an approval or a nested Claude session, or that both
     names a protected file and looks like it writes."""
     injection = check_injection({"command": command})
@@ -488,7 +548,7 @@ def check_bash(project: Project, command: str, agent: str | None = None) -> str 
     if command_touches_enforcement(scrubbed):
         return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
                                    "(Claude Code hook settings or the plugin itself)")
-    hit = mentioned_protected(project, scrubbed)
+    hit = mentioned_protected(project, scrubbed, cwd)
     if hit is None:
         return None
     target, lock = hit
@@ -515,7 +575,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
     if tool == "Bash" and tool_input.get("command"):
-        return check_bash(project, tool_input["command"], agent_name(payload))
+        return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None
 
 

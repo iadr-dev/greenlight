@@ -39,6 +39,13 @@ It runs inside the test process, so it could in principle detect that tests are 
 that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to
 leave surviving mutants. See [adapters](adapters.md).
 
+**Does greenlight enforce a language standard, a style, or "the latest version, nothing deprecated"?**
+It enforces what the project declares. `.bdd/standards.md` (written and approved by you) states the language and
+toolchain version, style, quality rules and deprecation policy; `[adapters.quality.NAME]` tables name your own formatter,
+linter, type checker and deprecation check, which `bdd check` runs and the gates require. A new project should start on
+the current stable release; an existing one keeps its version until you decide to upgrade, and no agent upgrades or adds a
+toolchain or dependency on its own. See [concepts](concepts.md) and the language cards under `cards/practices`.
+
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.

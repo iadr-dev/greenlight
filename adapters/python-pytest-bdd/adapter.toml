@@ -43,6 +43,9 @@ expected_fail = [
   'status (404|405|501)',
 ]
 
+# Quality checks are opt-in and are not copied into .bdd/config.toml: see "Quality checks" in guide.md for the
+# [adapters.quality.NAME] tables (ruff format, ruff check, mypy) to add to your own configuration.
+
 [scan]                                        # used by `bdd scan`
 step_start = '^\s*@(?P<kind>given|when|then)\b'
 assert_patterns = ['\bassert', 'pytest\.raises']

@@ -36,7 +36,8 @@ SCHEMA = 1
 BASELINE_WHAT = "integrity baseline"
 RESTORED_BY_ACCEPT = (BASELINE_WHAT, "baseline backup")      # accepting writes both copies afresh
 ACCEPTED_KEPT = 50
-PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml")
+PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml",
+                 f"{cfg.BDD_DIR}/standards.md")
 PLUGIN_FILES = ("hooks/hooks.json", ".claude-plugin/plugin.json", "tools/bdd/bdd", "tools/bdd/main.py")
 PLUGIN_TREES = ("tools/bdd/bddlib",)
 SKIPPED = {"__pycache__", "node_modules", ".git"}

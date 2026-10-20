@@ -97,6 +97,27 @@ python -m pytest -q --bdd-shuffle-seed 42              # random order, repeatabl
 
 `bdd run FEAT-007` does all of this and records the result; always use it for gates.
 
+## Quality checks (opt-in)
+
+greenlight forces no formatter, linter or type checker on a project. If yours uses `ruff` and `mypy`, say so in
+`.bdd/config.toml` (your file; the agents cannot edit it) and `bdd check FEAT-n` runs them with the project's own
+interpreter; once the tables exist, the implement and verify gates need a current, passing result.
+
+```toml
+[adapters.quality.format]
+command = '{project_python} -m ruff format --check {root}'
+
+[adapters.quality.lint]
+command = '{project_python} -m ruff check {root}'
+
+[adapters.quality.typecheck]
+command = '{project_python} -m mypy {root}'
+```
+
+Nothing here is a runtime dependency of greenlight or of the adapter; install the tools in the project's environment. To
+make deprecations fail, add `filterwarnings = ["error::DeprecationWarning"]` to the bound `tests/pytest.ini`. The
+`language-python` card lists the details.
+
 ## Known pitfalls
 
 - pytest-bdd turns every tag into a marker; unknown markers only warn (the run command silences it). Do not

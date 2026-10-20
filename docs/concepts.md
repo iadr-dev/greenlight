@@ -43,6 +43,25 @@ mutation tool (`[adapters.mutation]`, see [adapters](adapters.md)); `bdd mutate 
 files the feature changed and the verify gate requires a current result at or above the threshold. It is the check that
 answers code written to satisfy the tests instead of the rules. Off by default.
 
+## Engineering standards and quality checks
+
+Languages, frameworks and conventions differ too much for greenlight to carry rules of its own, so it leaves them to the
+project:
+
+- `.bdd/standards.md` (made by `bdd init`, or `bdd init --standards` in an existing project) states the language and
+  toolchain version, style, quality rules and deprecation policy. Only you can edit it and mark it `Status: APPROVED`;
+  agents cannot write it, and `bdd doctor` warns while it is missing or a draft. The implementer, the step-engineer and the
+  auditor read it. The declared toolchain is the standard: a new project starts on the current stable release, an existing
+  one is never upgraded silently, and an agent never upgrades or adds a toolchain, framework or dependency on its own.
+- `[adapters.quality.NAME]` tables in `.bdd/config.toml` name the project's own tools (formatter, linter, type checker,
+  a deprecation check). `bdd check FEAT-n` runs them without a shell, records the result, and the implement and verify
+  gates require a current, passing result. Without the tables nothing changes. Deprecation warnings should be errors where
+  the toolchain supports it; the practice card of each language names the switch.
+- Practice cards for Python, TypeScript (with Expo and Next.js), Kotlin, Swift, Go and Rust list the toolchain commands,
+  the deprecation switches and the usual pitfalls, and tell the implementer to read the library's current documentation
+  rather than recall an API.
+- The auditor's checklist (section Q) judges the diff against the standards, the recorded result and the documentation.
+
 ## Locks
 
 Approving the examples locks the feature files; passing the bind gate locks the steps, drivers and the adapter's

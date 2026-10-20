@@ -91,6 +91,24 @@ class MutationRules:
 
 
 @dataclass(frozen=True)
+class QualityCheck:
+    """One named check of the project's own tools (``[adapters.quality.NAME]``), such as ``lint`` or ``typecheck``.
+
+    ``command`` is split into words before ``{root}``, ``{python}`` and ``{project_python}`` are filled in, so a value
+    can never add words to it. The exit status is the verdict: 0 passes."""
+    name: str
+    command: str
+    timeout: int = 600
+
+
+@dataclass(frozen=True)
+class QualityRules:
+    """The optional quality checks of an adapter, in the order they are written."""
+    adapter: str
+    checks: tuple[QualityCheck, ...]
+
+
+@dataclass(frozen=True)
 class Config:
     root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
@@ -109,6 +127,7 @@ class Config:
     python: str = ""                         # the interpreter the project's tests run with (blank: .venv, venv, or bdd's own)
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
     mutation: MutationRules | None = None    # the first adapter that has an [adapters.mutation] table
+    quality: QualityRules | None = None      # the first adapter that has an [adapters.quality] table
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -195,6 +214,29 @@ def _mutation_rules(adapter: dict, path: Path) -> MutationRules | None:
     if not isinstance(extensions, list) or not all(isinstance(e, str) and e.startswith(".") for e in extensions):
         raise ConfigError(f"{path}: [adapters.mutation] extensions must be a list of suffixes such as \".py\"")
     return MutationRules(str(adapter.get("name", "")), command, float(threshold), timeout, tuple(extensions))
+
+
+_CHECK_NAME = re.compile(r"[a-z][a-z0-9_-]{0,30}")
+
+
+def _quality_rules(adapter: dict, path: Path) -> QualityRules | None:
+    table = adapter.get("quality")
+    if table is None:
+        return None
+    if not isinstance(table, dict) or not table:
+        raise ConfigError(f"{path}: [adapters.quality] needs at least one named check, such as [adapters.quality.lint]")
+    checks = []
+    for name, body in table.items():
+        if not _CHECK_NAME.fullmatch(name) or not isinstance(body, dict):
+            raise ConfigError(f"{path}: [adapters.quality.{name}]: a check is a table named in lower case, such as lint")
+        command = body.get("command")
+        if not isinstance(command, str) or not command.strip():
+            raise ConfigError(f"{path}: [adapters.quality.{name}] needs command, the command words as one string")
+        timeout = body.get("timeout", 600)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+            raise ConfigError(f"{path}: [adapters.quality.{name}] timeout must be a whole number of seconds")
+        checks.append(QualityCheck(name, command, timeout))
+    return QualityRules(str(adapter.get("name", "")), tuple(checks))
 
 
 def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
@@ -295,4 +337,5 @@ def load(root: Path | str | None) -> Config:
         python=_python(data, path),
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
         mutation=next((r for r in (_mutation_rules(a, path) for a in data.get("adapters", [])) if r), None),
+        quality=next((r for r in (_quality_rules(a, path) for a in data.get("adapters", [])) if r), None),
     )

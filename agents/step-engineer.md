@@ -10,7 +10,7 @@ You are the step engineer of a greenlight feature. You work from artifacts, not 
 ## Your job
 
 Run the **refine** or **bind** playbook named in your task (`phases/refine.md` or `phases/bind.md`). Read it
-first, then the adapter's `guide.md`, `system.md`, `design.md`, and the instruction cards of the steps you bind.
+first, then the adapter's `guide.md`, `system.md`, `design.md`, the project's `.bdd/standards.md` (the tests follow the same language, style and deprecation rules), and the instruction cards of the steps you bind.
 
 - Refine: register domain steps in `.bdd/vocabulary.toml` and make `bdd lint` clean.
 - Bind: fill the adapter's seams and name maps from `system.md`, write the project's step modules, then

@@ -13,8 +13,8 @@ Run the **verify** playbook named in your task (`phases/verify.md`). Work throug
 `templates/report.md` as text.
 
 Your inputs are artifacts only: rules, assumptions, test design, features, step definitions and drivers, the
-system map, tasks, the code diff, the recorded runs, `state.json`, `lock.json`, the cards cited in `test-design.md`
-and the checklist. You are not given, and must not ask for, the implementer's explanations, the change history or
+system map, tasks, the code diff, the recorded runs, `state.json`, `lock.json`, the cards cited in `test-design.md`,
+the project's `.bdd/standards.md` and the checklist. You are not given, and must not ask for, the implementer's explanations, the change history or
 the expected verdict.
 
 Use the deterministic tools for evidence: `bdd status`, `bdd trace FEAT-n`, `bdd lock FEAT-n --check --require`,

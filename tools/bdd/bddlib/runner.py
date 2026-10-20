@@ -10,7 +10,6 @@ import os
 import random
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import time
@@ -127,15 +126,65 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
     return words
 
 
+BATCH_SUFFIXES = (".bat", ".cmd")
+CMD_METACHARACTERS = '"&|<>^%!\r\n'
+
+
+def executable_suffixes(environ: dict | None = None) -> tuple[str, ...]:
+    """The suffixes Windows runs without being told (PATHEXT); empty on other systems, where the mode bit decides."""
+    if os.name != "nt":
+        return ()
+    value = (environ if environ is not None else os.environ).get("PATHEXT") or ".COM;.EXE;.BAT;.CMD"
+    return tuple(part.lower() for part in value.split(";") if part.startswith("."))
+
+
+def resolve_program(word: str, root: Path, search_path: str, suffixes: tuple[str, ...]) -> str | None:
+    """The file that ``word`` names, or None.
+
+    A word with a path separator is an explicit path, relative to the project (``./gradlew``). A bare name such as
+    ``ruff`` is looked up only in the absolute folders of ``search_path`` (PATH): never in the project or the working
+    directory, which Windows would otherwise search first, so a file planted in the project cannot stand in for a tool."""
+    path = Path(word)
+    explicit = any(separator in word for separator in ("/", "\\"))
+    folders = ([path.parent if path.is_absolute() else root / path.parent] if explicit else
+               [Path(entry) for entry in search_path.split(os.pathsep) if entry and Path(entry).is_absolute()])
+    names = [path.name] if not suffixes or path.suffix.lower() in suffixes else [path.name + suffix for suffix in suffixes]
+    for folder in folders:
+        for name in names:
+            candidate = folder / name
+            if candidate.is_file() and (bool(suffixes) or os.access(candidate, os.X_OK)):
+                return str(candidate)
+    return None
+
+
+def batch_problem(program: str, arguments: list[str]) -> str | None:
+    """Why a batch file may not be started with these arguments, or None. Windows hands a .bat or .cmd file to cmd.exe,
+    which reads quotes, & | < > ^ % ! and line breaks as its own syntax, so an argument holding one could add a command."""
+    if not program.lower().endswith(BATCH_SUFFIXES):
+        return None
+    for argument in arguments:
+        if any(char in argument for char in CMD_METACHARACTERS):
+            return (f"{Path(program).name} is a batch file and an argument contains a character that cmd.exe would read as "
+                    f"syntax ({argument!r}); start the tool through its real executable, or name it with a path that is not a batch file")
+    return None
+
+
 def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] = ()) -> tuple[int, str]:
     """(exit status, combined output). A command that cannot start or runs too long is a usage problem.
     Variables whose names start with one of ``scrub`` (such as PYTEST_ADDOPTS) are not passed on: they can change
     which tests run."""
-    if not shutil.which(words[0]):
+    program = resolve_program(words[0], root, os.environ.get("PATH", ""), executable_suffixes())
+    if not program:
         raise UsageError(f"cannot run {words[0]!r}: it is not on PATH; install the adapter's requirements first")
+    problem = batch_problem(program, words[1:])
+    if problem:
+        raise UsageError(problem)
     try:
         env = runner_environment(scrub)
-        done = subprocess.run(words, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        if os.name == "nt":
+            env["NoDefaultCurrentDirectoryInExePath"] = "1"          # nothing the tool starts looks in the project first
+        # the program as found, so a script shim such as npm.cmd or gradlew.bat starts on Windows without a shell
+        done = subprocess.run([program, *words[1:]], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
         raise UsageError(f"the test run took longer than {timeout} s and was stopped") from exc

@@ -60,6 +60,29 @@ with the plugin's `tools/bdd/bdd` wrapper (Python 3.11+, nothing to install):
 - run: tools/bdd/bdd classify FEAT-001 --expect green
 ```
 
+## Quality checks (optional)
+
+The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does
+not choose them. One table per check, in the order they should run:
+
+```toml
+[adapters.quality.format]
+command = '{project_python} -m ruff format --check {root}'
+
+[adapters.quality.lint]
+command = '{project_python} -m ruff check {root}'
+timeout = 300
+```
+
+`command` is split into words before `{root}`, `{python}` and `{project_python}` are filled in, and is started without a
+shell in the project, with the same environment rules as `bdd run`. The exit status is the verdict (0 passes); a tool that
+is not installed, or that runs too long, is a failed check with the reason. `bdd check FEAT-n` runs them and records the
+result in `.bdd/.runs/FEAT-n/quality.json`, together with the source, tests, interpreter and `.bdd/standards.md` it
+depends on. Once a table exists, the implement and verify gates need a current, passing result (a feature of kind `adopt`
+is not held to it); without it nothing changes. The guides of the Python and the Playwright adapters show suggested
+tables, and the language cards under `cards/practices` list the commands for Kotlin, Swift, Go, Rust, TypeScript, Expo
+and Next.js.
+
 ## Mutation check (optional)
 
 An adapter, or the project, can add an `[adapters.mutation]` table. It is off unless the table exists.

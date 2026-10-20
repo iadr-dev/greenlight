@@ -129,6 +129,24 @@ npm run typecheck --prefix tests                                        # type-c
 
 `bdd run FEAT-007` does all of this and records the result; always use it for gates.
 
+## Quality checks (opt-in)
+
+greenlight forces no formatter, linter or type checker on a project. If yours uses `tsc` and `eslint`, say so in
+`.bdd/config.toml` (your file; the agents cannot edit it) and `bdd check FEAT-n` runs them; once the tables exist, the
+implement and verify gates need a current, passing result.
+
+```toml
+[adapters.quality.typecheck]
+command = 'npx tsc --noEmit'
+
+[adapters.quality.lint]
+command = 'npx eslint .'
+```
+
+Agents cannot run `npx` or install packages: the orchestrator runs `bdd check`. Set the `@typescript-eslint/no-deprecated`
+rule to `error` in the ESLint configuration so that use of a deprecated API fails the lint. The `language-typescript`
+card (and `language-expo` or `language-nextjs`) lists the details.
+
 ## Known pitfalls
 
 - A tag selects whole: `FEAT-7` does not run `FEAT-70`.

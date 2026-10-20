@@ -39,6 +39,16 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | S7 | A design view exists, `bdd design` is clean, and the code follows it or the difference is explained | no | `bdd design FEAT-n`, then compare `design.md` with the diff |
 | S8 | Adoption features only (`bdd state show` says `kind: adopt`): every scenario is `@existing`, `bdd adopt FEAT-n --check` is clean, and no rule describes behaviour the code does not have | yes | `bdd adopt FEAT-n --check`, then read each rule against the code it cites |
 
+## Q - Code quality and standards
+
+| ID | Check | Blocking | How |
+|---|---|---|---|
+| Q1 | `.bdd/standards.md` exists and is approved (`Status: APPROVED`); a missing or draft file is reported, and the code is then judged against the code base's own conventions | no | read `.bdd/standards.md`, `bdd doctor` |
+| Q2 | The changed production code follows the declared language and toolchain version, style and quality rules; no toolchain, framework or dependency was upgraded or added without the person | yes when the standards are approved, otherwise no | read the diff against `.bdd/standards.md`, the lock files and manifests in the diff |
+| Q3 | When `[adapters.quality]` is configured, the recorded result is current and every check passed | yes when configured, otherwise not applicable | `bdd check FEAT-n --check` |
+| Q4 | The diff uses no deprecated or removed API: no deprecation warning is silenced or ignored, and the calls into libraries match their current documentation | yes | the deprecation check where configured; otherwise read the diff against the current documentation (project docs, or a documentation tool such as context7) |
+| Q5 | Nothing was suppressed to pass a check: no blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `// nolint` or `@ts-ignore` added without a stated reason | yes | search the diff for suppression markers |
+
 ## L - Locks, gates and approvals
 
 | ID | Check | Blocking | How |

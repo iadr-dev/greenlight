@@ -181,6 +181,95 @@
       "phase": "discover"
     },
     {
+      "apply_when": "the project is an Expo or React Native app and production code is written or judged",
+      "id": "language-expo",
+      "kind": "practice",
+      "output": "code that matches the Expo SDK the project declares, with compatible native module versions and no deprecated API of that SDK",
+      "pairs_with": [
+        "language-typescript"
+      ],
+      "path": "practices/language-expo.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a Go project",
+      "id": "language-go",
+      "kind": "practice",
+      "output": "code that follows the Go version in go.mod, is gofmt clean, passes vet and staticcheck, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-go.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a Kotlin project, on the JVM or Android",
+      "id": "language-kotlin",
+      "kind": "practice",
+      "output": "code that follows the project's declared Kotlin and JVM or Android versions, builds without warnings, passes the formatter and static analysis, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-kotlin.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "the project is a Next.js app and production code is written or judged",
+      "id": "language-nextjs",
+      "kind": "practice",
+      "output": "code that matches the Next.js version and router the project declares and uses no API that version deprecates",
+      "pairs_with": [
+        "language-typescript"
+      ],
+      "path": "practices/language-nextjs.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a Python project",
+      "id": "language-python",
+      "kind": "practice",
+      "output": "code that follows the project's declared Python version and standards, passes format lint and type checks, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-python.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a Rust project",
+      "id": "language-rust",
+      "kind": "practice",
+      "output": "code that follows the edition and rust-version in Cargo.toml, is rustfmt clean, passes clippy with warnings denied, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-rust.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a Swift project, for Apple platforms or on the server",
+      "id": "language-swift",
+      "kind": "practice",
+      "output": "code that follows the project's declared Swift language mode and deployment targets, builds with warnings as errors, passes the linter, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-swift.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging production code in a TypeScript or JavaScript project, including Node, Expo and Next.js",
+      "id": "language-typescript",
+      "kind": "practice",
+      "output": "code that follows the declared TypeScript and Node versions, passes type check lint and format checks, and uses no deprecated API",
+      "pairs_with": [
+        "language-expo",
+        "language-nextjs"
+      ],
+      "path": "practices/language-typescript.md",
+      "phase": "implement"
+    },
+    {
       "apply_when": "verifying that tests written or helped by an AI would really catch a defect, once the implementation is green",
       "id": "mutation-check",
       "kind": "practice",
