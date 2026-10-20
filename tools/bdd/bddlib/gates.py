@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, state, store, tripwire
+from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire
 from . import config as cfg
 from .errors import UsageError
 
@@ -79,6 +79,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     if gate == "verify":
         if data.get("kind") != "adopt":             # an adopted feature has no red to measure a change from
             problems += mutation.problems(root, data["feature"])
+        problems += stability.problems(root, data["feature"])
         if data["gates"].get("implement", {}).get("result") != "pass":
             problems.append("the implement gate has not passed")
     return problems

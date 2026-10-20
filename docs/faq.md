@@ -34,6 +34,14 @@ Today: Python with pytest and pytest-bdd (services, libraries, command-line tool
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.
 
+**Can CI check that the approvals are real?**
+Partly. `bdd approve FEAT-n --check` judges the committed record alone, with no session: the approved files must still
+match the hashes recorded at approval, the recorded origin must be one the project accepts (a person's typed prompt that was
+verified against the transcript, or an automatic or self-reported approval where the autonomy level and enforcement allow
+it), and every approval a later phase rests on must exist. It cannot re-read the session transcript, which stays on the
+machine where the person typed, and it cannot tell a hand-edited `state.json` from a genuine one, because the record is not
+signed; protect the branch (required reviews, no direct pushes) for that. See [CI](ci.md).
+
 **Can production code cheat the tests?**
 It runs inside the test process, so it could in principle detect that tests are running. The auditor reads the diff for
 that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to

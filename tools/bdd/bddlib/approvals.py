@@ -303,10 +303,30 @@ def grade_problems(root: Path, data: dict, gate: str, last: dict) -> list[str]:
     if origin in allowed:
         return []
     explanations = {
-        "pending": "is still waiting for its origin to be verified; run `bdd approve FEAT --verify` in a moment",
+        "pending": "is still waiting for its origin to be verified; run `bdd approve FEAT --verify` in a moment "
+                   "(on the machine where it was typed: the check needs the session transcript)",
         "headless": "was typed into a headless `claude -p` session, which is not accepted unless "
                     "`[approvals] allow_headless = true` is set in .bdd/config.toml",
         "invalid": "was not typed by a person (" + str(last.get("evidence", "unknown origin")) + ")",
         "unverifiable": "could not be verified (" + str(last.get("evidence", "no evidence")) + "); approve it again",
     }
     return [f"the {gate} approval " + explanations.get(origin, f"has origin {origin}")]
+
+
+# -- the check that needs no session ---------------------------------------------------------
+NEEDED_FROM = {"rules": "test-design", "examples": "system-map"}      # the first phase that rests on the approval
+
+
+def required_gates(data: dict) -> list[str]:
+    """The human gates a feature at this phase must already have passed: the phases after them rest on them."""
+    phase = state.PHASES.index(data["phase"])
+    return [g for g in GATES if phase >= state.PHASES.index(NEEDED_FROM[g])]
+
+
+def recorded_problems(root: Path, data: dict) -> dict[str, list[str]]:
+    """For every human gate that is required at this phase or has an approval record: why it is not validly approved,
+    judged from the committed record alone (no transcript, no hooks): the recorded origin, the recorded kind of
+    approval against the project's rules, and the hashes of the approved files against the files now. A gate that is
+    fine maps to an empty list."""
+    wanted = required_gates(data)
+    return {g: effective_problems(root, data, g) for g in GATES if g in wanted or _last(data, g) is not None}

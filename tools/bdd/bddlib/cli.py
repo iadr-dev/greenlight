@@ -29,6 +29,7 @@ COMMANDS = {
     "adopt": ("adopt", "run"),
     "check": ("quality", "run"),
     "mutate": ("mutation", "run"),
+    "stability": ("stability", "run"),
     "migrate": ("migrate", "run"),
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),
