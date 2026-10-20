@@ -24,6 +24,7 @@ jobs:
           bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
           "$bdd" lint tests/features
           for dir in .bdd/features/FEAT-*; do
+            [ -d "$dir" ] || continue
             id=$(basename "$dir" | grep -o '^FEAT-[0-9]*')
             "$bdd" lock "$id" --check --require
             "$bdd" run "$id"
