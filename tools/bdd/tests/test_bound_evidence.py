@@ -130,7 +130,13 @@ class AgentCommandsTest(ProjectCase):
             '"npm" install', 'n""pm install', "'npm' 'i'", "$'np\\x6d' install",
             "node node_modules/npm/bin/npm-cli.js install", "node /usr/lib/node_modules/pnpm/bin/pnpm.cjs add x",
             "node .yarn/releases/yarn-3.6.1.cjs install", "node tools/yarn.js add x", "node tools/npx-cli.js thing",
-            "npm audit fix", "npm audit --fix", "npm audit --fix --force", "npm audit signatures", "npm audit --json fix")
+            "npm audit fix", "npm audit --fix", "npm audit --fix --force", "npm audit signatures", "npm audit --json fix",
+            "node node_modules/npm/bin/npm-cli install", "node node_modules/npm/bin/npx-cli x", "node node_modules/npm/lib/cli.js i",
+            "node --no-warnings node_modules/npm/bin/npm-cli.js install", "node --no-warnings node_modules/npm/lib/cli.js install",
+            "node -r ./hook.js --max-old-space-size=512 node_modules/pnpm/dist/pnpm.mjs add x", "bun --bun node_modules/yarn/lib/cli.js add x",
+            "node ./node_modules/pnpm/bin/pnpm add x", "bun node_modules/yarn/bin/yarn.js add x", "node node_modules/npm/bin/npm-cli/ install",
+            "printf 'npm install' | bash", "ls ./tools/npm; bash run.sh", "ls ./tools/npm | xargs echo", "cat tools/yarn.js > out.txt",
+            "cat tools/yarn.js; node run.js")
         for command in refused:
             with self.subTest(command=command):
                 self.assertIn("may not install packages", self.bash(command, "step-engineer"))
@@ -144,7 +150,8 @@ class AgentCommandsTest(ProjectCase):
                    "npm audit --omit=dev", "npm audit --audit-level=high", "npm --version", "npm -v", "yarn run build",
                    "yarn test", "yarn why left-pad", "pnpm test", "pnpm run build", "bun run build", "bun test",
                    "node tests/run.mjs --tag FEAT-1 --out r.xml", "ls node_modules/npm", "ls ./tools/npm", "cd node_modules/npm",
-                   "cat tools/yarn.js", "cat package.json", "git status")
+                   "cat tools/yarn.js", "cat package.json", "git status", "git add yarn-error.log", "cat yarn-error.log", "echo hello",
+                   "ls node_modules/npm/bin", "cd node_modules/yarn && ls", "node tests/junit-reporter.mjs")
         for command in allowed:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command, "implementer"))
@@ -170,6 +177,22 @@ class AgentCommandsTest(ProjectCase):
 
 
 class EnvironmentWatchTest(ProjectCase):
+    def test_the_installed_node_tooling_is_watched_by_its_entry_points_and_manifests(self):
+        self.config(tail='support = ["tests/package.json"]\n')
+        names = {"tests/package.json": "{}", "tests/node_modules/.package-lock.json": "{}",
+                 "tests/node_modules/@playwright/test/cli.js": "x", "tests/node_modules/@playwright/test/package.json": "{}",
+                 "tests/node_modules/playwright-bdd/dist/cli/index.js": "x", "tests/node_modules/playwright-bdd/dist/other.js": "x",
+                 "tests/node_modules/left-pad/index.js": "x"}
+        for rel, content in names.items():
+            self.write(rel, content)
+        watched = {p.relative_to(self.root).as_posix() for p in tripwire.node_environment_files(self.root)}
+        self.assertEqual(watched, {"tests/node_modules/.package-lock.json", "tests/node_modules/@playwright/test/cli.js",
+                                   "tests/node_modules/@playwright/test/package.json",
+                                   "tests/node_modules/playwright-bdd/dist/cli/index.js"})
+
+    def test_a_project_without_node_tooling_watches_nothing_of_it(self):
+        self.assertEqual(tripwire.node_environment_files(self.root), [])
+
     def test_the_interpreter_its_startup_files_and_the_test_runner_are_watched(self):
         scripts = "Scripts" if os.name == "nt" else "bin"
         site = self.root / ".venv" / ("Lib" if os.name == "nt" else "lib/python3.12") / "site-packages"

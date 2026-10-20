@@ -5,7 +5,9 @@ file or shell tool call this looks at the result instead:
 
 * the files that make greenlight enforce anything (Claude Code settings and hooks, the plugin's own
   files, ``.bdd/config.toml``) against a baseline of their hashes;
-* the locked specs and bound steps against their locks.
+* the locked specs and bound steps against their locks;
+* the project's own test environment: the Python interpreter and test packages, and the entry points and manifests of
+  the installed node test tooling.
 
 A difference is reported to the model at once and kept in ``.bdd/.integrity/violations.json``; the
 ``implement`` and ``verify`` gates refuse to pass while one is open. A violation closes when the file
@@ -75,11 +77,30 @@ def environment_files(root: Path) -> list[Path]:
     return [p for p in found if p.is_file()]
 
 
+# The programs a test run starts and the manifests that name their versions, relative to node_modules. Whole packages are
+# thousands of files, too many to hash on every tool call within the hook's time budget.
+NODE_ENTRY_FILES = (".package-lock.json", "@playwright/test/package.json", "@playwright/test/cli.js", "playwright/package.json",
+                    "playwright/lib/program.js", "playwright-core/package.json", "playwright-bdd/package.json",
+                    "playwright-bdd/dist/cli/index.js")
+
+
+def node_environment_files(root: Path) -> list[Path]:
+    """The installed node tooling next to a bound ``package.json``: npm's record of the installed tree, the entry points the
+    run starts and the manifests of the test packages. Only the entry points: the rest of the packages is guarded against
+    writes by agents and covered by the bound lockfile, not watched."""
+    found: list[Path] = []
+    for manifest in cfg.load(root).support_files:
+        modules = manifest.parent / "node_modules"
+        if manifest.name == "package.json" and modules.is_dir():
+            found += [modules / entry for entry in NODE_ENTRY_FILES]
+    return [p for p in found if p.is_file()]
+
+
 def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     """Every existing file whose change would weaken enforcement."""
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
     candidates += _files_under(root / ".claude" / "hooks")
-    candidates += environment_files(root)
+    candidates += environment_files(root) + node_environment_files(root)
     if plugin_root is not None:
         candidates += [plugin_root / rel for rel in PLUGIN_FILES]
         for tree in PLUGIN_TREES:
