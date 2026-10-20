@@ -27,6 +27,7 @@ COMMANDS = {
     "migrate": ("migrate", "run"),
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),
+    "adapter": ("adapter", "run"),
 }
 
 
