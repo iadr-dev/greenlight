@@ -2,6 +2,7 @@
 
     bdd status [--brief] [--json]       every feature in this project and what it is waiting for
     bdd trace FEAT-007 [--json]         rule -> example -> scenario -> task matrix and its gaps
+    bdd scan FEAT-007 [--json]          assertion-free then steps, fixed waits, stubs of undeclared dependencies
 
 ``status --brief`` is for the SessionStart hook: one line, nothing at all when there is nothing in
 progress, and never an error (a hook that fails would only get in the way).
@@ -13,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import approvals, enforcement, state, store, trace, tripwire
+from . import approvals, enforcement, scan, state, store, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -142,6 +143,28 @@ def run_trace(argv: list[str]) -> int:
         return 1 if report["gaps"] else 0
 
     return guarded("trace", action)
+
+
+def run_scan(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="bdd scan", description="Deterministic checks on step definitions and drivers.")
+    ap.add_argument("feature", help="feature id, e.g. FEAT-007")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_intermixed_args(argv)
+
+    def action() -> int:
+        root = project_root()
+        issues = scan.scan(root, store.find_feature_dir(root, args.feature))
+        if args.json:
+            print(json.dumps([vars(i) for i in issues], indent=2, ensure_ascii=False))
+        else:
+            print("\n".join(str(i) for i in issues) if issues else f"{args.feature}: no findings")
+        return 1 if issues else 0
+
+    try:
+        return guarded("scan", action)
+    except cfg.ConfigError as exc:
+        print(f"bdd scan: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

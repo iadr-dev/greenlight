@@ -1,6 +1,7 @@
 """Project configuration: ``.bdd/config.toml`` (human-edited, read with tomllib)."""
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,16 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class ScanRules:
+    """How ``bdd scan`` reads one adapter's step definitions (``[adapters.scan]`` in config.toml)."""
+    step_dirs: tuple[Path, ...]
+    step_start: str                          # a line that starts a step definition; named group ``kind`` = given|when|then
+    assert_patterns: tuple[str, ...] = ()    # evidence that a ``then`` body checks something
+    sleep_patterns: tuple[str, ...] = ()     # fixed waits
+    stub_patterns: tuple[str, ...] = ()      # a stub of a dependency; group 1 = what is stubbed
+
+
+@dataclass(frozen=True)
 class Config:
     root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
@@ -27,6 +38,7 @@ class Config:
     language: str = "auto"
     allow_headless_approvals: bool = False   # accept approvals typed into `claude -p` (CI-driven flows)
     enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
+    scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -40,6 +52,32 @@ def find_root(start: Path | str | None = None) -> Path | None:
         if (candidate / BDD_DIR).is_dir():
             return candidate
     return None
+
+
+def _patterns(table: dict, key: str, path: Path) -> tuple[str, ...]:
+    values = table.get(key, [])
+    if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+        raise ConfigError(f"{path}: [adapters.scan] {key} must be a list of regular expressions")
+    for value in values:
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise ConfigError(f"{path}: [adapters.scan] {key}: {value!r} is not a valid regular expression ({exc})") from exc
+    return tuple(values)
+
+
+def _scan_rules(root: Path, adapter: dict, path: Path) -> ScanRules | None:
+    table = adapter.get("scan")
+    if table is None:
+        return None
+    if not isinstance(table, dict) or not isinstance(table.get("step_start"), str):
+        raise ConfigError(f"{path}: [adapters.scan] needs step_start, a regular expression with a (?P<kind>...) group")
+    start = _patterns({"step_start": [table["step_start"]]}, "step_start", path)[0]
+    if "kind" not in re.compile(start).groupindex:
+        raise ConfigError(f"{path}: [adapters.scan] step_start needs a named group (?P<kind>given|when|then)")
+    dirs = tuple(root / adapter[key] for key in ("steps", "drivers") if key in adapter)
+    return ScanRules(dirs, start, _patterns(table, "assert_patterns", path), _patterns(table, "sleep_patterns", path),
+                     _patterns(table, "stub_patterns", path))
 
 
 def load(root: Path | str | None) -> Config:
@@ -74,4 +112,5 @@ def load(root: Path | str | None) -> Config:
         language=data.get("language", "auto"),
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
         enforcement=enforcement,
+        scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
     )
