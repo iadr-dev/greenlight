@@ -134,6 +134,28 @@ and says whether it is current.
 With the table present, the verify gate refuses until the recorded result is current (same production source and tests)
 and passes the threshold. Without it nothing changes. See the `mutation-check` card for how to read survivors.
 
+## Several adapters in one repository
+
+A repository with a backend and a web front end has two adapters. Give each its own folder with `--into`:
+
+```sh
+bdd adapter apply python-pytest-bdd --into api
+bdd adapter apply ts-playwright-bdd --into web
+```
+
+The adapter's files are copied under that folder, and its table in `.bdd/config.toml` gets `root = "web"`: its paths
+(features, steps, drivers, support files) are relative to that folder, and its run command runs in it. In a run command
+`{base}` is that folder (`{root}` is still the project). Nothing changes for a project with one adapter at its top level.
+
+- `bdd run FEAT-n` runs the feature with **every** adapter that has scenarios of it and records one run with all their
+  cases; `--adapter NAME` runs just one. An adapter with no scenario of the feature is skipped, and `--isolated` gives each
+  adapter only the scenarios in its own feature folder.
+- `bdd classify`, `bdd trace`, `bdd scan` and the gates treat the scenarios of both folders as one feature: a rule can
+  have an API example and a UI example, the red proof covers both, and so does the green.
+- Tag the feature files of both folders with the same `@FEAT-n`, and keep rule and example numbers unique across them.
+- The scenario names must be unique across the adapters of one feature, because a test result is matched to its scenario
+  by name.
+
 ## Writing an adapter
 
 An adapter is a folder with `adapter.toml`, `guide.md` and `templates/`. `adapter.toml` declares its name, profiles,

@@ -1,0 +1,1 @@
+Set a minimum order. Checkout should refuse an order whose total is under $5.00 and tell the customer so on the checkout page, with the minimum in the message. The cart and the orders page should work as before, and an order of $5.00 or more should still go through.

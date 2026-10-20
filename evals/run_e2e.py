@@ -3,8 +3,9 @@
 
     python evals/run_e2e.py [--request discounts] [--model haiku] [--autonomy autopilot] [--keep]
 
-It copies the reference app (evals/apps/shop-api) into a temporary project with its own virtual environment,
-sets greenlight up (`bdd init --adapter python-pytest-bdd`, proves the sample green), then asks Claude Code,
+It copies the reference app the request belongs to (evals/apps/shop-api for a Python service, evals/apps/shop-web for a
+web front end) into a temporary project, with its own virtual environment or its installed packages and browser, sets
+greenlight up (`bdd init` with the app's adapter, proves the sample green), then asks Claude Code,
 headless, to run `/greenlight:feature "<request>"`. Afterwards it reads the project's own records, with the
 `bdd` CLI and git, never the conversation, and writes one metrics row to evals/results/.
 
@@ -25,7 +26,11 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "evals" / "apps" / "shop-api"
+APPS = {"shop-api": REPO / "evals" / "apps" / "shop-api", "shop-web": REPO / "evals" / "apps" / "shop-web"}
+ADAPTERS = {"shop-api": "python-pytest-bdd", "shop-web": "ts-playwright-bdd"}
+# Which reference app a request is about. A request not listed here is about shop-api.
+REQUEST_APPS = {"minimum-order": "shop-web", "login-return": "shop-web"}
+WEB_PORT = "3107"
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
@@ -47,9 +52,18 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def build_project(tmp: Path) -> tuple[Path, dict, str]:
+def build_project(tmp: Path, app: str) -> tuple[Path, dict, str]:
+    """The reference app copied into a temporary project, and the environment its tests run in: for a Python service a
+    virtual environment (its interpreter is returned), for a web front end the app's packages (no interpreter)."""
     project = tmp / "project"
-    shutil.copytree(APP, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(APPS[app], project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", ".next"))
+    if app == "shop-web":
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
+        env.pop("CLAUDE_PLUGIN_DATA", None)
+        run([shutil.which("npm") or "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], project, env, timeout=900)
+        return project, env, ""
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
@@ -67,11 +81,33 @@ def bdd(project: Path, env: dict, *args: str, check: bool = True) -> subprocess.
     return run(["sh", str(REPO / "tools" / "bdd" / "bdd"), *args], project, env, check=check)
 
 
-def set_up(project: Path, env: dict, autonomy: str, python: str) -> None:
+WEB_SERVER = ("  webServer: { command: 'npm run build && node node_modules/next/dist/bin/next start -p " + WEB_PORT + "', cwd: '..', "
+              "url: 'http://127.0.0.1:" + WEB_PORT + "/login', reuseExistingServer: false, timeout: 240_000, "
+              "env: { SHOP_TEST_ENDPOINTS: '1' } },")
+WEB_SERVER_COMMENT = "  // webServer: { command: 'npm start', url: 'http://localhost:3000', reuseExistingServer: false },"
+
+
+def set_up_web(project: Path, env: dict) -> None:
+    """The test tooling from the adapter's lockfile, the browser, and the start of the application: what the person
+    does once, before the first feature (the agents may not install packages, and the configuration is bound)."""
+    run([shutil.which("npm") or "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", "tests"], project, env, timeout=900)
+    run(["node", "tests/node_modules/@playwright/test/cli.js", "install", "chromium"], project, env, timeout=900)
+    config = project / "tests" / "bdd.config.ts"
+    text = config.read_text(encoding="utf-8")
+    if WEB_SERVER_COMMENT not in text:
+        raise SystemExit("the adapter's configuration changed: update WEB_SERVER_COMMENT in evals/run_e2e.py")
+    config.write_text(text.replace(WEB_SERVER_COMMENT, WEB_SERVER), encoding="utf-8", newline="\n")
+
+
+def set_up(project: Path, env: dict, autonomy: str, python: str, app: str = "shop-api") -> None:
     run([*GIT, "init", "-q"], project, env)
     run([*GIT, "add", "-A"], project, env)
     run([*GIT, "commit", "-q", "-m", "reference app"], project, env)
-    bdd(project, env, "init", "--adapter", "python-pytest-bdd", "--autonomy", autonomy, "--python", python)
+    if app == "shop-web":
+        bdd(project, env, "init", "--adapter", ADAPTERS[app], "--autonomy", autonomy)
+        set_up_web(project, env)
+    else:
+        bdd(project, env, "init", "--adapter", ADAPTERS[app], "--autonomy", autonomy, "--python", python)
     smoke = bdd(project, env, "init", "--smoke")
     print(smoke.stdout.strip())
     run([*GIT, "add", "-A"], project, env)
@@ -152,10 +188,11 @@ def main() -> int:
     model = MODELS[args.model]
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
-        project, env, python = build_project(tmp)
-        set_up(project, env, args.autonomy, python)
+        app = REQUEST_APPS.get(args.request, "shop-api")
+        project, env, python = build_project(tmp, app)
+        set_up(project, env, args.autonomy, python, app)
         output = ask(project, env, request, model, args.autonomy, args.minutes)
-        row = {"request": args.request, "model": args.model, "claude": {k: output.get(k) for k in (
+        row = {"request": args.request, "app": app, "model": args.model, "claude": {k: output.get(k) for k in (
             "exit", "seconds", "is_error", "num_turns", "total_cost_usd", "subtype")}, **collect(project, env)}
         RESULTS.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
