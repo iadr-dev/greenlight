@@ -18,6 +18,11 @@ What it blocks inside a greenlight project:
   a shell command (for example a nested ``claude -p``), because such a prompt would reach the
   approval hook looking exactly like something the user typed.
 
+This is a best-effort text check, not a sandbox: a shell has more spellings than any pattern list covers, and the pattern
+sets are deliberately not grown to chase them. What holds is elsewhere: the lock check and the tripwire (they report the
+effect of a change, whatever command made it, including the installed test tooling), the deny rules that ``bdd doctor``
+shows and only the person can add, and the same checks in CI.
+
 Outside a project (no ``.bdd`` directory) it does nothing. Inside one it fails closed: if the guard
 cannot work out whether a call is safe (unreadable lock data, broken configuration, an internal
 error) the call is blocked and the reason says how to fix it.
@@ -228,8 +233,10 @@ AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=")      # all
 CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
                   "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
                   "exec", "dlx", "x", "init", "create", "publish", "global"}
-DATA_COMMANDS = {"ls", "cat", "echo", "printf", "head", "tail", "wc", "stat", "file", "grep", "rg", "du", "tree", "dir",
-                 "which", "where", "realpath", "readlink", "cd", "pushd"}      # a path they are given is data, not a program
+DATA_COMMANDS = {"ls", "cat", "head", "tail", "wc", "stat", "file", "grep", "rg", "du", "tree", "dir", "which", "where",
+                 "realpath", "readlink", "cd", "pushd"}      # a path they are given is data, not a program
+INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "xargs", "eval", "source", ".", "node",
+                "nodejs", "bun", "deno", "python", "python3", "py", "perl", "ruby", "php"}   # they can run what they are given
 _CONTINUATION = re.compile(r"\\\r?\n")
 _SIMPLE_COMMANDS = re.compile(r"[;&|\n`()]+")
 INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv, node_modules): "
@@ -241,14 +248,25 @@ NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-ma
                 "Installing is the person's decision; report the missing requirement instead.")
 
 
-def node_program(word: str) -> str | None:
+def _last_segment(word: str) -> str:
+    return word.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold()
+
+
+def node_program(word: str, run_by_interpreter: bool = False) -> str | None:
     """What kind of package tool a command word starts, if any, whatever folder it is in: ``npm``, ``./tools/yarn``,
-    ``npm.cmd``, or a script run through node (``npm-cli.js``, ``pnpm.cjs``, ``yarn-1.22.19.cjs``)."""
-    name = word.replace("\\", "/").rsplit("/", 1)[-1].casefold()
-    if name in NODE_PROGRAMS:
-        return NODE_PROGRAMS[name]
+    ``npm.cmd``, a script (``npm-cli.js``, ``pnpm.cjs``, ``yarn-1.22.19.cjs``) or the same without its suffix. Run through
+    node or bun, anything under ``node_modules/<tool>/`` is that tool. A name with another dot (``yarn-error.log``) is not."""
+    name = _last_segment(word)
     stem, _, suffix = name.rpartition(".")
-    return NODE_PROGRAMS.get(stem.split("-", 1)[0]) if suffix in SCRIPT_SUFFIXES else None
+    if suffix in SCRIPT_SUFFIXES:
+        name = stem
+    elif "." in name:
+        return None
+    program = NODE_PROGRAMS.get(name.split("-", 1)[0])
+    if program or not run_by_interpreter:
+        return program
+    parts = word.replace("\\", "/").casefold().split("/")
+    return next((NODE_PROGRAMS[after] for before, after in zip(parts, parts[1:]) if before == "node_modules" and after in NODE_PROGRAMS), None)
 
 
 def node_arguments_are_safe(args: list[str]) -> bool:
@@ -267,16 +285,29 @@ def node_arguments_are_safe(args: list[str]) -> bool:
     return words[0] in SAFE_SUBCOMMANDS
 
 
+def _command_refuses(simple: str, interpreting: bool) -> bool:
+    words = simple.split()
+    if not words:
+        return False
+    # A path given to a plain read command is data. Not when the command redirects, or when something in the same command
+    # can run what it is given (a shell, xargs, node ...): then every path counts.
+    data = not interpreting and _last_segment(words[0]) in DATA_COMMANDS and not re.search("[<>]", simple)
+    for at, word in enumerate(words):
+        if data and at > 0 and ("/" in word or "\\" in word):
+            continue
+        program = node_program(word, at > 0 and _last_segment(words[at - 1]) in INTERPRETERS)
+        if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
+            return True
+    return False
+
+
 def refuses_node_packages(command: str) -> bool:
     """Does any reading of the command run a package tool in a way an agent may not?"""
     for reading in shell_readings(_CONTINUATION.sub("", command)):
-        for simple in _SIMPLE_COMMANDS.split(reading):
-            words = simple.split()
-            data_paths = bool(words) and words[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() in DATA_COMMANDS
-            for at, word in enumerate(words):
-                program = None if data_paths and at > 0 and ("/" in word or "\\" in word) else node_program(word)
-                if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
-                    return True
+        commands = _SIMPLE_COMMANDS.split(reading)
+        interpreting = any(_last_segment(word) in INTERPRETERS for simple in commands for word in simple.split())
+        if any(_command_refuses(simple, interpreting) for simple in commands):
+            return True
     return False
 
 

@@ -90,14 +90,20 @@ const SECONDS: Record<string, number> = {
   d: 86400, day: 86400, days: 86400,
   w: 604800, week: 604800, weeks: 604800,
 };
-const AMOUNT_AND_UNIT = /([\d.]+)\s*([a-z]+)/gi;
+const PIECE = /^(\d+(?:\.\d+)?)([a-z]*)$/;
 
 /** '2 days', '30 minutes', '1h 30m' as milliseconds. */
 export function durationMs(text: string): number {
-  const found = [...text.matchAll(AMOUNT_AND_UNIT)];
-  const rest = text.replaceAll(AMOUNT_AND_UNIT, '').replaceAll(/[\s,]|and/g, '');
-  const unknown = found.find(([, , unit]) => SECONDS[(unit ?? '').toLowerCase()] === undefined);
-  const numbers = found.every(([, amount]) => Number.isFinite(Number(amount)));
-  assert.ok(found.length > 0 && rest === '' && unknown === undefined && numbers, `cannot read the duration '${text}'`);
-  return found.reduce((total, [, amount, unit]) => total + Number(amount) * (SECONDS[(unit ?? '').toLowerCase()] ?? 0) * 1000, 0);
+  const words = text.toLowerCase().split(/[\s,]+/).filter((word) => word !== '' && word !== 'and');
+  assert.ok(words.length > 0, `cannot read the duration '${text}'`);
+  let seconds = 0;
+  for (let at = 0; at < words.length; at += 1) {
+    const piece = PIECE.exec(words[at] ?? '');
+    const unit = piece?.[2] || words[at + 1];      // "30m", or "30" and "minutes"
+    const size = unit === undefined ? undefined : SECONDS[unit];
+    assert.ok(piece && size !== undefined, `cannot read the duration '${text}'`);
+    seconds += Number(piece[1]) * size;
+    at += piece[2] ? 0 : 1;
+  }
+  return seconds * 1000;
 }

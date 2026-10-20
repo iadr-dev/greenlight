@@ -65,9 +65,11 @@ red is proven. `bdd lock FEAT-n --scope bind --bound` locks exactly these.
 `-c tests/bdd.config.ts`, and writes the JUnit report through the bound reporter. No shell is involved. Variables that
 change what node loads or how Playwright behaves (`NODE_*`, `PW_*`, `PLAYWRIGHT_*`) are not passed on.
 
-**Not covered.** The packages in `tests/node_modules` are not hashed or watched by greenlight. Agents may neither write
-there nor install packages (the guard refuses it, for any `node_modules` folder), and the lockfile is bound, so install
-from the lockfile with `npm ci` and do not run `npm install` in `tests/` during a feature. The node
+**Not covered.** The packages in `tests/node_modules` are not hashed as a whole. The tripwire watches npm's record of the
+installed tree (`.package-lock.json`), the entry points the run starts and the manifests of the four test packages; agents
+may neither write there nor install packages (the guard refuses it, for any `node_modules` folder, as a best-effort text
+check), and the lockfile is bound. Install from the lockfile with `npm ci` and do not run `npm install` in `tests/` during
+a feature. The node
 program itself is whichever `node` is on `PATH`. Unlike the Python adapter, a gate does not compare the runtime that
 produced a recorded run. Run the gates in CI as well (see `ci.md`).
 
