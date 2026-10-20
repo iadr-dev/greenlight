@@ -55,6 +55,20 @@ Each adapter ships a complete, pinned GitHub Actions workflow in `adapters/<name
 [ci.md](ci.md) for what it checks (approvals from the committed record, locks, a fresh green run, traceability, and the
 optional stability, quality and mutation checks) and what it cannot. `adapters/<name>/ci.md` has the plain test run.
 
+## One feature in several repositories
+
+Each repository uses the adapter that fits its own stack (a Python API with `python-pytest-bdd`, a web app with
+`ts-playwright-bdd`); the home lists the others:
+
+```toml
+[workspace]
+web = "../shop-web"
+api = "../shop-api"
+```
+
+Run commands in a member with `bdd --in web run FEAT-007`, or in all of them with `--workspace`. Details and limits:
+[concepts](concepts.md).
+
 ## Quality checks (optional)
 
 The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does

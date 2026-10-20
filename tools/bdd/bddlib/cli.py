@@ -37,6 +37,7 @@ COMMANDS = {
     "init": ("initcmd", "run"),
     "change": ("changecmd", "run"),
     "cards": ("cards", "run"),
+    "workspace": ("workspace", "run"),
 }
 
 
@@ -52,8 +53,47 @@ def configure_streams(*streams) -> None:
             stream.reconfigure(encoding="utf-8", errors="replace", newline="\n")
 
 
+ACROSS_WORKSPACE = ("lock", "run", "classify", "status")      # commands that `--workspace` repeats in every repository
+
+
+def across_workspace(argv: list[str]) -> int:
+    """``bdd COMMAND ... --workspace``: COMMAND in this repository and then in every member of the workspace."""
+    from . import workspace
+    command = argv[0]
+    _, rest = workspace.without_flag(argv[1:])
+    root = config.find_root()
+    if root is None:
+        print(f"bdd {command}: not inside a greenlight project", file=sys.stderr)
+        return 2
+    if command == "lock" and "--check" not in rest:
+        print("bdd lock: --workspace goes with --check", file=sys.stderr)
+        return 2
+    try:
+        include_home = command in ("lock", "status") or bool(config.load(root).runs)
+        return workspace.fan_out(root, lambda args: main([command, *args]), rest, include_home)
+    except config.ConfigError as exc:
+        print(f"bdd {command}: {exc}", file=sys.stderr)
+        return 2
+
+
+def in_member(argv: list[str]) -> int:
+    """``bdd --in NAME COMMAND ...``: run COMMAND as if started in the member repository NAME of the workspace."""
+    from . import workspace
+    from .errors import UsageError
+    try:
+        name, rest = workspace.take_in_flag(argv)
+        return workspace.run_in(name, rest, main)
+    except (UsageError, config.ConfigError) as exc:
+        print(f"bdd --in: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str]) -> int:
     configure_streams()
+    if argv[:1] == ["--in"]:
+        return in_member(argv)
+    if argv[:1] and argv[0] in ACROSS_WORKSPACE and "--workspace" in argv[1:]:
+        return across_workspace(argv)
     if argv in (["--version"], ["version"]):
         print(f"bdd {__version__}")
         return 0

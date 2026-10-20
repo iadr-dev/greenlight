@@ -24,7 +24,8 @@ Windows is not installed) greenlight works in soft mode: violations are detected
 
 **Can I use it from Codex or another agent tool?**
 Yes, in soft mode. `bdd install-skills codex` installs the skills for Codex and `bdd install-skills agents-md` adds a
-block to `AGENTS.md` for tools that read it. Those tools run no greenlight hooks, so nothing is prevented, only
+block to `AGENTS.md` for tools that read it; `bdd install-skills claude` does the same for Claude Code without the
+plugin. `--uninstall` removes exactly what was installed. Those tools run no greenlight hooks, so nothing is prevented, only
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
@@ -61,6 +62,11 @@ Yes, as far as a test or a check can show it. The standards file has API and dat
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.
+
+**Can one feature span several repositories?**
+Yes: name the other repositories in a `[workspace]` table in the home repository's `.bdd/config.toml`. The home keeps the
+rules, approvals and report; each member keeps its own scenarios, locks and recorded runs under the same ids, and the home's
+gates read them. See [concepts](concepts.md).
 
 **Can I use it on an existing code base?**
 Yes. New features and changes work as on any project; scenarios that describe behaviour the system already has are

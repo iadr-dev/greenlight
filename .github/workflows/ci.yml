@@ -67,6 +67,8 @@ jobs:
         run: uv pip install --system --require-hashes --no-build -r requirements-dev.txt
       - name: Fresh scaffold runs green, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_pytest_bdd.py" -v
+      - name: A whole feature in soft mode, without hooks
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_soft_mode_pipeline.py" -v
       - name: bdd init proves the sample feature green
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_initcmd.py" -v
       - name: greenlight's own specs lint clean (dogfood)
