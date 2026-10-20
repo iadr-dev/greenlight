@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -145,6 +146,27 @@ class RunTest(RunCase):
         words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario="a b; rm -rf /")
         self.assertEqual(words[-2:], ["-k", "a b; rm -rf /"])             # one word, whatever it contains
         self.assertEqual(len(words), 9)
+
+    def test_the_regex_placeholder_makes_a_name_match_only_itself(self):
+        names = ["Order \\E of (999)", "a\\Qb", 'say "hi" [now] {x} $1 ^ | ? * + . # & ~', "café 訂單", "{tag} {out} {scenario}",
+                 "ends with a backslash \\"]
+        rules = cfg.RunRules("x", "{python} run", "--out {out}", isolated="-Dname='\\A{scenario:regex}\\z'")
+        for name in names:
+            with self.subTest(name=name):
+                words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario=name)
+                prefix = "-Dname=\\A"
+                self.assertTrue(words[-1].startswith(prefix) and words[-1].endswith("\\z"), words[-1])
+                pattern = words[-1][len(prefix):-2]
+                self.assertTrue(re.fullmatch(pattern, name), "the escaped name must match the name")
+                self.assertFalse(re.fullmatch(pattern, name + "x"), "and nothing longer")
+                # the same text is also a valid literal in Java's regular expressions: a backslash is only ever put in
+                # front of punctuation, never in front of a letter or a digit, where it would mean something else
+                self.assertTrue(all(not escaped.isalnum() for escaped in re.findall(r"\\(.)", pattern, re.DOTALL)), pattern)
+
+    def test_a_placeholder_in_a_value_is_not_filled_in_again(self):
+        rules = cfg.RunRules("x", "{python} run", "--out {out}", isolated="-k {scenario}")
+        words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario="{tag} {out}")
+        self.assertEqual(words[-2:], ["-k", "{tag} {out}"])
 
     def test_several_adapters_need_a_choice(self):
         two = [cfg.RunRules("a", "x", "y"), cfg.RunRules("b", "x", "y")]

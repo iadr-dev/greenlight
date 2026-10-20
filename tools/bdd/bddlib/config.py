@@ -82,7 +82,8 @@ class RunRules:
 
     Commands are split into words before ``{root}``, ``{python}`` (the interpreter running bdd),
     ``{project_python}`` (the project's own environment), ``{tag}``, ``{marker}``, ``{out}``, ``{seed}`` and
-    ``{scenario}`` are filled in, so a value can never add words to the command."""
+    ``{scenario}`` (or ``{scenario:regex}``, the same name with every regular-expression metacharacter escaped, for a
+    runner that filters by a pattern) are filled in, so a value can never add words to the command."""
     adapter: str
     by_tag: str                              # runs the tests carrying {tag}
     report: str                              # extra words that make the runner write JUnit XML to {out}

@@ -114,6 +114,9 @@ def pick_all(config: cfg.Config, adapter: str | None) -> list[cfg.RunRules]:
     return [pick_rules(config, adapter)] if adapter else list(config.runs)
 
 
+_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex)?)\}")
+
+
 def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed: int | None = None,
                  scenario: str | None = None) -> list[str]:
     """The words to run: the by-tag command, the report words, and the shuffle or isolation words if asked."""
@@ -123,15 +126,15 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
         raise UsageError(f"adapter {rules.adapter} has no shuffle words in [adapters.run]")
     if scenario is not None and not rules.isolated:
         raise UsageError(f"adapter {rules.adapter} has no isolated words in [adapters.run]")
-    values = {"{root}": str(root), "{base}": str(root / rules.base) if rules.base else str(root), "{python}": sys.executable, "{project_python}": project_python(root), "{tag}": tag,
-              "{marker}": re.sub(r"\W", "_", tag),
-              "{out}": str(out), "{seed}": str(seed if seed is not None else ""), "{scenario}": scenario or ""}
-    words = []
-    for word in shlex.split(template):
-        for placeholder, value in values.items():
-            word = word.replace(placeholder, value)
-        words.append(word)
-    return words
+    values = {"root": str(root), "base": str(root / rules.base) if rules.base else str(root),
+              "python": sys.executable, "project_python": project_python(root), "tag": tag,
+              "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
+              "scenario": scenario or "",
+              # for a runner that takes a name filter as a regular expression: every metacharacter escaped, so the name
+              # matches only itself (re.escape leaves letters alone and puts a backslash only before punctuation)
+              "scenario:regex": re.escape(scenario or "")}
+    # one pass over each word: a value that contains something that looks like a placeholder is not filled in again
+    return [_PLACEHOLDER.sub(lambda found: values[found.group(1)], word) for word in shlex.split(template)]
 
 
 BATCH_SUFFIXES = (".bat", ".cmd")

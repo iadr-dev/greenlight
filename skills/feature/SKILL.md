@@ -138,7 +138,9 @@ Under `guided` also ask the person after test design before moving on, and show 
 Show the report's verdict, the traceability matrix (`bdd trace FEAT-n`), the enforcement level (hard or soft, and
 why), the assumptions, the cost per phase and anything the auditor marked as must fix. If the feature ran on
 `autopilot`, say plainly that it is UNREVIEWED and list the assumptions first. Then stop; do not start the next
-feature on your own.
+feature on your own. Offer `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" pr FEAT-n` (add `--write` to save `PULL_REQUEST.md` in the
+project): it prints a pull-request description from the recorded facts, with the UNREVIEWED notice first under
+autopilot. It never contacts a git host; the person pastes it.
 
 ## Files to read when
 

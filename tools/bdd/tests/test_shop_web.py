@@ -91,13 +91,14 @@ class AppTest(unittest.TestCase):
         harness = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(harness)
         requests = {p.stem for p in (REPO / "evals" / "requests").glob("*.md")}
-        self.assertTrue(set(harness.REQUEST_APPS) <= requests)
-        for name, app in harness.REQUEST_APPS.items():
+        web = {name: kind for name, kind in harness.REQUEST_KINDS.items() if kind["app"] == "shop-web"}
+        self.assertEqual(set(web), {"minimum-order", "login-return"})
+        self.assertTrue(set(web) <= requests)
+        for name, kind in web.items():
             with self.subTest(request=name):
-                self.assertTrue(harness.APPS[app].is_dir())
-                self.assertIn(harness.ADAPTERS[app], adapter.available())
+                self.assertTrue((harness.APPS / kind["app"]).is_dir())
+                self.assertIn(kind["adapter"], adapter.available())
                 self.assertTrue((REPO / "evals" / "requests" / f"{name}.answers.json").is_file())
-        self.assertEqual(set(harness.APPS), set(harness.ADAPTERS))
 
     def test_the_fixture_features_and_seams_fit_the_adapter(self):
         with tempfile.TemporaryDirectory() as tmp:

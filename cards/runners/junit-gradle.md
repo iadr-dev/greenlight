@@ -3,6 +3,8 @@ id: junit-gradle
 kind: runner
 apply_when: "a Java or Kotlin project built with Gradle and tested with JUnit 5 (the generic-junit adapter)"
 ---
+> For a Spring Boot service (Maven) or an Android/Kotlin module (Gradle) written with Cucumber-JVM, the `kotlin-android` adapter ships this setup ready made: steps, drivers, run command and classification. Use this card when your tests are plain JUnit.
+
 ## Run
 
 Mark the tests of a feature with a JUnit tag whose name is the marker, and let the build script take the tag as a property:

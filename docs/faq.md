@@ -29,8 +29,9 @@ plugin. `--uninstall` removes exactly what was installed. Those tools run no gre
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
-Today: Python with pytest and pytest-bdd (services, libraries, command-line tools) and web UIs with Playwright
-(TypeScript). See [adapters](adapters.md) for what is planned. The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
+Today: Python with pytest and pytest-bdd (services, libraries, command-line tools), web UIs with Playwright (TypeScript),
+Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests, and any runner that writes a JUnit report
+(`generic-junit`). See [adapters](adapters.md) for what each covers and what it does not. The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
 
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.
@@ -87,3 +88,12 @@ revert. To change approved work while keeping the history, use `/greenlight:chan
 **Why Python in a tool for any language?**
 It is installed nearly everywhere, the standard library is enough (TOML, JSON, XML), and one deterministic
 implementation of the checks is easier to trust than prompts that re-derive them.
+
+**Can I get a pull-request description out of a feature?**
+Yes: `bdd pr FEAT-n` (add `--write` to save `PULL_REQUEST.md`, or `--json`). It is built from the records, never contacts a git host and is safe to
+paste. See [concepts](concepts.md).
+
+**Can several projects share the same domain steps?**
+Yes. Put the shared vocabulary file in each project (vendored or as a submodule), include it in `.bdd/vocabulary.toml` and
+pin it with `bdd vocabulary pin` after reading it. A change to the file is reported until a person pins it again. See
+[the vocabulary](vocabulary.md).
