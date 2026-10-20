@@ -274,7 +274,9 @@ class GateTest(RunCase):
         self.run_feature(cases=ALL_RED)
         self.gate("bind")
         kept = self.root / ".bdd" / ".runs" / "FEAT-007" / "red.json"
-        kept.write_text(kept.read_text(encoding="utf-8").replace("expected", "forged"), encoding="utf-8")
+        text = kept.read_text(encoding="utf-8")
+        self.assertIn('"mode": "all"', text)
+        kept.write_text(text.replace('"mode": "all"', '"mode": "forged"'), encoding="utf-8")
         code, _, err = self.classify("--run", "red")
         self.assertEqual((code, "does not match" in err), (2, True))
 
