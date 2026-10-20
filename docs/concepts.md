@@ -42,6 +42,14 @@ Approving the examples locks the feature files; passing the bind gate locks the 
 plumbing (`bdd lock FEAT-n --scope bind --bound`). A changed locked file blocks the implement and verify gates. The
 implementer can write production code but not tests.
 
+## Adopting existing code
+
+`/greenlight:adopt` describes behaviour the system already has. The feature has kind `adopt`: every scenario is tagged
+`@existing`, the tests pass from the start, the bind gate pins the production source, and the implement and verify gates
+refuse if a scenario is not `@existing` or the production source changed (`bdd adopt FEAT-n --check` shows why). Rules
+state what was observed and cite where; code that looks wrong becomes a question for you, not a rule or a fix. An
+adoption proves the behaviour is described, locked and traceable, not that it is right.
+
 ## Autonomy levels
 
 | Level | Asks you |

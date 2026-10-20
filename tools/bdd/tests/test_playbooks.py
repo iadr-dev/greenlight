@@ -25,9 +25,9 @@ class PlaybookTest(unittest.TestCase):
                 self.assertEqual(found, HEADINGS)
                 self.assertRegex(text, r"(?m)^Agent: (the )?\*\*[a-z-]+\*\*", "the playbook names the agent that runs it")
 
-    def test_there_is_a_playbook_for_nothing_else_but_the_quick_path(self):
+    def test_there_is_a_playbook_for_nothing_else_but_the_quick_and_adoption_paths(self):
         names = {p.stem for p in PHASES.glob("*.md")}
-        self.assertEqual(names - set(state.PHASES), {"quick"})
+        self.assertEqual(names - set(state.PHASES), {"quick", "adopt"})
 
     def test_the_quick_path_keeps_the_approvals_and_the_red_gate(self):
         text = playbook("quick")

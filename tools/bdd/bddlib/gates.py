@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import approvals, classify, design, enforcement, featurefiles, lockfile, runner, state, store, tripwire
+from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, runner, state, store, tripwire
 from . import config as cfg
 from .errors import UsageError
 
@@ -69,6 +69,11 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
         problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]
+    if data.get("kind") == "adopt" and gate in adopt.CHECKED_GATES:
+        problems += adopt.problems(root, data)
+        if gate == "implement":                     # there is no implementation to wait for: the existing code must already pass
+            raw = runner.latest_bytes(root, data["feature"]) if cfg.load(root).runs else None
+            problems += run_problems(root, data["feature"], "verify", raw)
     if gate == "verify" and data["gates"].get("implement", {}).get("result") != "pass":
         problems.append("the implement gate has not passed")
     return problems
