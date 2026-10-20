@@ -54,6 +54,9 @@ def do_record(root, feature_dir, args: argparse.Namespace) -> int:
     data = state.load(feature_dir)
     print(f"{data['feature']}: {args.gate} {'rejected' if args.reject else 'approved'} ({entry['grade']}); "
           f"phase is now {data['phase']}")
+    if entry["grade"] == "self-reported":
+        print("note: this approval is self-reported, not verified by a hook; the feature's enforcement is reported "
+              "as soft and the audit report says so.", file=sys.stderr)
     return 0
 
 

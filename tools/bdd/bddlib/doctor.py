@@ -14,13 +14,14 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from . import claudepaths, config as cfg
+from . import claudepaths, config as cfg, enforcement
 
 MIN_PYTHON = (3, 11)
 BUDGET_MS_POSIX = 200
 BUDGET_MS_WINDOWS = 300
 LATENCY = "hook latency"
 DENY_RULES = "deny rules"
+ENFORCEMENT = "enforcement"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
 RECOMMENDED_DENY = (
@@ -127,17 +128,43 @@ def check_deny_rules(denied: set[str]) -> Check:
                  "the agent is not allowed to edit that file, so this has to be you:\n" + snippet)
 
 
+def check_enforcement(mode: str, hooks_seen: bool) -> Check:
+    """What a project can actually rely on: hooks prevent, soft mode only detects afterwards."""
+    soft_fix = ("Soft enforcement detects tampering afterwards and prevents nothing: run `bdd lock FEAT-n --check --require` "
+                "in CI. To get prevention, use Claude Code with the plugin's hooks (needs a POSIX sh).")
+    if mode == "soft":
+        return Check(ENFORCEMENT, "warn", 'soft (enforcement = "soft"): violations are detected, not prevented', soft_fix)
+    if mode == "hard":
+        return Check(ENFORCEMENT, "ok" if hooks_seen else "warn",
+                     'hard (enforcement = "hard"): approvals must be typed by the person' if hooks_seen else
+                     'hard is required but no hook has run in this project yet; start it from Claude Code with the plugin',
+                     "" if hooks_seen else "Hooks only run inside Claude Code with the greenlight plugin enabled.")
+    if hooks_seen:
+        return Check(ENFORCEMENT, "ok", "hooks have run in this project: approvals have to be typed by the person")
+    return Check(ENFORCEMENT, "warn", "no hook has run in this project yet, so nothing is prevented (soft)", soft_fix)
+
+
+def project_enforcement(project: Path) -> Check:
+    try:
+        return check_enforcement(cfg.load(project).enforcement, enforcement.hooks_seen(project))
+    except cfg.ConfigError as exc:
+        return Check(ENFORCEMENT, "warn", f"the project configuration cannot be read ({exc})",
+                     "Fix .bdd/config.toml (or run `bdd migrate` if it is from an older greenlight).")
+
+
 def run_checks() -> list[Check]:
     wrapper = Path(__file__).resolve().parents[1] / "bdd"
     samples, error = measure_wrapper(wrapper)
     project = cfg.find_root()
     deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
+    mode = [project_enforcement(project)] if project else []
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
                    "Hooks need a POSIX sh. On Windows install Git for Windows (https://git-scm.com/download/win); without it greenlight runs in soft enforcement only.", False),
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
+        *mode,
         *deny,
     ]
 

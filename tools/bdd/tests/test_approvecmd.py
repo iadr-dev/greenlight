@@ -25,8 +25,9 @@ class ApproveCommandTest(ProjectCase):
 
     def test_self_reported_approval_is_recorded_and_the_phase_reported(self):
         self.prepare_rules()
-        code, out, _ = self.run_cmd("FEAT-007", "rules", "--self-reported")
+        code, out, err = self.run_cmd("FEAT-007", "rules", "--self-reported")
         self.assertEqual((code, out.strip()), (0, "FEAT-007: rules approved (self-reported); phase is now test-design"))
+        self.assertIn("not verified by a hook", err)
 
     def test_a_rejection_keeps_its_reason(self):
         self.prepare_rules()

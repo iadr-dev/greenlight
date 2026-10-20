@@ -59,7 +59,20 @@ With hooks active (the normal case) enforcement is **hard**: a guard blocks writ
 approval and evidence data, the tripwire detects tampering by its effect after every tool call, and approvals are
 verified against the transcript. Without hooks (for example Git for Windows is missing, or another tool runs the
 skills) enforcement is **soft**: violations are detected after the fact, not prevented, and the report says so.
-greenlight never presents soft enforcement as hard.
+greenlight never presents soft enforcement as hard: `bdd doctor` warns about it, `bdd state show` and the report name it
+with the reasons, and a self-reported approval says it was not verified by a hook.
+
+To use greenlight from a tool without hooks, install its instructions:
+
+```sh
+bdd install-skills codex        # skills under .agents/skills (add --user for ~/.agents/skills)
+bdd install-skills agents-md    # a marked block in AGENTS.md for any tool that reads it
+```
+
+Both support `--dry-run`, never overwrite a differing file without `--force`, and tell the agent to leave approvals to
+you. With no hook to record what you typed, you set `enforcement = "soft"` in `.bdd/config.toml` and confirm in plain
+words; the agent records it with `bdd approve --self-reported`. Run the locks check in CI
+(see [CI](ci.md)) to catch afterwards what nothing prevents.
 
 ## Agents
 
