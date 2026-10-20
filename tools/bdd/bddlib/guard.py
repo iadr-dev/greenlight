@@ -336,21 +336,48 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     return None
 
 
+_TOKEN_BREAKS = re.compile(r"[\s;&|()`<>=\"']+")          # a path starts after whitespace, a redirection, an assignment, a quote
+_WILDCARDS_ONLY = re.compile(r"[*?\[\]]*")
+
+
+def glob_matches(name: str, segment: str) -> bool:
+    """Would the shell glob ``segment`` match the file name ``name`` (which starts with a dot)? A glob that starts with a
+    dot matches it as it is; one that does not matches it only when the shell's dotglob option is on, so it is tried
+    against the name without its dot, but only if it has a literal character (`b*`, `ru?s`): a bare `*` is everywhere.
+    `[^x]` means `[!x]` to a shell."""
+    pattern = segment.casefold().replace("[^", "[!")
+    if pattern.startswith("."):
+        return fnmatch.fnmatchcase(name, pattern)
+    return not _WILDCARDS_ONLY.fullmatch(pattern) and fnmatch.fnmatchcase(name.lstrip("."), pattern)
+
+
 def segment_glob_reaches(text: str, name: str) -> bool:
     """Could a glob in the command expand to the folder or file ``name`` (a name that starts with a dot)?
 
-    Decided by matching the glob against the real name: `.b*`, `.?dd` and `.*` reach `.bdd`; `.gitignore*` and `src/*`
-    do not. Shells do not let `*` match a leading dot, so a segment has to start with a dot to count."""
-    for token in re.split(r"[\s;&|()`]+", text):
-        for segment in token.split("/"):
-            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(name, segment):
-                return True
+    Decided by matching the glob against the real name: `.b*`, `.?dd`, `.[^a]dd` and `.*` reach `.bdd`; `.gitignore*` and
+    `src/*` do not."""
+    for token in _TOKEN_BREAKS.split(text):
+        if any(_GLOB.search(segment) and glob_matches(name, segment) for segment in token.split("/")):
+            return True
     return False
 
 
 def names_segment(text: str, name: str) -> bool:
     """Does ``name`` appear in the command as a whole path segment, spelled out or reached by a glob?"""
     return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None or segment_glob_reaches(text, name)
+
+
+STANDARDS_NAME = "standards.md"
+
+
+def clearly_elsewhere(before: str) -> bool:
+    """Is the file name that follows ``before`` written with a folder in front of it that is not .bdd and cannot lead to it
+    (`docs/standards.md`, `src/*/standards.md`)? A bare name, `./name` or `../name` could be anywhere, `.bdd` included."""
+    folder = re.search(r"[^\s;&|()`<>=\"']*/$", before)
+    if folder is None:
+        return False
+    segments = [part for part in folder.group(0).split("/") if part not in ("", ".", "..")]
+    return bool(segments) and not names_segment(folder.group(0), cfg.BDD_DIR)
 
 
 def cwd_inside(project: Project, cwd: Path | None, folder: str = "") -> bool:
@@ -371,13 +398,14 @@ def mentioned_protected(project: Project, command: str, cwd: Path | None = None)
     command that ``cd``s first or builds the path in a script is still recognised. A false alarm
     only produces a clear refusal; a miss would defeat the point."""
     by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
-    names = sorted(set(by_name) | MANAGED_NAMES, key=len, reverse=True)
+    names = sorted(set(by_name) | MANAGED_NAMES | {STANDARDS_NAME}, key=len, reverse=True)
     pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
     for reading in shell_readings(command):
         text = reading.casefold()
-        match = pattern.search(text)
-        if match:
+        for match in pattern.finditer(text):
             name = match.group(0)
+            if name == STANDARDS_NAME and clearly_elsewhere(text[:match.start()]):
+                continue
             lock = by_name.get(name)
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
         # `cd .bdd && echo x > config.toml`, a call that already runs inside .bdd, and `.b*/config.toml` all name a person

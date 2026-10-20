@@ -271,7 +271,18 @@ class StandardsFileTest(ProjectCase):
             with self.subTest(name=name):
                 self.assertIn("managed by", self.bash(f"echo x > {name}", inside))
         self.assertIsNone(self.bash("ls", inside))                                       # reading is fine
-        self.assertIsNone(self.bash("echo x > standards.md", self.root / "src"))        # another folder's file
+        self.assertIn("managed by", self.bash("echo x > standards.md", self.root / "src"))     # a bare name fails closed
+        self.assertIn("managed by", self.bash("echo x > ./standards.md", self.root / "src"))
+        self.assertIn("managed by", self.bash("echo x > ../standards.md", self.root / "src"))
+
+    def test_a_standards_file_in_a_folder_that_is_not_bdd_is_a_different_file(self):
+        for command in ("echo x > docs/standards.md", "echo x > src/*/standards.md", "echo x > ../docs/standards.md",
+                        "echo x > .git*/standards.md"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command))
+        for command in ("echo x > .bdd/standards.md", "echo x > docs/../.bdd/standards.md", "echo x > .b*/standards.md"):
+            with self.subTest(command=command):
+                self.assertIn("managed by", self.bash(command))
 
     def test_a_glob_that_can_expand_to_bdd_is_treated_as_naming_it(self):
         for command in ("echo x > .b*/standards.md", "echo x > .?dd/config.toml", "echo x > .*/standards.md",
@@ -279,8 +290,18 @@ class StandardsFileTest(ProjectCase):
             with self.subTest(command=command):
                 self.assertIsNotNone(self.bash(command))               # `.*` also reaches .claude: either message blocks
         self.assertIn("managed by", self.bash("echo x > .b*/standards.md"))
-        self.assertIsNone(self.bash("echo x > .git*/standards.md"))
-        self.assertIsNone(self.bash("echo x > src/*/standards.md"))
+
+    def test_redirections_assignments_and_character_classes_do_not_hide_a_glob(self):
+        for command in ("echo x>.b*/standards.md", "echo x 2>.?dd/config.toml", "F=.b*/config.toml; echo x > $F",
+                        "echo x > .[^a]dd/config.toml", "echo x > .[!a]dd/standards.md"):
+            with self.subTest(command=command):
+                self.assertIn("managed by", self.bash(command))
+
+    def test_a_glob_without_a_dot_reaches_bdd_only_when_it_has_a_literal_character(self):
+        self.assertIn("managed by", self.bash("echo x > b*/config.toml"))            # dotglob
+        self.assertIn("managed by", self.bash("echo x > .bdd/.ru?s/latest.json"))
+        self.assertIsNone(self.bash("rm -rf *"))                                      # a bare * is everywhere: not a target
+        self.assertIsNone(self.bash("cp -r * ../backup"))
 
     def test_the_managed_folders_are_matched_as_whole_segments_wherever_the_command_starts(self):
         data = self.root / ".bdd"
