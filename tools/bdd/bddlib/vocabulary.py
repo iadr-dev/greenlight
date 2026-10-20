@@ -13,6 +13,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import sharedvocab
+
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 CORE_FILE = PLUGIN_ROOT / "vocabulary" / "core.json"
 
@@ -114,6 +116,7 @@ class Entry:
     justification: str = ""
     owner: str = ""
     maps_to: dict = field(default_factory=dict)
+    origin: str = ""                  # the vocabulary file a project step was read from
 
     def candidates(self, language: str) -> tuple[Pattern, ...]:
         """Patterns to try for a feature written in ``language`` (its own, plus English / any-language)."""
@@ -133,12 +136,18 @@ class Match:
     params: dict[str, str]
 
 
+def _where(entry_id: str, entries: list[Entry]) -> str:
+    """An id with the files that define it, when they differ."""
+    files = sorted({e.origin or e.source for e in entries if e.id == entry_id})
+    return f"{entry_id} ({' and '.join(files)})" if len(files) > 1 else entry_id
+
+
 class Vocabulary:
     def __init__(self, entries: list[Entry]):
         ids = [e.id for e in entries]
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         if dupes:
-            raise VocabularyError(f"duplicate vocabulary ids: {', '.join(dupes)}")
+            raise VocabularyError("duplicate vocabulary ids: " + ", ".join(_where(d, entries) for d in dupes))
         self.entries = entries
         self.by_id = {e.id: e for e in entries}
 
@@ -184,7 +193,7 @@ def load_core(path: Path | str = CORE_FILE) -> list[Entry]:
 
 
 def load_project(path: Path | str, core_ids: set[str] | None = None) -> list[Entry]:
-    """Read a project's ``vocabulary.toml``. ``core_ids`` (if given) validates ``composes``."""
+    """Read one ``vocabulary.toml`` (the project's or a shared one). ``core_ids`` (if given) validates ``composes``."""
     data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     if data.get("extends", "core") != "core":
         raise VocabularyError("vocabulary.toml: 'extends' must be \"core\"")
@@ -204,11 +213,40 @@ def load_project(path: Path | str, core_ids: set[str] | None = None) -> list[Ent
         entries.append(Entry(raw["id"], raw["kind"], "project", {"*": _patterns(texts, where)},
                              requires=raw.get("requires", "table_or_docstring_optional"), composes=composes,
                              description=raw.get("description", ""), justification=raw.get("justification", ""),
-                             owner=raw.get("owner", ""), maps_to=dict(raw.get("maps_to", {}))))
+                             owner=raw.get("owner", ""), maps_to=dict(raw.get("maps_to", {})), origin=str(path)))
     return entries
+
+
+def load_shared(project_file: Path, core_ids: set[str]) -> list[Entry]:
+    """The steps of the files the project includes. A project step may not reuse the id of a shared one."""
+    try:
+        files = sharedvocab.closure(sharedvocab.project_root(project_file), project_file)
+    except sharedvocab.IncludeError as exc:
+        raise VocabularyError(str(exc)) from exc
+    root = sharedvocab.project_root(project_file)
+    shared: list[Entry] = []
+    owners: dict[str, str] = {}
+    for path in files:
+        for entry in load_project(path, core_ids):
+            first = owners.setdefault(entry.id, sharedvocab.relative(root, path))
+            if first != sharedvocab.relative(root, path):
+                raise VocabularyError(f"{entry.id} is defined by both {first} and {sharedvocab.relative(root, path)}; "
+                                      "two shared vocabularies may not define the same step id")
+            shared.append(entry)
+    return shared
 
 
 def load(project_file: Path | str | None = None) -> Vocabulary:
     core = load_core()
-    project = load_project(project_file, {e.id for e in core}) if project_file and Path(project_file).exists() else []
-    return Vocabulary(core + project)
+    core_ids = {e.id for e in core}
+    if not (project_file and Path(project_file).exists()):
+        return Vocabulary(core)
+    project_file = Path(project_file)
+    project, shared = load_project(project_file, core_ids), load_shared(project_file, core_ids)
+    root = sharedvocab.project_root(project_file)
+    owners = {e.id: sharedvocab.relative(root, Path(e.origin)) for e in shared}
+    for entry in project:
+        if entry.id in owners:
+            raise VocabularyError(f"{entry.id} in {sharedvocab.relative(root, project_file)} overrides the shared step of the "
+                                  f"same id in {owners[entry.id]}; a project step cannot replace a shared one, give it its own id")
+    return Vocabulary(core + project + shared)
