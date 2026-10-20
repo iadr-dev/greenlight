@@ -9,9 +9,15 @@ An adapter opts in with an ``[adapters.mutation]`` table in ``.bdd/config.toml``
     extensions = [".py"]            # only changed files with these suffixes are mutated
 
 The tool is started without a shell, on the files that differ from the commit at which the red was proven, and writes
-a JSON object to ``{out}``: whole numbers ``killed`` and ``survived``, optionally ``timeout``, ``suspicious`` and
-``skipped`` (reported, not counted). The result is recorded in ``.bdd/.runs/FEAT-n/mutation.json``, which only this
-command writes. Without the table nothing changes: no gate asks for the check.
+a JSON object to ``{out}``, a file in a fresh private folder outside the project that is removed afterwards, and exits 0
+once it has finished (survivors are stated in the report, not by a failing exit). The object holds whole numbers
+``killed`` and ``survived``, optionally ``timeout``, ``suspicious`` and ``skipped`` (reported, not counted). The result
+is recorded in ``.bdd/.runs/FEAT-n/mutation.json`` with the command, the exit status and the hash of the report, which
+only this command writes. Without the table nothing changes: no gate asks for the check.
+
+The check fails, rather than passes, when it measured nothing although something changed: production files changed but
+none ends in the configured ``extensions``, the tool exited non-zero, or it generated no mutants. Only a feature that
+changed no production file at all has nothing to mutate.
 
 A mutation check answers what the recorded runs cannot: whether the tests would notice a change in the code. It is the
 answer to production code written to satisfy the tests instead of the rules.
@@ -19,9 +25,11 @@ answer to production code written to satisfy the tests instead of the rules.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shlex
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -78,26 +86,36 @@ def parse_report(path: Path) -> dict[str, int]:
     return counts
 
 
-def verdict(counts: dict[str, int] | None, threshold: float) -> tuple[float | None, bool, str]:
-    """(score in percent, passed, note). No counts means there was nothing to mutate."""
-    if counts is None:
+def verdict(rules: cfg.MutationRules, counts: dict[str, int] | None, changed: int, selected: int,
+            exit_status: int | None) -> tuple[float | None, bool, str]:
+    """(score in percent, passed, note). Three cases are not alike: nothing changed (nothing to measure), something
+    changed but nothing was selected for mutation (the check covered nothing: a failure), and a tool that ran."""
+    if changed == 0:
         return None, True, "no production file changed since the red, so there is nothing to mutate"
+    if selected == 0:
+        wanted = ", ".join(rules.extensions)
+        return None, False, (f"{changed} production file(s) changed but none ends in the configured extensions ({wanted}), "
+                             "so the check covered nothing; list the suffixes of the code in `extensions`")
+    if exit_status != 0:
+        return None, False, (f"the mutation tool exited with status {exit_status}; a tool that completes exits 0 and "
+                             "states survivors in its report")
     counted = counts["killed"] + counts["survived"]
     if counted == 0:
         return None, False, "the tool generated no mutants for the changed files, which proves nothing"
     score = round(100 * counts["killed"] / counted, 1)
-    if score >= threshold:
+    if score >= rules.threshold:
         return score, True, ""
-    return score, False, f"{counts['survived']} of {counted} mutants survived; at least {threshold:g}% must be killed"
+    return score, False, f"{counts['survived']} of {counted} mutants survived; at least {rules.threshold:g}% must be killed"
 
 
-def changed_files(root: Path, feature_dir: Path, rules: cfg.MutationRules) -> list[str]:
+def changed_files(root: Path, feature_dir: Path, rules: cfg.MutationRules) -> tuple[list[str], list[str]]:
+    """(production files changed since the red, those of them that are selected for mutation)."""
     red = state.load(feature_dir).get("red")
     if not red:
         raise UsageError("no red was recorded for this feature, so there is no point to measure the change from; "
                          "pass the bind gate first")
     files = redrecord.changed_production_files(root, cfg.load(root).test_dirs, red["commit"])
-    return [f for f in files if not rules.extensions or f.endswith(rules.extensions)]
+    return files, [f for f in files if not rules.extensions or f.endswith(rules.extensions)]
 
 
 def current_marks(root: Path, feature_id: str) -> dict[str, str]:
@@ -106,27 +124,36 @@ def current_marks(root: Path, feature_id: str) -> dict[str, str]:
             "inputs": runner.inputs_digest(root, feature_id)}
 
 
+def run_tool(root: Path, rules: cfg.MutationRules, files: list[str]) -> dict:
+    """Run the tool with its report in a fresh private folder outside the project, so nothing in the project (the
+    agent, the tool's own configuration) can have written it beforehand. Returns the facts about the run."""
+    scrub = next((r.scrub_env for r in cfg.load(root).runs if r.adapter == rules.adapter), ())
+    with tempfile.TemporaryDirectory(prefix="greenlight-mutation-") as scratch:
+        report = Path(scratch) / "report.json"
+        words = build_command(rules, root, report, files)
+        started = time.perf_counter()
+        status, output = runner.execute(words, root, rules.timeout, scrub)
+        tail = output[-runner.TAIL_CHARS:]
+        if not report.is_file():
+            raise UsageError(f"the mutation tool wrote no report ({' '.join(words)}):\n{tail}")
+        raw = report.read_bytes()
+        counts = parse_report(report)
+    return {"command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2), "tail": tail,
+            "counts": counts, "report_sha256": hashlib.sha256(raw).hexdigest()}
+
+
 def run_mutation(root: Path, feature_id: str) -> dict:
     rules = rules_of(root)
     feature_dir = store.find_feature_dir(root, feature_id)
-    files = changed_files(root, feature_dir, rules)
-    folder = runner.runs_dir(root, feature_id)
-    folder.mkdir(parents=True, exist_ok=True)
-    record = {"schema": runner.SCHEMA, "feature": feature_id, "at": store.utc_now(), "files": files, "threshold": rules.threshold,
-              "command": None, "exit": None, "seconds": 0.0, "tail": "", "counts": None, **current_marks(root, feature_id)}
+    changed, files = changed_files(root, feature_dir, rules)
+    runner.runs_dir(root, feature_id).mkdir(parents=True, exist_ok=True)
+    record = {"schema": runner.SCHEMA, "feature": feature_id, "at": store.utc_now(), "changed": changed, "files": files,
+              "threshold": rules.threshold, "command": None, "exit": None, "seconds": 0.0, "tail": "", "counts": None,
+              "report_sha256": None, **current_marks(root, feature_id)}
     if files:
-        report = folder / "mutation-report.json"
-        report.unlink(missing_ok=True)
-        words = build_command(rules, root, report, files)
-        scrub = next((r.scrub_env for r in cfg.load(root).runs if r.adapter == rules.adapter), ())
-        started = time.perf_counter()
-        status, output = runner.execute(words, root, rules.timeout, scrub)
-        record.update(command=words, exit=status, seconds=round(time.perf_counter() - started, 2),
-                      tail=output[-runner.TAIL_CHARS:])
-        if not report.is_file():
-            raise UsageError(f"the mutation tool wrote no report ({' '.join(words)}):\n{record['tail']}")
-        record["counts"] = parse_report(report)
-    record["score"], record["passed"], record["note"] = verdict(record["counts"], rules.threshold)
+        record.update(run_tool(root, rules, files))
+    record["score"], record["passed"], record["note"] = verdict(rules, record["counts"], len(changed), len(files),
+                                                                record["exit"])
     store.write_json(result_path(root, feature_id), record)
     return record
 

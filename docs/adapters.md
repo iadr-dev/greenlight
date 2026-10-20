@@ -71,10 +71,15 @@ proven (committed or not; tests and `.bdd/` are never included). The tool writes
 {"killed": 18, "survived": 2, "timeout": 1, "suspicious": 0, "skipped": 0}
 ```
 
-`killed` and `survived` are required whole numbers and decide the score; the others are shown, not counted. The
-tool's exit status is ignored (many tools exit non-zero when mutants survive); a missing or malformed report is an
-error, and so is a report with no mutants at all, because that proves nothing. The result is recorded in
-`.bdd/.runs/FEAT-n/mutation.json`, which only the command writes. `bdd mutate FEAT-n --check` shows the record
+`{out}` is a file in a fresh private folder outside the project, removed afterwards, so nothing in the project can have
+written the report beforehand. `killed` and `survived` are required whole numbers and decide the score; the others
+are shown, not counted. The tool must exit 0 once it has finished and state survivors in the report; a non-zero exit
+fails the check whatever the report says (a wrapper turns a tool that exits non-zero on survivors into exit 0 plus
+counts). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
+If production files changed but none ends in `extensions`, the check fails too: it covered nothing. Only a feature
+that changed no production file at all passes with "nothing to mutate". The result is recorded in
+`.bdd/.runs/FEAT-n/mutation.json` (command, exit status, hash of the report, the changed and the mutated files), which
+only the command writes. `bdd mutate FEAT-n --check` shows the record
 and says whether it is current.
 
 With the table present, the verify gate refuses until the recorded result is current (same production source and tests)

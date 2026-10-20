@@ -123,5 +123,5 @@ extensions = [".py"]
 (only those ending in `extensions`), and records the result. The tool must leave a JSON report at `{out}` with whole
 numbers `killed` and `survived` (optionally `timeout`, `suspicious`, `skipped`). Most tools do not write exactly this
 format: put a few lines of your own (standard library only) around the tool that run it on `{files}` and translate its
-results into the two counts. The format and the placeholders are described in `docs/adapters.md`. Once the table
+results into the two counts, and exit 0 when it has finished. The format and the placeholders are described in `docs/adapters.md`. Once the table
 exists, the verify gate requires a result that is current and at or above the threshold.

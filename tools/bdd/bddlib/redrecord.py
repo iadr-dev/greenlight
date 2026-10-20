@@ -7,12 +7,16 @@ order later: the tests were red against exactly this source, before any implemen
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 
 from . import lockfile, store
 from .config import BDD_DIR
 from .errors import UsageError
+
+
+_COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
 def git(root: Path, *args: str) -> str:
@@ -62,7 +66,9 @@ def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> l
 
 def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: str) -> list[str]:
     """Production files added or modified since ``commit``, committed or not, that still exist."""
-    tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit).split("\0")
+    if not _COMMIT.fullmatch(commit):
+        raise UsageError("the recorded red commit is not a commit id")
+    tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--").split("\0")
     untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
     excluded = excluded_prefixes(root, test_dirs)
     return sorted(n for n in {*tracked, *untracked} if n and is_production(n, excluded) and (root / n).is_file())
