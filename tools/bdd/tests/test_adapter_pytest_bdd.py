@@ -9,6 +9,8 @@ import io
 import json
 import os
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -76,6 +78,7 @@ class ApplyTest(unittest.TestCase):
         self.assertIn("tests/drivers/system.py", created)
         self.assertEqual((self.root / "tests" / "conftest.py").read_text(encoding="utf-8"), "# mine\n")
         self.assertEqual(cfg.load(self.root).runs[0].adapter, "python-pytest-bdd")
+        self.assertEqual({p.name for p in cfg.load(self.root).support_files}, {"conftest.py", "test_features.py", "__init__.py"})
         with self.assertRaises(UsageError) as cm:
             adapter.apply(self.root, "python-pytest-bdd")
         self.assertIn("already in .bdd/config.toml", str(cm.exception))
@@ -166,10 +169,18 @@ class ContractTest(unittest.TestCase):
         probe = self.root / "tests/test_probe.py"
         probe.write_text(PROBE, encoding="utf-8", newline="\n")
         self.addCleanup(probe.unlink)
-        import subprocess, sys
         done = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(probe)], cwd=self.root,
                               capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+    def test_6_the_project_can_complete_a_request_without_editing_a_core_driver(self):
+        probe = self.root / "tests/test_complete.py"
+        probe.write_text(COMPLETE, encoding="utf-8", newline="\n")
+        self.addCleanup(probe.unlink)
+        done = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(probe)], cwd=self.root,
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
 
 
 ORDERS = """@FEAT-001
@@ -239,6 +250,41 @@ def test_an_unstubbed_call_fails_and_a_stubbed_one_is_recorded():
     stubs.respond("payments", "charge", {"ok": True})
     assert stubs.call("payments", "charge", {"amount": 5}) == {"ok": True}
     stubs.assert_received("payments", "charge", {"amount": 5})
+'''
+
+
+COMPLETE = '''
+from tests.drivers import api
+from tests.drivers.operations import API, Api
+from tests.drivers.system import System
+from tests.drivers.world import new_world
+
+
+class FakeHttp:
+    def __init__(self):
+        self.calls = []
+
+    def request(self, method, url, **options):
+        self.calls.append((method, url, options))
+        return type("Response", (), {"status_code": 200, "json": lambda self: {}})()
+
+
+class Mine(System):
+    client = FakeHttp()
+
+    def http(self):
+        return self.client
+
+    def complete(self, operation, fields):
+        return {"order": 1, **fields}
+
+
+def test_complete_fills_in_what_the_scenario_left_out(tmp_path):
+    API["look up order"] = Api("GET", "/orders/{order}")
+    world = new_world(tmp_path)
+    world.system = Mine()
+    api.call(world, "alice", "look up order", None)
+    assert world.system.client.calls[0][:2] == ("GET", "/orders/1")
 '''
 
 

@@ -12,10 +12,11 @@ def call(world: World, actor: str, operation: str, data: Any) -> Outcome:
     if operation not in API:
         raise NotMapped("API operation", operation, API)
     route = API[operation]
-    fields = data if isinstance(data, dict) else {}
+    given = data if isinstance(data, dict) else {}
+    fields = world.system.complete(operation, given)         # the project may add what the scenario left out
     path = route.path.format(**fields)
     used = {name for name in fields if "{" + name + "}" in route.path}
-    sent = {k: v for k, v in fields.items() if k not in used} if isinstance(data, dict) else data
+    sent = {k: v for k, v in fields.items() if k not in used} if (fields or isinstance(data, dict)) else data
     options: dict[str, Any] = {"headers": world.headers.get(actor, {})}
     options["params" if route.method.upper() == "GET" else "json"] = sent or None
     response = world.system.http().request(route.method.upper(), path, **options)

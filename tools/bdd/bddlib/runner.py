@@ -22,6 +22,7 @@ from .errors import UsageError
 
 RUNS_DIR = ".runs"
 LATEST = "latest.json"
+RED = "red.json"
 SCHEMA = 1
 TAIL_CHARS = 4000
 SKIPPED = {"__pycache__", "node_modules", ".git"}
@@ -41,6 +42,7 @@ def inputs_digest(root: Path, feature_id: str) -> str:
     A recorded run only backs a gate while this still matches, so editing a test after running it
     means running it again."""
     files = list(featurefiles.spec_files(root, feature_id))
+    files += [f for f in cfg.load(root).support_files if f.is_file()]
     for directory in cfg.load(root).step_dirs:
         for dirpath, dirnames, filenames in os.walk(directory):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIPPED and not d.startswith("."))
@@ -49,6 +51,30 @@ def inputs_digest(root: Path, feature_id: str) -> str:
     for path in sorted({f.resolve() for f in files}):
         digest.update(f"{lockfile.relative(root, path)}\n{lockfile.file_digest(path)}\n".encode("utf-8"))
     return digest.hexdigest()
+
+
+def project_python(root: Path) -> str:
+    """The interpreter a Python project's tests should run with: its own environment, not the one running bdd.
+
+    In order: ``GREENLIGHT_PYTHON``, the active virtual environment (``VIRTUAL_ENV``), ``.venv`` or ``venv`` in the
+    project, and finally the interpreter that runs bdd."""
+    explicit = os.environ.get("GREENLIGHT_PYTHON")
+    if explicit and Path(explicit).is_file():
+        return explicit
+    environments = [Path(os.environ["VIRTUAL_ENV"])] if os.environ.get("VIRTUAL_ENV") else []
+    environments += [root / ".venv", root / "venv"]
+    for environment in environments:
+        for relative in ("Scripts/python.exe", "bin/python"):
+            if (environment / relative).is_file():
+                return str(environment / relative)
+    return sys.executable
+
+
+def interpreter_identity(root: Path) -> dict:
+    """Which program ran the tests: its path and hash. A gate only accepts a run made with the interpreter the
+    project resolves to now, so a run cannot be made with a program chosen just for that run."""
+    path = Path(project_python(root))
+    return {"path": str(path), "sha256": lockfile.file_digest(path) if path.is_file() else None}
 
 
 def pick_rules(config: cfg.Config, adapter: str | None) -> cfg.RunRules:
@@ -75,7 +101,8 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
         raise UsageError(f"adapter {rules.adapter} has no shuffle words in [adapters.run]")
     if scenario is not None and not rules.isolated:
         raise UsageError(f"adapter {rules.adapter} has no isolated words in [adapters.run]")
-    values = {"{root}": str(root), "{python}": sys.executable, "{tag}": tag, "{marker}": re.sub(r"\W", "_", tag),
+    values = {"{root}": str(root), "{python}": sys.executable, "{project_python}": project_python(root), "{tag}": tag,
+              "{marker}": re.sub(r"\W", "_", tag),
               "{out}": str(out), "{seed}": str(seed if seed is not None else ""), "{scenario}": scenario or ""}
     words = []
     for word in shlex.split(template):
@@ -121,10 +148,35 @@ def run_feature(root: Path, feature_id: str, scenarios: list[str], rules: cfg.Ru
         runs.append(entry)
         cases += found
     record = {"schema": SCHEMA, "feature": feature_id, "adapter": rules.adapter, "at": store.utc_now(), "inputs": inputs_digest(root, feature_id),
+              "interpreter": interpreter_identity(root),
               "mode": "isolated" if isolated else "shuffle" if shuffle else "all", "seed": seed, "runs": runs,
               "cases": [{"name": c.name, "classname": c.classname, "outcome": c.outcome, "text": c.text} for c in cases]}
     store.write_json(latest_path(root, feature_id), record)
     return record
+
+
+def latest_bytes(root: Path, feature_id: str) -> bytes | None:
+    """The last run exactly as stored (read once, so what is checked is what is kept), or None."""
+    path = latest_path(root, feature_id)
+    return path.read_bytes() if path.is_file() else None
+
+
+def keep_red(root: Path, feature_id: str, raw: bytes) -> dict:
+    """Keep the run that proved the red, so later runs (the green, the auditor's reruns) cannot overwrite the evidence.
+    ``raw`` is the very bytes that were checked."""
+    target = runs_dir(root, feature_id) / RED
+    target.write_bytes(raw)
+    return {"file": RED, "sha256": hashlib.sha256(raw).hexdigest(), "at": store.utc_now()}
+
+
+def load_red(root: Path, feature_id: str, kept: dict | None) -> dict:
+    """The kept red run, if it is still what was recorded at the bind gate."""
+    path = runs_dir(root, feature_id) / RED
+    if not kept or not path.is_file():
+        raise UsageError(f"no red run was kept for {feature_id}: the bind gate has not passed with a recorded run")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != kept["sha256"]:
+        raise UsageError(f"the kept red run of {feature_id} does not match what the bind gate recorded")
+    return store.read_json(path, "the kept red run")
 
 
 def load_latest(root: Path, feature_id: str) -> dict:

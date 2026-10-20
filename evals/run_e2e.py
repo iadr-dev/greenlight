@@ -57,6 +57,7 @@ def build_project(tmp: Path) -> tuple[Path, dict]:
     run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
     env = os.environ.copy()
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
+    env["VIRTUAL_ENV"] = str(venv)                                 # the project's tests run in this environment
     env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
     env.pop("CLAUDE_PLUGIN_DATA", None)
     env["PYTHONUTF8"] = "1"

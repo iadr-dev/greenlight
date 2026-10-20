@@ -3,6 +3,7 @@ import io
 import json
 import os
 import shutil
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -260,9 +261,76 @@ class GateTest(RunCase):
         self.run_feature(cases=ALL_GREEN)
         self.assertEqual(self.gate("verify")["phase"], "done")
 
+    def test_the_run_that_proved_the_red_is_kept_when_later_runs_overwrite_the_latest(self):
+        self.run_feature(cases=ALL_RED)
+        self.gate("bind")
+        self.run_feature(cases=ALL_GREEN)                                        # the green, or an auditor's rerun
+        code, out, _ = self.classify("--run", "red", "--expect", "red")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.classify("--expect", "red")[0], 1)                  # the latest run is no longer a red
+        self.assertEqual(self.classify("--run", "red", "--expect", "green")[0], 1)
+
+    def test_a_kept_red_that_was_altered_is_refused(self):
+        self.run_feature(cases=ALL_RED)
+        self.gate("bind")
+        kept = self.root / ".bdd" / ".runs" / "FEAT-007" / "red.json"
+        text = kept.read_text(encoding="utf-8")
+        self.assertIn('"mode": "all"', text)
+        kept.write_text(text.replace('"mode": "all"', '"mode": "forged"'), encoding="utf-8")
+        code, _, err = self.classify("--run", "red")
+        self.assertEqual((code, "does not match" in err), (2, True))
+
+    def test_there_is_no_kept_red_before_the_bind_gate(self):
+        self.run_feature(cases=ALL_RED)
+        code, _, err = self.classify("--run", "red")
+        self.assertEqual((code, "no red run was kept" in err), (2, True))
+
     def test_projects_without_a_run_command_are_not_held_to_it(self):
         self.config()
         self.assertEqual(self.gate("bind")["gates"]["bind"]["result"], "pass")
+
+
+class ProjectPythonTest(ProjectCase):
+    """The project's tests run in the project's environment, not in the one that runs bdd."""
+
+    def make_env(self, folder: str) -> Path:
+        scripts = self.root / folder / ("Scripts" if os.name == "nt" else "bin")
+        scripts.mkdir(parents=True)
+        python = scripts / ("python.exe" if os.name == "nt" else "python")
+        python.write_text("", encoding="utf-8")
+        return python
+
+    def resolve(self, **env) -> str:
+        with mock.patch.dict(os.environ, env):
+            for key in ("GREENLIGHT_PYTHON", "VIRTUAL_ENV"):
+                if key not in env:
+                    os.environ.pop(key, None)
+            return runner.project_python(self.root)
+
+    def test_without_any_environment_it_is_the_interpreter_running_bdd(self):
+        self.assertEqual(self.resolve(), sys.executable)
+
+    def test_a_virtual_environment_in_the_project_is_found(self):
+        python = self.make_env(".venv")
+        self.assertEqual(self.resolve(), str(python))
+
+    def test_the_active_environment_beats_the_one_in_the_project(self):
+        self.make_env(".venv")
+        active = self.make_env("elsewhere")
+        self.assertEqual(self.resolve(VIRTUAL_ENV=str(active.parents[1])), str(active))
+
+    def test_an_explicit_choice_beats_everything(self):
+        self.make_env(".venv")
+        explicit = self.root / "chosen-python"
+        explicit.write_text("", encoding="utf-8")
+        self.assertEqual(self.resolve(GREENLIGHT_PYTHON=str(explicit)), str(explicit))
+        self.assertEqual(self.resolve(GREENLIGHT_PYTHON=str(self.root / "missing")), str(self.root / ".venv" / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")))
+
+    def test_the_adapter_runs_its_tests_with_it(self):
+        rules = cfg.RunRules("x", "{project_python} -m pytest -m {tag}", "--out {out}")
+        python = self.make_env(".venv")
+        words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"))
+        self.assertEqual(words[0], str(python))
 
 
 class JunitTest(unittest.TestCase):

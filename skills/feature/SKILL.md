@@ -58,10 +58,10 @@ this one needs. Tell it to read the playbook first.
 | examples | qa-designer | `bdd lint` clean, `bdd trace` no gaps | **human gate: examples** (step 4) |
 | system-map | system-analyst | every step mapped, or listed as a seam | `bdd gate FEAT-n system-map --result pass` |
 | refine | step-engineer | `bdd lint` clean | `bdd gate FEAT-n refine --result pass` |
-| bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind <the adapter's steps and drivers>`; `bdd gate FEAT-n bind --result pass --record-red` |
+| bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you | write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
 | implement | implementer, one task at a time | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status` | `bdd gate FEAT-n implement --result pass` |
-| verify | spec-auditor | the report has evidence on every line | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS |
+| verify | spec-auditor | the report has evidence on every line | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
 
 Rules for the loop:
 
@@ -74,11 +74,30 @@ Rules for the loop:
 - **Questions**: an agent returns blocking questions; you ask the person one at a time with the recommended
   answer, then run the agent again with the answers. Under `autopilot` you answer the most conservative way,
   record it as an assumption, and say so in the report.
-- **Change requests**: when an agent says a locked file would have to change, do not let it. Show the person the
-  request and, if they agree, follow the `change` skill (`/greenlight:change`).
+- **Change requests**: when an agent says a locked file would have to change, do not let it. Under `guided` and
+  `standard` show the person the request and, if they agree, follow the `change` skill (`/greenlight:change`).
+  Under `auto` and `autopilot` there may be nobody to ask: follow the `change` skill yourself for a request that
+  does not alter what the person asked for (for example tagging scenarios that describe behaviour the system
+  already has with `@existing`), record it as an assumption, and say so in the report. A request that would
+  change what the person asked for, or touch money, authorisation, personal data or data loss, is listed
+  prominently in the report and decided by the person.
+- **Never stop to ask when nobody can answer.** Under `autopilot` (and in a headless run) a stuck phase is not a
+  question for the person: decide the conservative way, record it as an assumption, or use the change flow.
+  Stop only after three attempts at the same phase, and say exactly what is stuck.
+- **Keep the scope the person asked for.** Tell the agents what was asked, and that rules, examples and code
+  beyond it are proposals (deferred questions), not additions. A one-paragraph request seldom needs more than a
+  handful of rules and a few examples per rule.
+- **Requirements are the person's.** Never install packages into the machine's Python. If the adapter's
+  requirements are missing, ask the person to install them (or install into the project's own environment only
+  after they say yes) and run `bdd init --smoke` again.
 - **The red gate is the point.** Do not let any production code be written before `bind` has passed.
 - **Never** edit a feature file, step, driver or production file yourself, record an approval for the person, or
   weaken a gate. You may write `tasks.md` and `report.md` and nothing else in the project.
+
+**Findings.** If the verdict is FINDINGS, look at the *must fix* items. Under `guided` and `standard` show them to
+the person and let them decide. Under `auto` and `autopilot` fix them through the `change` flow and the phases it
+reopens, then run verify again, at most twice; after that report what is left. Should-fix and unverifiable items
+always go in the final report.
 
 ## 4. Human gates
 

@@ -11,6 +11,7 @@ A pass is refused unless what it depends on is true right now:
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import approvals, classify, enforcement, featurefiles, lockfile, runner, state, store, tripwire
@@ -34,29 +35,34 @@ def lock_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
 RUN_EXPECTED = {"bind": "red", "verify": "green"}
 
 
-def run_problems(root: Path, feature_id: str, gate: str) -> list[str]:
+def run_problems(root: Path, feature_id: str, gate: str, raw: bytes | None) -> list[str]:
     """When the adapter has a run command, ``bind`` needs a valid red and ``verify`` a green, from a
     run that ``bdd run`` recorded against the files as they are now."""
     config = cfg.load(root)
     if gate not in RUN_EXPECTED or not config.runs:
         return []
     expect = RUN_EXPECTED[gate]
+    if raw is None:
+        return [f"{feature_id} has not been run yet; run `bdd run {feature_id}` first"]
     try:
-        record = runner.load_latest(root, feature_id)
+        record = json.loads(raw)
         if record.get("inputs") != runner.inputs_digest(root, feature_id):
             return [f"the recorded run is out of date: the feature files or steps changed since `bdd run {feature_id}`"]
+        if any("{project_python}" in r.by_tag for r in config.runs) and record.get("interpreter") != runner.interpreter_identity(root):
+            return ["the recorded run used another interpreter than the project resolves to now; run it again with "
+                    "`bdd run` from the project's own environment"]
         verdict = classify.classify_run(record, classify.feature_scenarios(root, feature_id), list(config.runs))[expect]
-    except UsageError as exc:
+    except (UsageError, ValueError) as exc:
         return [str(exc)]
     return [] if verdict["valid"] else [f"the recorded run is not a valid {expect}: " + "; ".join(verdict["problems"])]
 
 
-def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str) -> list[str]:
+def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: bytes | None = None) -> list[str]:
     """Reasons a *passing* result may not be recorded yet (empty list = fine)."""
     problems: list[str] = []
     for human_gate in APPROVALS_NEEDED.get(gate, ()):
         problems += approvals.effective_problems(root, data, human_gate)
-    problems += run_problems(root, data["feature"], gate)
+    problems += run_problems(root, data["feature"], gate, raw)
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
         problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]
@@ -81,14 +87,19 @@ def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: d
         approvals.verify_origins(feature_dir)       # before the state lock is taken: it is not re-entrant
 
     def mutate(current: dict) -> None:
+        raw = None
+        if result == "pass" and name in RUN_EXPECTED and cfg.load(root).runs:
+            raw = runner.latest_bytes(root, current["feature"])          # read once: checked and kept are the same bytes
         if result == "pass":
-            problems = gate_problems(root, feature_dir, current, name)
+            problems = gate_problems(root, feature_dir, current, name, raw)
             if problems:
                 raise UsageError(f"cannot record {name}=pass: " + "; ".join(problems))
         current["gates"][name] = {"result": result, "at": store.utc_now(), "detail": detail,
                                   "session": enforcement.current_session()}
         if red is not None:
             current["red"] = red
+        if name == "bind" and result == "pass" and raw is not None:
+            current["red_run"] = runner.keep_red(root, current["feature"], raw)
         if result == "pass":
             state.advance_phase(current, name)
 

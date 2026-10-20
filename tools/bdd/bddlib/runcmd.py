@@ -14,7 +14,7 @@ import json
 import sys
 from collections import Counter
 
-from . import classify, config as cfg, runner, store
+from . import classify, config as cfg, runner, state, store
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
 
@@ -55,13 +55,16 @@ def run_classify(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd classify", description="Classify the recorded run of a feature.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("--expect", choices=("red", "green"), help="exit 1 unless the run is a valid red / a green")
+    ap.add_argument("--run", choices=("latest", "red"), default="latest",
+                    help="the last run (default) or the run that proved the red, kept at the bind gate")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_intermixed_args(argv)
 
     def action() -> int:
         root = project_root()
-        store.find_feature_dir(root, args.feature)
-        record = runner.load_latest(root, args.feature)
+        feature_dir = store.find_feature_dir(root, args.feature)
+        record = (runner.load_latest(root, args.feature) if args.run == "latest"
+                  else runner.load_red(root, args.feature, state.load(feature_dir).get("red_run")))
         rules = list(cfg.load(root).runs)
         report = classify.classify_run(record, classify.feature_scenarios(root, args.feature), rules)
         print(json.dumps(report, indent=2, ensure_ascii=False) if args.json else classify.render(report))

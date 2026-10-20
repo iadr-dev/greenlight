@@ -16,11 +16,15 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    tagged `@R-n.m`, and one scenario per example tagged `@EX-n.m.k`. Use a `Scenario Outline` with
    `Examples` for partitions and boundaries.
 2. Write in business language: no selectors, URLs, SQL, status codes or class names (lint refuses them).
-3. Use steps from the vocabulary: domain steps first, core steps allowed. For a step that needs something new,
+3. For every example, look at the code and the existing tests first (you can read them): if the system already
+   behaves that way, tag the scenario `@existing`. It is a regression guard, not new behaviour, and it will pass
+   in the red run; keep such examples few. Untagged scenarios must fail for the right reason before any code
+   exists.
+4. Use steps from the vocabulary: domain steps first, core steps allowed. For a step that needs something new,
    write it with a `# proposed-step` comment; it is resolved in the refine phase.
-4. Run `bdd lint` and fix everything it reports. `bdd trace FEAT-n` must show no gaps between rules, examples
+5. Run `bdd lint` and fix everything it reports. `bdd trace FEAT-n` must show no gaps between rules, examples
    and scenarios.
-5. Show the person the scenarios.
+6. Show the person the scenarios.
 
 ## Output files
 

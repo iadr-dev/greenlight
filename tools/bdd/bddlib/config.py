@@ -31,7 +31,8 @@ class ScanRules:
 class RunRules:
     """How to run an adapter's tests and read their failures (``[adapters.run]`` / ``[adapters.classify]``).
 
-    Commands are split into words before ``{root}``, ``{python}``, ``{tag}``, ``{out}``, ``{seed}`` and
+    Commands are split into words before ``{root}``, ``{python}`` (the interpreter running bdd),
+    ``{project_python}`` (the project's own environment), ``{tag}``, ``{marker}``, ``{out}``, ``{seed}`` and
     ``{scenario}`` are filled in, so a value can never add words to the command."""
     adapter: str
     by_tag: str                              # runs the tests carrying {tag}
@@ -57,6 +58,7 @@ class Config:
     enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
     scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
     version: int = SCHEMA_VERSION            # the schema this project's .bdd/ is at
+    support_files: tuple[Path, ...] = ()     # the adapter's own test plumbing (conftest.py, ...): bound like steps
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
 
     @property
@@ -116,6 +118,16 @@ def _run_rules(adapter: dict, path: Path) -> RunRules | None:
     return RunRules(str(adapter.get("name", "")), table["by_tag"], table["report"], table.get("shuffle", ""),
                     table.get("isolated", ""), timeout, _patterns(classify, "test_defect", path),
                     _patterns(classify, "expected_fail", path))
+
+
+def _support_files(root: Path, data: dict, path: Path) -> tuple[Path, ...]:
+    found: list[Path] = []
+    for adapter in data.get("adapters", []):
+        names = adapter.get("support", [])
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            raise ConfigError(f"{path}: support must be a list of file names")
+        found += [root / n for n in names]
+    return tuple(found)
 
 
 def _schema_version(data: dict, path: Path) -> int:
@@ -178,12 +190,13 @@ def load(root: Path | str | None) -> Config:
         feature_dirs=tuple(root / a["features"] for a in data.get("adapters", []) if "features" in a),
         step_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("steps", "drivers") if key in a),
         test_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("features", "steps", "drivers")
-                        if key in a),
+                        if key in a) + _support_files(root, data, path),
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
         enforcement=enforcement,
         scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
         version=version,
+        support_files=_support_files(root, data, path),
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
     )

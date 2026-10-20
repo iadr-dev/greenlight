@@ -29,6 +29,8 @@ def lock_parser() -> argparse.ArgumentParser:
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("paths", nargs="*", type=Path, help="files or directories to lock")
     ap.add_argument("--scope", choices=lockfile.SCOPES, help="spec = .feature files, bind = steps and drivers")
+    ap.add_argument("--bound", action="store_true",
+                    help="with --scope bind: lock the adapter's step, driver and support files named in the configuration")
     ap.add_argument("--check", action="store_true", help="verify existing locks instead of creating one")
     ap.add_argument("--require", action="store_true", help="with --check: fail if a scope is not locked at all")
     ap.add_argument("--json", action="store_true", help="machine-readable output (with --check)")
@@ -40,6 +42,11 @@ def do_lock(args: argparse.Namespace, root: Path) -> int:
         raise UsageError("--scope spec|bind is required to create a lock")
     feature_dir = store.find_feature_dir(root, args.feature)
     paths = args.paths
+    if args.bound:
+        if args.scope != "bind" or paths:
+            raise UsageError("--bound goes with --scope bind and no paths")
+        config = cfg.load(root)
+        paths = [p for p in (*config.step_dirs, *config.support_files) if p.exists()]
     if not paths and args.scope == "spec":
         paths = featurefiles.spec_files(root, args.feature)
         if not paths:
