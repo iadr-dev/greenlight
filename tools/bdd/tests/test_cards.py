@@ -65,6 +65,7 @@ class RulesTest(CardCase):
             "bad cost": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("cost: low", "cost: huge"), "cost must be one of"),
             "unknown key": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("cost: low", "cost: low\nowner: me"), "unknown front matter key"),
             "pairs_with not a list": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("[other-one]", "other-one"), "pairs_with must be a list"),
+            "bad phase": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("cost: low", "cost: low\nphase: lunch"), "phase must be one of"),
             "missing pitfalls": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("## Known pitfalls\n- one\n", ""), "'## Known pitfalls' section is missing"),
             "empty pitfalls": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("- one\n", ""), "'## Known pitfalls' section is missing or empty"),
             "unknown pair": ("techniques/a.md", GOOD.replace("id: boundary-value", "id: a").replace("[other-one]", "[ghost]"), "'ghost', which is not a card"),
