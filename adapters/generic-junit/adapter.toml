@@ -1,0 +1,49 @@
+name = "generic-junit"
+version = 1
+profiles = ["base", "api", "ui", "cli", "lib"]   # the project's own runner binds whatever instructions it uses
+
+[detect]                                          # never suggested by `init`: it is the choice when no other adapter fits
+files = []
+
+[requires]
+packages = []
+optional = ["a test runner that can write a JUnit XML report"]
+
+[paths]
+features = "tests/features"
+steps = "tests/steps"
+drivers = "tests/drivers"
+support = ["tests/run_tests.py", "tests/run_junit.py"]
+
+[run]
+# The sample runner below runs the sample feature with nothing but the standard library. Replace the command with your
+# runner's (the cards under cards/runners show common ones) and keep the contract in guide.md:
+#   {tag}    the feature tag, FEAT-007          {marker}  the same as a word, FEAT_007
+#   {out}    where the one JUnit file goes      {seed}    for the shuffle words, if your runner can shuffle
+# The command is split into words, then the placeholders are filled; it never goes through a shell.
+by_tag = '{python} -I tests/run_tests.py --tag {tag}'
+report = '--out {out}'
+shuffle = '--seed {seed}'
+isolated = '--only "{scenario}"'
+timeout = 600
+
+[classify]                                        # ordered; defects first; applied to the failure text. Extend for your runner.
+test_defect = [
+  'NotMapped',
+  'ImportError|ModuleNotFoundError|SyntaxError|NameError',
+  'build failed|cannot find symbol|error CS\d+|undefined: ',
+  '(?i)undefined step|step definition.* not found|no matching step',
+  '(?i)no tests (were )?(found|executed)',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError|AssertionFailedError|AssertError',
+  '(?i)expected .* (but|to) ',
+  'status (404|405|501)',
+]
+
+[scan]                                            # used by `bdd scan`; a starting point for Given/When/Then style step code
+step_start = '^\s*@?(?P<kind>given|when|then)\b'
+assert_patterns = ['[Aa]ssert', '[Ee]xpect', '\.should', 'require\.', 'must be']
+sleep_patterns = ['[Ss]leep\(', 'setTimeout\(']
+stub_patterns = []
