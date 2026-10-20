@@ -290,10 +290,37 @@ class ApprovalBindingTest(WorkspaceCase):
 
     def test_the_approval_covers_each_members_feature_files_and_configuration(self):
         last = self.approved()["approvals"][-1]
-        self.assertEqual(sorted(k for k in last["artifacts"] if k.startswith("@")),
-                         ["@api/.bdd/config.toml", "@api/features/spec.feature",
-                          "@web/.bdd/config.toml", "@web/features/spec.feature"])
+        self.assertEqual({name: sorted(files) for name, files in last["members"].items()},
+                         {"api": [".bdd/config.toml", "features/spec.feature"], "web": [".bdd/config.toml", "features/spec.feature"]})
+        self.assertEqual(list(last["artifacts"]), ["features/discounts.feature"])       # only this repository's own files
         self.assertEqual(self.problems(), [])
+
+    def test_a_home_file_named_like_a_member_entry_cannot_stand_for_it(self):
+        write(self.root, "features/web/features/spec.feature", SPEC.format(title="Odd", scenario="Odd name", n=3))
+        last = self.approved()["approvals"][-1]
+        self.assertIn("features/web/features/spec.feature", last["artifacts"])
+        self.assertEqual(sorted(last["members"]["web"]), [".bdd/config.toml", "features/spec.feature"])
+        write(self.web, "features/spec.feature", SPEC.format(title="Web", scenario="Edited scenario", n=1))
+        self.assertEqual(self.problems(), ["web:features/spec.feature changed after the examples approval; "
+                                           "it has to be approved again"])
+
+    def test_a_spec_file_added_to_a_member_after_the_approval_needs_a_new_approval(self):
+        self.approved()
+        write(self.web, "features/more.feature", SPEC.format(title="More", scenario="One more", n=9))
+        self.assertEqual(self.problems(), ["web:features/more.feature was added after the examples approval; "
+                                           "it has to be approved again"])
+
+    def test_a_spec_file_removed_from_a_member_needs_a_new_approval(self):
+        self.approved()
+        (self.web / "features" / "spec.feature").unlink()
+        self.assertEqual(self.problems(), ["web:features/spec.feature was removed after the examples approval; "
+                                           "it has to be approved again"])
+
+    def test_a_member_added_to_the_workspace_after_the_approval_needs_a_new_approval(self):
+        self.config(tail=f'\n[workspace]\nweb = {json.dumps(str(self.web))}\n')
+        self.approved()
+        self.config(tail=f'\n[workspace]\nweb = {json.dumps(str(self.web))}\napi = {json.dumps(str(self.api))}\n')
+        self.assertEqual(self.problems(), ["api joined the workspace after the examples approval; it has to be approved again"])
 
     def test_a_member_spec_that_is_unlocked_edited_and_locked_again_needs_a_new_approval(self):
         self.approved()
@@ -303,19 +330,19 @@ class ApprovalBindingTest(WorkspaceCase):
         (self.web / "features" / "spec.feature").write_text(SPEC.format(title="Web", scenario="Something else", n=1),
                                                             encoding="utf-8", newline="\n")
         lockfile.lock(self.web, feature_dir, "FEAT-007", "spec", [self.web / "features" / "spec.feature"])
-        self.assertEqual(self.problems(), ["@web/features/spec.feature changed after the examples approval; "
+        self.assertEqual(self.problems(), ["web:features/spec.feature changed after the examples approval; "
                                            "it has to be approved again"])
 
     def test_a_changed_member_configuration_needs_a_new_approval(self):
         self.approved()
         with (self.api / ".bdd" / "config.toml").open("a", encoding="utf-8") as handle:
             handle.write("\n# quietly loosened\n")
-        self.assertIn("@api/.bdd/config.toml changed after the examples approval", self.problems()[0])
+        self.assertIn("api:.bdd/config.toml changed after the examples approval", self.problems()[0])
 
     def test_a_member_dropped_from_the_workspace_invalidates_the_approval(self):
         self.approved()
         self.config(tail=f'\n[workspace]\nweb = {json.dumps(str(self.web))}\n')
-        self.assertTrue(any("@api/" in p for p in self.problems()))
+        self.assertEqual(self.problems(), ["api left the workspace after the examples approval; it has to be approved again"])
 
     def test_examples_cannot_be_approved_while_a_member_is_not_observed(self):
         shutil.rmtree(self.api)

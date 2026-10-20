@@ -9,7 +9,7 @@ An approval is a record in the feature's ``state.json``:
                 auto            recorded by the orchestrator under the auto / autopilot levels
     origin      pending | human | headless | invalid | unverifiable | self-reported | auto
     artifacts   SHA-256 of what was approved (rules.md, or the feature files; for the examples of a feature that spans
-                several repositories also each member's feature files and config.toml, keyed ``@member/path``)
+                several repositories, each member's feature files and config.toml in a separate ``members`` map)
 
 A hook-grade approval starts as ``pending``: when the hook runs, the person's prompt is not yet in
 the session transcript, so who wrote it cannot be checked yet. ``verify_origins`` checks it
@@ -37,7 +37,7 @@ TRANSCRIPT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
 
 # -- what is being approved ----------------------------------------------------------------
 def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict[str, str]:
-    """Digests of the files this approval covers; refuses if there is nothing to approve."""
+    """Digests of the files of this repository that the approval covers; refuses if there is nothing to approve."""
     if gate == "rules":
         rules = feature_dir / "rules.md"
         if not rules.is_file():
@@ -45,45 +45,47 @@ def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -
         files = [rules]
     else:
         files = featurefiles.spec_files(root, feature_id)
-    hashes = {lockfile.relative(root, f): lockfile.file_digest(f) for f in files}
-    if gate == "examples":
-        members = member_artifacts(root, feature_id)
-        hashes.update(members)
-        files = files or [key for key in members if key.endswith(".feature")]
-        if not files:
-            raise UsageError(f"there is nothing to approve: no .feature file is tagged @{feature_id}")
-    return hashes
+    return {lockfile.relative(root, f): lockfile.file_digest(f) for f in files}
 
 
-MEMBER_PREFIX = "@"
-
-
-def member_artifacts(root: Path, feature_id: str) -> dict[str, str]:
-    """Digests of what each other repository of a workspace contributes to the examples: its feature files for the
-    feature and its ``config.toml``. Approving the examples covers them, so a member's specs cannot be unlocked, edited and
-    locked again (or its configuration changed) without the person approving again. A member that cannot be read here
-    cannot be approved."""
-    found: dict[str, str] = {}
+def member_artifacts(root: Path, feature_id: str) -> dict[str, dict[str, str]]:
+    """What each other repository of a workspace contributes to the examples: member name -> {path inside the member ->
+    digest} of its feature files for the feature and its ``config.toml``. They are kept apart from this repository's own
+    artifacts (a map of their own in the approval), so no name of one can stand for a file of the other. Approving the
+    examples covers them, so a member's specs cannot be unlocked, edited and locked again, added to, or its configuration
+    changed, without the person approving again. A member that cannot be read here cannot be approved."""
+    found: dict[str, dict[str, str]] = {}
     for member in cfg.load(root).workspace:
         why = workspace.unobserved(member)
         if why:
             raise UsageError(f"cannot approve the examples: {member.name} is not observed here ({why})")
         files = [member.path / cfg.BDD_DIR / "config.toml", *featurefiles.spec_files(member.path, feature_id)]
-        found.update({f"{MEMBER_PREFIX}{member.name}/{lockfile.relative(member.path, f)}": lockfile.file_digest(f) for f in files})
+        found[member.name] = {lockfile.relative(member.path, f): lockfile.file_digest(f) for f in files}
     return found
 
 
-def artifact_path(root: Path, rel: str) -> Path | None:
-    """Where an artifact key points: a path in this repository, or ``@member/path`` in a member (None when the member is
-    no longer part of the workspace or the path leaves it)."""
-    if not rel.startswith(MEMBER_PREFIX):
-        return root / rel
-    name, _, inner = rel[len(MEMBER_PREFIX):].partition("/")
-    for member in cfg.load(root).workspace:
-        target = member.path / inner
-        if member.name == name and workspace.inside(member.path, target):
-            return target
-    return None
+def member_problems(root: Path, feature_id: str, recorded: dict[str, dict[str, str]]) -> list[str]:
+    """How the members' contribution to the examples differs from what was approved: changed, added or removed files, a
+    member that joined or left the workspace, or one that cannot be read here."""
+    try:
+        current = member_artifacts(root, feature_id)
+    except UsageError as exc:
+        return [str(exc)]
+    again = "after the examples approval; it has to be approved again"
+    problems: list[str] = []
+    for name, files in current.items():
+        old = recorded.get(name)
+        if old is None:
+            problems.append(f"{name} joined the workspace {again}")
+            continue
+        for rel, digest in files.items():
+            if rel not in old:
+                problems.append(f"{name}:{rel} was added {again}")
+            elif old[rel] != digest:
+                problems.append(f"{name}:{rel} changed {again}")
+        problems += [f"{name}:{rel} was removed {again}" for rel in old if rel not in files]
+    problems += [f"{name} left the workspace {again}" for name in recorded if name not in current]
+    return problems
 
 
 def prerequisite_problems(data: dict, gate: str) -> list[str]:
@@ -126,18 +128,22 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
     feature_id = data["feature"]
     check_grade(root, data, grade)
     artifacts: dict[str, str] = {}
+    members: dict[str, dict[str, str]] = {}
     if decision == "approve":
         problems = prerequisite_problems(data, gate)
         if problems:
             raise UsageError(f"cannot approve {gate}: " + "; ".join(problems))
         artifacts = artifact_hashes(root, feature_dir, feature_id, gate)
         if gate == "examples":
-            ensure_spec_locked(root, feature_dir, feature_id,
-                               {k: v for k, v in artifacts.items() if not k.startswith(MEMBER_PREFIX)})
+            members = member_artifacts(root, feature_id)
+            if not artifacts and not any(rel.endswith(".feature") for files in members.values() for rel in files):
+                raise UsageError(f"there is nothing to approve: no .feature file is tagged @{feature_id}")
+            ensure_spec_locked(root, feature_dir, feature_id, artifacts)
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
-             "origin": {"hook": "pending"}.get(grade, grade), "artifacts": artifacts, "session": session,
+             "origin": {"hook": "pending"}.get(grade, grade), "artifacts": artifacts, "members": members,
+             "session": session,
              "prompt_id": prompt_id, "transcript_path": transcript_path,
              "mode": cfg.load(root).enforcement, "hooks_seen": bool(data.get("hooks_seen"))}
 
@@ -325,9 +331,11 @@ def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
         return [f"the {gate} approval was revoked by a change ({last['revoked']}); it has to be approved again"]
     problems = grade_problems(root, data, gate, last)
     for rel, digest in last["artifacts"].items():
-        target = artifact_path(root, rel)
-        if target is None or not target.is_file() or lockfile.file_digest(target) != digest:
+        target = root / rel
+        if not target.is_file() or lockfile.file_digest(target) != digest:
             problems.append(f"{rel} changed after the {gate} approval; it has to be approved again")
+    if gate == "examples":
+        problems += member_problems(root, data["feature"], last.get("members", {}))
     return problems
 
 
