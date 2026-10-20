@@ -46,7 +46,8 @@ signed; protect the branch (required reviews, no direct pushes) for that. See [C
 **Can production code cheat the tests?**
 It runs inside the test process, so it could in principle detect that tests are running. The auditor reads the diff for
 that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to
-leave surviving mutants. See [adapters](adapters.md).
+leave surviving mutants. The Python adapter ships a wrapper for mutmut and the Playwright adapter one for Stryker, so
+turning the check on is an install and a few lines of configuration. See [adapters](adapters.md).
 
 **Does greenlight enforce a language standard, a style, or "the latest version, nothing deprecated"?**
 It enforces what the project declares. `.bdd/standards.md` (written and approved by you) states the language and
@@ -61,6 +62,11 @@ Yes, as far as a test or a check can show it. The standards file has API and dat
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.
+
+**Can one feature span several repositories?**
+Yes: name the other repositories in a `[workspace]` table in the home repository's `.bdd/config.toml`. The home keeps the
+rules, approvals and report; each member keeps its own scenarios, locks and recorded runs under the same ids, and the home's
+gates read them. See [concepts](concepts.md).
 
 **Can I use it on an existing code base?**
 Yes. New features and changes work as on any project; scenarios that describe behaviour the system already has are

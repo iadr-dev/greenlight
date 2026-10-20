@@ -45,6 +45,18 @@ Arguments: `$ARGUMENTS`
 The feature directory is `.bdd/features/FEAT-n-slug/`. Write the person's request word for word into the task you
 give the first agent.
 
+### Features that span several repositories
+
+If `.bdd/config.toml` has a `[workspace]` table (`bdd workspace list` shows the members), the repository you run in is the
+home: the brief, rules, state, approvals and report stay here, and every agent task names the repository each file belongs
+to (the home or a member) and tells the agent to run its commands for a member as `bdd --in NAME ...`. Create the feature
+once with `bdd state next-id` and `bdd state init` here, then in each member that takes part with
+`bdd --in NAME state init FEAT-n --title "<same title>"`; scenarios in a member carry the same `@FEAT-n`, `@R-` and `@EX-`
+ids. Check the members yourself before each gate (`bdd workspace check FEAT-n --gate bind|implement|verify`,
+`bdd lock FEAT-n --check --require --workspace`, `bdd trace FEAT-n --workspace`); the home's gates refuse while a member's
+evidence is missing, stale or broken. A member that is not on this machine is not observed: say so to the person and
+list it in the report; never mark it fine.
+
 ## 3. The loop
 
 Read where the feature stands (`bdd state show FEAT-n --json`: its `phase`) and run that phase. For each phase

@@ -1,0 +1,2 @@
+-r requirements-dev.in
+mutmut==3.8.0

@@ -55,6 +55,20 @@ Each adapter ships a complete, pinned GitHub Actions workflow in `adapters/<name
 [ci.md](ci.md) for what it checks (approvals from the committed record, locks, a fresh green run, traceability, and the
 optional stability, quality and mutation checks) and what it cannot. `adapters/<name>/ci.md` has the plain test run.
 
+## One feature in several repositories
+
+Each repository uses the adapter that fits its own stack (a Python API with `python-pytest-bdd`, a web app with
+`ts-playwright-bdd`); the home lists the others:
+
+```toml
+[workspace]
+web = "../shop-web"
+api = "../shop-api"
+```
+
+Run commands in a member with `bdd --in web run FEAT-007`, or in all of them with `--workspace`. Details and limits:
+[concepts](concepts.md).
+
 ## Quality checks (optional)
 
 The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does
@@ -101,7 +115,7 @@ An adapter, or the project, can add an `[adapters.mutation]` table. It is off un
 
 ```toml
 [adapters.mutation]
-command    = '{project_python} -m your_mutation_wrapper {files} --report {out}'
+command    = '{project_python} -I tests/tools/mutate_python.py --report {out} -- {files}'
 threshold  = 80        # percent of killed / (killed + survived); above 0, at most 100
 timeout    = 1800      # seconds
 extensions = [".py"]   # only changed files with these suffixes are mutated (blank: all)
@@ -118,8 +132,9 @@ proven (committed or not; tests and `.bdd/` are never included). The tool writes
 `{out}` is a file in a fresh private folder outside the project, removed afterwards, so nothing in the project can have
 written the report beforehand. `killed` and `survived` are required whole numbers and decide the score; the others
 are shown, not counted. The tool must exit 0 once it has finished and state survivors in the report; a non-zero exit
-fails the check whatever the report says (a wrapper turns a tool that exits non-zero on survivors into exit 0 plus
-counts). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
+fails the check whatever the report says (a tool that exits non-zero on survivors needs a wrapper that turns that into
+exit 0 plus counts; the adapters ship them: `tests/tools/mutate_python.py` for mutmut in `python-pytest-bdd`,
+`tests/tools/mutate-ts.mjs` for Stryker in `ts-playwright-bdd`, each described in the adapter's guide). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
 If production files changed but none ends in `extensions`, the check fails too: it covered nothing. Only a feature
 that changed no production file at all passes with "nothing to mutate". The result is recorded in
 `.bdd/.runs/FEAT-n/mutation.json` (command, exit status, hash of the report, the changed and the mutated files), which

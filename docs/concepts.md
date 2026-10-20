@@ -141,6 +141,28 @@ spec-auditor. Each has an explicit tool list and write permissions (the implemen
 cannot write at all). They read files, never chat history, and report instead of recording; the orchestrator
 (`/greenlight:feature`) records everything.
 
+## Features across several repositories
+
+When one feature needs work in more than one repository (an API and a web app, a library and its consumers), one
+repository is the home: it holds the brief, the rules, the approvals and the report. The others are listed in the home's
+`.bdd/config.toml`:
+
+```toml
+[workspace]
+web = "../shop-web"
+```
+
+Each member is a greenlight project of its own, with the scenarios, steps, locks and recorded runs for its share of the
+rules, tagged with the same `@FEAT-n`, `@R-` and `@EX-` ids. Ids come from the home (`bdd state next-id`); a member
+learns one with `bdd --in web state init FEAT-n --title "..."`. `bdd --in NAME COMMAND` runs any command inside a member,
+and `--workspace` repeats `lock --check`, `run`, `classify` and `status` in every repository (`bdd trace --workspace`
+shows one matrix). The home's bind, implement and verify gates read each member's own evidence: a valid red and a green
+run, intact locks, no open integrity violation. A member that is not on this machine, or not readable, is **not observed
+here**; it cannot back a gate and the report says so. Approving the examples also covers each member's feature files and
+configuration, so a member's spec cannot be unlocked, edited and locked again without you approving again. The guard and the tripwire protect a member through the paths of
+the tool calls a session makes into it; Claude Code does not tell hooks which extra directories a session includes, so
+a member the session never touches is protected only by its locks and by CI.
+
 ## Changing approved work
 
 `/greenlight:change FEAT-n "<what and why>"` is the one sanctioned route: it releases the affected locks, revokes the
