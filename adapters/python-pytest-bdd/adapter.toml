@@ -14,7 +14,8 @@ optional = ["time-machine", "respx", "httpx"]
 features = "tests/features"
 steps = "tests/steps"
 drivers = "tests/drivers"
-support = ["tests/pytest.ini", "tests/conftest.py", "tests/test_features.py", "tests/__init__.py", "tests/*/conftest.py"]
+support = ["tests/pytest.ini", "tests/conftest.py", "tests/test_features.py", "tests/__init__.py", "tests/*/conftest.py",
+           "tests/tools/mutate_python.py"]
 
 [run]
 # {project_python} is the project's own environment (`python = ` in .bdd/config.toml, else .venv or venv), so the tests

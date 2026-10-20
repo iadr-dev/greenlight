@@ -76,6 +76,24 @@ jobs:
       - name: greenlight's own specs pass (dogfood)
         run: python specs/run_specs.py
 
+  mutation-wrapper:
+    name: mutation wrapper (mutmut, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+      - name: Install mutmut with the adapter's requirements (pinned, hashed, wheels only)
+        run: uv pip install --system --require-hashes --no-build -r requirements-mutation.txt
+      - name: The wrapper with the real mutmut (weak tests fail the threshold, strong tests pass)
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_mutation_wrapper.py" -v
+
   adapter-ts-playwright-bdd:
     name: adapter contract (ts-playwright-bdd, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -102,6 +120,10 @@ jobs:
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
+      - name: The Stryker wrapper with the real Stryker (weak tests leave survivors, strong tests do not)
+        env:
+          GREENLIGHT_NODE_MUTATION_TESTS: "1"
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_mutation_wrapper_ts.py" -v
 
   reference-app-shop-web:
     name: reference app (shop-web, ${{ matrix.os }})
