@@ -74,7 +74,7 @@ GENERIC_RUNS = {
     "csv-tool": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
                  "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
                  ["tests/run_junit.py", "go.mod"]),
-    "money-lib": ("{python} -I tests/run_junit.py --reports node-report.xml --command \"npm run bdd --silent -- {marker}_ dist/tests/\"",
+    "money-lib": ("{python} -I tests/run_junit.py --reports node-report.xml --command \"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
                   ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"]),
 }
 
