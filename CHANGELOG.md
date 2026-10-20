@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The CI templates capture the list of finished features before looping, so a failing `bdd status --done` stops the job instead of passing with nothing checked.
+
 ### Added
 - Stability reruns and CI that needs no session (decision D35): `bdd stability FEAT-n [--runs N]` reruns a feature (the first run in the usual order, the others shuffled) and flags a scenario whose result changes between runs; with `[stability] runs = N` in `.bdd/config.toml` the verify gate wants a current stable result, and the auditor checklist has item E6. `bdd approve FEAT-n --check` judges the approvals from the committed record alone (hashes of the approved files, the recorded origin and grade, required approvals present), and `bdd status --done` lists the finished features, so CI can check them. Every adapter ships a complete GitHub Actions workflow in `adapters/<name>/ci/github-actions.yml` with pinned actions, read-only permissions, uv for Python, and the gates per finished feature; `docs/ci.md` says what the approval check can and cannot tell.
 
