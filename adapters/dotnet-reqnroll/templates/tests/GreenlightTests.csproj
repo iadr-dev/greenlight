@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The test project. It is bound: it is locked with the steps and drivers, together with nuget.config and the lock
+       file. To test your own projects, add <ProjectReference Include="..\src\YourApp\YourApp.csproj" /> below. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Greenlight.Tests</RootNamespace>
+    <!-- Packages are restored from packages.lock.json with their hashes; a changed or substituted package fails the restore. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Use of an obsolete API is an error, so the code stays on current APIs. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CS0612;CS0618;CS0672</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="Reqnroll.xUnit" Version="3.3.4" />
+    <PackageReference Include="JunitXml.TestLogger" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

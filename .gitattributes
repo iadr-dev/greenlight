@@ -2,3 +2,12 @@
 # Hook entry points run under Git Bash on Windows: they must keep LF endings.
 tools/bdd/bdd text eol=lf
 *.sh text eol=lf
+
+# Go and .NET adapter files: formatters and lock files compare bytes, so they keep LF endings on every OS.
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+packages.lock.json text eol=lf
+nuget.config text eol=lf

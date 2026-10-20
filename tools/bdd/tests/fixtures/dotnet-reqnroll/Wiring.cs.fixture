@@ -1,0 +1,6 @@
+namespace Greenlight.Tests.Drivers;
+
+public static class Wiring
+{
+    public static SystemUnderTest CreateSystem(Clock clock, Stubs stubs) => new FullSystem(clock, stubs);
+}

@@ -9,6 +9,8 @@ broken test.
 | Adapter | Status | For |
 |---|---|---|
 | `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib`, `data` |
+| `go-godog` | available | Go services, libraries and command-line tools with godog (Cucumber for Go); profiles `base`, `api`, `cli`, `lib`, `data` |
+| `dotnet-reqnroll` | available | .NET services, libraries and command-line tools with Reqnroll and xUnit; profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
 | `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests (no device); profiles `base`, `lib`, `data` |
@@ -16,6 +18,22 @@ broken test.
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
 repository and why. If nothing fits, greenlight says so; it does not pretend.
+
+## The Go and .NET adapters
+
+Both are the language-specific form of the generic-junit contract: the steps for every core instruction, the drivers (a world
+per scenario, the seams `ExpectedMissing`, a clock, stubs, comparison helpers, a query counter) and a run command that
+produces the JUnit report are shipped and pinned, so a missing seam is an *expected* failure and a broken test a *defect*
+from the first run.
+
+- `go-godog` puts the test code in its own Go module in `tests/` (`go.mod` and `go.sum` pinned, read-only with `-mod=readonly`),
+  runs `go -C tests test` and lets godog's junit formatter write the report. See `adapters/go-godog/guide.md`.
+- `dotnet-reqnroll` puts the test code in its own project in `tests/` (packages pinned in `packages.lock.json`, restored with
+  `RestoreLockedMode`), runs `dotnet test` through a small bound wrapper and lets `JunitXml.TestLogger` write the report. See
+  `adapters/dotnet-reqnroll/guide.md`.
+
+Detection suggests them from `go.mod` and from `*.csproj`/`*.sln`. In CI, each adapter has a job that scaffolds it into a
+temporary project and runs the sample feature, every core step and a red phase for real.
 
 ## The JVM adapters
 
