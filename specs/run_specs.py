@@ -5,7 +5,7 @@ It scaffolds the `python-pytest-bdd` adapter into a temporary folder, drops in t
 (`specs/operations.py`, which maps the names used in the features to `tools/bdd/bdd`) and the features, and runs
 pytest there. Nothing of the adapter is copied into the repository, so nothing can drift from it.
 
-    python specs/run_specs.py [pytest options]
+    python specs/run_specs.py
 
 Needs `pytest` and `pytest-bdd` (requirements-dev.txt) and `sh`.
 """
@@ -23,7 +23,7 @@ REPO = HERE.parent
 ADAPTER = REPO / "adapters" / "python-pytest-bdd" / "templates" / "tests"
 
 
-def main(extra: list[str]) -> int:
+def main() -> int:
     with tempfile.TemporaryDirectory(prefix="greenlight-specs-") as tmp:
         scaffold = Path(tmp) / "tests"
         shutil.copytree(ADAPTER, scaffold, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -32,9 +32,9 @@ def main(extra: list[str]) -> int:
         shutil.copyfile(HERE / "operations.py", scaffold / "drivers" / "operations.py")
         shutil.copytree(HERE / "features", scaffold / "features", dirs_exist_ok=True)
         env = {**os.environ, "GREENLIGHT_REPO": str(REPO)}
-        command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-W", "ignore", *extra]
+        command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-W", "ignore"]
         return subprocess.run(command, cwd=tmp, env=env).returncode
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())

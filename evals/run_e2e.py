@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -34,18 +33,15 @@ GIT = ["git", "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "-c", "
        "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
 
 
-SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*")      # a model id or a request name: never an option, never a path escape
+# The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
+MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us.anthropic.claude-haiku-5-5",
+          "sonnet-5.5": "us.anthropic.claude-sonnet-5-5", "opus-5.5": "us.anthropic.claude-opus-5-5"}
 
 
-def checked(value: str, what: str) -> str:
-    if not SAFE_NAME.fullmatch(value) or ".." in value:
-        raise SystemExit(f"{what} {value!r} is not an acceptable name")
-    return value
-
-
-def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True) -> subprocess.CompletedProcess:
+def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True,
+        stdin_text: str | None = None) -> subprocess.CompletedProcess:
     done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          stdin=subprocess.DEVNULL, timeout=timeout)
+                          input=stdin_text, stdin=None if stdin_text is not None else subprocess.DEVNULL, timeout=timeout)
     if check and done.returncode != 0:
         raise SystemExit(f"command failed ({done.returncode}): {' '.join(command)}\n{done.stdout}\n{done.stderr}")
     return done
@@ -84,11 +80,11 @@ def set_up(project: Path, env: dict, autonomy: str) -> None:
 
 def ask(project: Path, env: dict, request: str, model: str, autonomy: str, minutes: int) -> dict:
     prompt = f'/greenlight:feature "{request.strip()}" --autonomy {autonomy}'
-    command = ["claude", "-p", prompt, "--plugin-dir", str(REPO), "--model", model, "--allowedTools", TOOLS,
-               "--output-format", "json", "--setting-sources", "project"]
+    command = ["claude", "-p", "--plugin-dir", str(REPO), "--model", model, "--allowedTools", TOOLS,
+               "--output-format", "json", "--setting-sources", "project"]          # the prompt goes in on stdin
     started = time.time()
     try:
-        done = run(command, project, env, timeout=minutes * 60, check=False)
+        done = run(command, project, env, timeout=minutes * 60, check=False, stdin_text=prompt)
         text, code = done.stdout, done.returncode
     except subprocess.TimeoutExpired as exc:
         text, code = (exc.stdout or "") if isinstance(exc.stdout, str) else "", "timeout"
@@ -141,8 +137,9 @@ def collect(project: Path, env: dict) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--request", default="discounts", help="a file name in evals/requests/ (without .md)")
-    ap.add_argument("--model", default="haiku")
+    requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
+    ap.add_argument("--request", default="discounts", choices=sorted(requests), help="a file in evals/requests/")
+    ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
     ap.add_argument("--autonomy", default="autopilot", choices=("guided", "standard", "auto", "autopilot"))
     ap.add_argument("--minutes", type=int, default=45, help="give up after this long")
     ap.add_argument("--keep", action="store_true", help="keep the temporary project and print its path")
@@ -151,13 +148,13 @@ def main() -> int:
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
-    request = (REQUESTS / f"{checked(args.request, 'request')}.md").read_text(encoding="utf-8")
-    checked(args.model, "model")
+    request = requests[args.request].read_text(encoding="utf-8")
+    model = MODELS[args.model]
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
         project, env = build_project(tmp)
         set_up(project, env, args.autonomy)
-        output = ask(project, env, request, args.model, args.autonomy, args.minutes)
+        output = ask(project, env, request, model, args.autonomy, args.minutes)
         row = {"request": args.request, "model": args.model, "claude": {k: output.get(k) for k in (
             "exit", "seconds", "is_error", "num_turns", "total_cost_usd", "subtype")}, **collect(project, env)}
         RESULTS.mkdir(exist_ok=True)
