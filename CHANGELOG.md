@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CI installs the adapter contract's requirements with `uv` (`uv pip install --require-hashes --no-build`) from the pinned `requirements-dev.txt`.
+
 - Decision D22 on QA capability: ideas from four public QA skill collections (three MIT, one noncommercial-only) are adapted in our own words into the auditor checklist, technique cards, mutation and stability checks and a test-data card; no text is imported.
 
 - The `python-pytest-bdd` adapter (`adapters/python-pytest-bdd/`: `adapter.toml`, `guide.md`, `ci.md`, `templates/`) and `bdd adapter list|apply NAME`, which copies the templates into a project without overwriting anything and registers the adapter (run, classify and scan tables) in `.bdd/config.toml`. Every core instruction of the `base`, `api`, `cli` and `lib` profiles is bound to a driver in `tests/steps/core_steps.py` (a test checks that none is missing and none is extra): fake-free seams in `tests/drivers/system.py` that raise `ExpectedMissing` (`BDD_EXPECTED_MISSING`) until the project implements them, logical-name maps in `operations.py` (an unmapped name is `NotMapped`, a test defect), a per-scenario world with an isolated workspace, an injectable clock, stubs that fail on unstubbed calls, and a real-network block. pytest options `--bdd-shuffle-seed` and `--bdd-scenario` give `bdd run --shuffle` and `--isolated`. A sample feature passes on a fresh scaffold; a contract test (in CI on Linux and Windows, skipped where `pytest-bdd` is not installed) scaffolds a project, runs it green, shuffled and isolated, passes `bdd scan` and `bdd lint`, and checks that a missing seam and a 404 classify as expected failures and an unmapped name as a test defect.
