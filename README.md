@@ -1,5 +1,14 @@
 # greenlight
 
+```text
+                               ___       __    __
+   ____ _________  ___  ____  / (_)___ _/ /_  / /_
+  / __ `/ ___/ _ \/ _ \/ __ \/ / / __ `/ __ \/ __/
+ / /_/ / /  /  __/  __/ / / / / / /_/ / / / / /_
+ \__, /_/   \___/\___/_/ /_/_/_/\__, /_/ /_/\__/
+/____/                         /____/
+```
+
 **AI × BDD spec-driven development for Claude Code.** greenlight turns a feature request into human-approved,
 executable specifications, and then into working code. People approve the contract (rules and examples); the AI does
 the mechanical work in between, under gates it cannot talk its way past.
