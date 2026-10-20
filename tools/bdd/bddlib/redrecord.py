@@ -30,20 +30,19 @@ def git(root: Path, *args: str) -> str:
     return done.stdout
 
 
-BYTECODE_SUFFIXES = (".pyc", ".pyo")
+_GENERATED_BYTECODE = re.compile(r"(?:.*/)?__pycache__/[^/]+\.cpython-\d+(?:\.opt-[12])?\.pyc")
 
 
-def is_bytecode(name: str) -> bool:
-    """Python's compiled files change every time the tests run (they embed the source's modification time), so a
-    project that does not ignore them would see its production source change from running its own tests."""
-    return "__pycache__" in name.split("/") or name.endswith(BYTECODE_SUFFIXES)
+def is_generated_bytecode(name: str) -> bool:
+    """Exactly what Python writes next to a module when it imports it: ``__pycache__/<module>.cpython-312.pyc``.
+    Those files embed the source's modification time, so a project that does not ignore them would see its production
+    source change from running its own tests. Nothing else qualifies: a ``.py`` under ``__pycache__`` or a ``.pyc``
+    anywhere else can be imported, so it is source. Callers apply this to untracked files only."""
+    return _GENERATED_BYTECODE.fullmatch(name) is not None
 
 
 def is_production(name: str, excluded: list[str]) -> bool:
-    """Folders (entries ending in a slash) match by prefix, files only by their exact name; compiled bytecode is
-    generated, not source."""
-    if is_bytecode(name):
-        return False
+    """Folders (entries ending in a slash) match by prefix, files only by their exact name."""
     return not any(name.startswith(entry) if entry.endswith("/") else name == entry for entry in excluded)
 
 
@@ -54,10 +53,11 @@ def excluded_prefixes(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:
 
 def production_files(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:
     """Tracked and untracked (not ignored) files that are neither greenlight data nor tests."""
-    listing = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    tracked = git(root, "ls-files", "-z", "--cached").split("\0")
+    untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
     excluded = excluded_prefixes(root, test_dirs)
-    names = sorted({n for n in listing.split("\0") if n})
-    return [n for n in names if is_production(n, excluded) and (root / n).is_file()]
+    names = sorted({*tracked, *(n for n in untracked if not is_generated_bytecode(n))})
+    return [n for n in names if n and is_production(n, excluded) and (root / n).is_file()]
 
 
 def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:
@@ -72,7 +72,8 @@ def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> l
             continue
         if "R" in entry[:2] or "C" in entry[:2]:
             i += 1                                    # a rename/copy entry is followed by the original path
-        paths.append(entry[3:])
+        if not (entry[:2] == "??" and is_generated_bytecode(entry[3:])):
+            paths.append(entry[3:])
     return [p for p in paths if is_production(p, excluded)]
 
 
@@ -81,7 +82,8 @@ def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: st
     if not _COMMIT.fullmatch(commit):
         raise UsageError("the recorded red commit is not a commit id")
     tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--").split("\0")
-    untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
+    untracked = [n for n in git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
+                 if not is_generated_bytecode(n)]
     excluded = excluded_prefixes(root, test_dirs)
     return sorted(n for n in {*tracked, *untracked} if n and is_production(n, excluded) and (root / n).is_file())
 

@@ -29,11 +29,17 @@ class RequestTableTest(unittest.TestCase):
 
 
 class ProductionChangesTest(unittest.TestCase):
-    def test_greenlights_data_tests_and_bytecode_are_not_production(self):
+    def test_greenlights_data_tests_and_generated_bytecode_are_not_production(self):
         harness = load_harness()
-        lines = ["?? .bdd/features/FEAT-001/state.json", " M tests/features/billing.feature", "?? billing/__pycache__/",
+        lines = ["?? .bdd/features/FEAT-001/state.json", " M tests/features/billing.feature",
                  "?? billing/__pycache__/pricing.cpython-312.pyc", " M .gitignore"]
         self.assertEqual(harness.production_changes(lines), [])
+
+    def test_anything_importable_under_a_bytecode_name_is_production(self):
+        harness = load_harness()
+        lines = ["?? billing/__pycache__/evil.py", "?? billing/legacy.pyc", " M billing/__pycache__/pricing.cpython-312.pyc"]
+        self.assertEqual(harness.production_changes(lines),
+                         ["billing/__pycache__/evil.py", "billing/legacy.pyc", "billing/__pycache__/pricing.cpython-312.pyc"])
 
     def test_a_changed_renamed_or_new_source_file_is_production(self):
         harness = load_harness()

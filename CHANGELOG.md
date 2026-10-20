@@ -24,7 +24,7 @@ versions follow [SemVer](https://semver.org/).
 
 ### Fixed
 - The CI example in `docs/ci.md` no longer fails in a project that has no feature yet.
-- Compiled Python files (`__pycache__`, `.pyc`, `.pyo`) are no longer counted as production source: in a project that does not ignore them, running the tests rewrote them, so an adopted feature whose code was unchanged (or restored) failed the production-source check (A3), and the red record and the mutation scope saw changes that were not source.
+- Generated Python bytecode is no longer counted as production source: in a project that does not ignore `__pycache__`, running the tests rewrote those files, so an adopted feature whose code was unchanged (or restored) failed the production-source check (A3), and the red record and the mutation scope saw changes that were not source. Only an untracked file of exactly the shape Python writes (`__pycache__/<module>.cpython-312.pyc`) is skipped; a `.py` under `__pycache__`, a sourceless `.pyc` elsewhere and any tracked file still count, because they can be imported.
 - `test_fifty_locked_features_are_evaluated_quickly` measures the fastest of seven calls against the same hook budget instead of the mean of five, so a loaded CI machine no longer fails it while a slow guard still does.
 
 ## [0.1.0] - 2026-10-20
