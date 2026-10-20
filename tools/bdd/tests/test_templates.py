@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import cli, scan, state, trace
+from bddlib import cli, design, scan, state, trace
 
 REPO = Path(__file__).resolve().parents[3]
 TEMPLATES = REPO / "templates"
@@ -16,6 +16,7 @@ SECTIONS = {
     "brief.md": ["The ask", "The job behind it", "Problem statement", "Goals", "Non-goals", "Assumptions", "Open questions"],
     "rules.md": ["Business rules", "Non-functional requirements", "Out of scope"],
     "test-design.md": ["Coverage check"],
+    "design.md": ["Components and data flow", "Key interaction"],
     "system.md": ["Interfaces", "Dependencies", "Clock", "Seams that do not exist yet"],
     "tasks.md": [],
     "report.md": ["Traceability", "Gates, locks and approvals", "Checklist", "Findings", "Cost"],
@@ -43,6 +44,13 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual({k: v["examples"] for k, v in tasks.items()},
                          {"T-000.1": ["EX-000.1.1", "EX-000.1.2"], "T-000.2": ["EX-000.1.3"]})
 
+    def test_the_template_design_view_passes_its_own_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            shutil.copyfile(TEMPLATES / "design.md", folder / "design.md")
+            shutil.copyfile(TEMPLATES / "system.md", folder / "system.md")
+            self.assertEqual(design.lint(folder), [])
+
     def test_the_template_system_map_lists_its_dependencies_for_the_scan(self):
         self.assertEqual(scan.declared_dependencies(TEMPLATES / "system.md"), {"payments"})
 
@@ -59,7 +67,7 @@ class ExampleFeatureTest(unittest.TestCase):
             '[[adapters]]\nname = "x"\nfeatures = "features"\nsteps = "steps"\n', encoding="utf-8")
         shutil.copytree(EXAMPLE / "features", cls.root / "features")
         cls.feature_dir = state.create(cls.root, "FEAT-007", "Order discounts", "standard")
-        for name in ("brief.md", "rules.md", "test-design.md", "system.md", "tasks.md"):
+        for name in ("brief.md", "rules.md", "test-design.md", "system.md", "tasks.md", "design.md"):
             shutil.copyfile(EXAMPLE / name, cls.feature_dir / name)
 
     @classmethod

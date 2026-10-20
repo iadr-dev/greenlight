@@ -56,7 +56,7 @@ this one needs. Tell it to read the playbook first.
 | specify | product-analyst | `rules.md` exists with `R-` lines | **human gate: rules** (step 4) |
 | test-design | qa-designer | `bdd trace FEAT-n` shows no `T001` | `bdd gate FEAT-n test-design --result pass` |
 | examples | qa-designer | `bdd lint` clean, `bdd trace` no gaps | **human gate: examples** (step 4) |
-| system-map | system-analyst | every step mapped, or listed as a seam | `bdd gate FEAT-n system-map --result pass` |
+| system-map | system-analyst | every step mapped, or listed as a seam; `bdd design FEAT-n` clean | `bdd gate FEAT-n system-map --result pass` |
 | refine | step-engineer | `bdd lint` clean | `bdd gate FEAT-n refine --result pass` |
 | bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you | write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
@@ -116,7 +116,7 @@ gate. If the gate says an approval is still waiting to be verified, ask the pers
 Never type the approval yourself and never ask another tool or agent to. Two exceptions, each recorded for what it
 is: at `auto` and `autopilot`, `bdd approve FEAT-n GATE --auto`; and in a project without hooks (soft enforcement),
 after the person says yes in the session, `bdd approve FEAT-n GATE --self-reported`. Say which one applied.
-Under `guided` also ask the person after test design before moving on.
+Under `guided` also ask the person after test design before moving on, and show them `design.md` after the system map and wait for their reaction before binding.
 
 ## 5. When the feature is done
 

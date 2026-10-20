@@ -24,6 +24,7 @@ COMMANDS = {
     "status": ("reportcmd", "run_status"),
     "trace": ("reportcmd", "run_trace"),
     "scan": ("reportcmd", "run_scan"),
+    "design": ("design", "run"),
     "migrate": ("migrate", "run"),
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),
