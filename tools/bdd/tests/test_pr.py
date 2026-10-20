@@ -122,11 +122,24 @@ class OutputTest(PrHelpers, ProjectCase):
 
     def test_places_outside_the_project_or_under_the_managed_folder_are_refused(self):
         self.prepare()
-        for target in ("../outside.md", ".bdd/pr.md", "missing-folder/pr.md"):
+        for target in ("../outside.md", ".bdd/pr.md", "missing-folder/pr.md", "..", str(self.root.parent / "abs.md")):
             with self.subTest(target=target):
                 code, _, err = self.cli("--output", target)
                 self.assertEqual(code, 2, err)
+                self.assertIn("file name", err)
         self.assertFalse((self.root.parent / "outside.md").exists())
+
+    def test_the_managed_folder_is_refused_as_the_current_folder(self):
+        out, err, here = io.StringIO(), io.StringIO(), os.getcwd()
+        os.chdir(self.root / ".bdd")
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["pr", "FEAT-007", "--output", "pr.md"])
+        finally:
+            os.chdir(here)
+        self.assertEqual(code, 2)
+        self.assertIn("managed by the bdd command line", err.getvalue())
+        self.assertFalse((self.root / ".bdd" / "pr.md").exists())
 
 
 if __name__ == "__main__":

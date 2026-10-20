@@ -2,7 +2,7 @@
 
     bdd pr FEAT-007                    Markdown on stdout, safe to paste
     bdd pr FEAT-007 --json             the same facts as data
-    bdd pr FEAT-007 --output PR.md     write the Markdown to a file inside the project (not under .bdd/)
+    bdd pr FEAT-007 --output PR.md     write the Markdown to a new file with that name in the current folder (inside the project, not .bdd/)
 
 Everything comes from artifacts and records: the brief, the trace matrix, the state file (gates, approvals,
 assumptions, cost), the recorded runs, the quality, mutation and stability results and the auditor's report.
@@ -274,7 +274,9 @@ def render_matrix(rules: list[dict]) -> list[str]:
 
 
 def verdict_word(valid: bool | None) -> str:
-    return "" if valid is None else (" (valid)" if valid else " (NOT valid)")
+    if valid is None:
+        return ""
+    return " (valid)" if valid else " (NOT valid)"
 
 
 def render_run(label: str, run: dict | None, digest: str = "") -> str:
@@ -390,18 +392,20 @@ def render(facts: dict) -> str:
 
 # -- command ------------------------------------------------------------------------------------
 def output_target(root: Path, name: str, force: bool) -> str:
-    """A path to a file inside the project, outside .bdd/ (CLI-managed data), not replaced without --force."""
-    base = os.path.realpath(root)
-    target = os.path.realpath(os.path.join(os.getcwd(), name))
-    shown = os.path.relpath(target, base).replace(os.sep, "/")
-    if os.path.commonpath([base, target]) != base or target == base:
-        raise UsageError(f"--output must name a file inside {base}")
-    if shown == cfg.BDD_DIR or shown.startswith(cfg.BDD_DIR + "/"):
-        raise UsageError(f"--output may not be inside {cfg.BDD_DIR}/: that folder is managed by the bdd command line")
-    if not os.path.isdir(os.path.dirname(target)):
-        raise UsageError(f"--output: the folder of {shown} does not exist")
+    """The path of a new file called ``name`` in the current folder, which must be inside the project but not under .bdd/
+    (CLI-managed data). Only a file name is accepted, so the path cannot be steered; an existing file needs --force."""
+    safe = os.path.basename(name)
+    if not safe or safe != name or safe in (os.curdir, os.pardir):
+        raise UsageError("--output takes a file name, written in the current folder; it is not a path")
+    base, folder = os.path.realpath(root), os.path.realpath(os.getcwd())
+    if os.path.commonpath([base, folder]) != base:
+        raise UsageError(f"--output writes in the current folder, which must be inside {base}")
+    inside = os.path.relpath(folder, base).replace(os.sep, "/")
+    if inside == cfg.BDD_DIR or inside.startswith(cfg.BDD_DIR + "/"):
+        raise UsageError(f"--output may not write inside {cfg.BDD_DIR}/: that folder is managed by the bdd command line")
+    target = os.path.join(folder, safe)
     if os.path.isdir(target) or (os.path.exists(target) and not force):
-        raise UsageError(f"{shown} exists; use --force to replace a file")
+        raise UsageError(f"{safe} exists; use --force to replace a file")
     return target
 
 
@@ -409,7 +413,7 @@ def run(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd pr", description="A pull-request description from a feature's records.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("--json", action="store_true", help="the facts as JSON instead of Markdown")
-    ap.add_argument("--output", metavar="FILE", help="write to a file inside the project instead of stdout")
+    ap.add_argument("--output", metavar="NAME", help="write to a file with this name in the current folder (inside the project)")
     ap.add_argument("--force", action="store_true", help="with --output: replace an existing file")
     args = ap.parse_args(argv)
 
@@ -421,8 +425,12 @@ def run(argv: list[str]) -> int:
             sys.stdout.write(text)
             return 0
         target = output_target(root, args.output, args.force)
-        Path(target).write_text(text, encoding="utf-8", newline="\n")
-        print(f"{args.feature}: wrote {os.path.relpath(target, os.path.realpath(root)).replace(os.sep, '/')}")
+        try:
+            Path(target).write_text(text, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            print(f"bdd pr: cannot write {args.output}: {exc.strerror or exc}", file=sys.stderr)
+            return 2
+        print(f"{args.feature}: wrote {args.output}")
         return 0
 
     try:
