@@ -1,6 +1,6 @@
 ---
 name: spec-auditor
-description: Independent review of a finished feature against the greenlight checklist, from artifacts only, returning a report with evidence for every line (verify phase). Read-only: it writes nothing and returns the report as text.
+description: "Independent review of a finished feature against the greenlight checklist, from artifacts only, returning a report with evidence for every line (verify phase). Read-only: it writes nothing and returns the report as text."
 tools: Read, Grep, Glob, Bash
 model: opus
 ---

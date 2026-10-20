@@ -1,7 +1,7 @@
 ---
 id: C.ENTITY.SEED
 kind: instruction
-apply_when: a scenario needs records to exist before the action: customers, orders, products, accounts
+apply_when: "a scenario needs records to exist before the action: customers, orders, products, accounts"
 ---
 ## Semantics
 

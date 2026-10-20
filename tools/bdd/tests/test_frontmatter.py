@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from bddlib.frontmatter import FrontmatterError, parse
 
@@ -26,11 +27,33 @@ class FrontmatterTest(unittest.TestCase):
             ("---\nnested:\n  child: 1\n---\n", "no value"),
             ("---\nlist: [a, b\n---\n", "unterminated"),
             ("---\njust text\n---\n", "expected 'key: value'"),
+            ("---\ndescription: Read-only: it writes nothing\n---\n", "put it in double quotes"),
+            ("---\ndescription: fine # not a comment here\n---\n", "put it in double quotes"),
+            ("---\ndescription: {braces}\n---\n", "put it in double quotes"),
+            ("---\ndescription: ends with a colon:\n---\n", "put it in double quotes"),
         ]:
             with self.subTest(bad=bad):
                 with self.assertRaises(FrontmatterError) as cm:
                     parse(bad)
                 self.assertIn(msg, str(cm.exception))
+
+
+class RealYamlTest(unittest.TestCase):
+    """Everything that Claude Code or Codex reads must also be plain, valid YAML where a real parser looks at it."""
+
+    ROOT = Path(__file__).resolve().parents[3]
+
+    def test_every_agent_skill_and_card_parses_with_the_strict_parser(self):
+        files = [*self.ROOT.glob("agents/*.md"), *self.ROOT.glob("skills/*/SKILL.md"), *self.ROOT.glob("cards/**/*.md")]
+        self.assertGreater(len(files), 40)
+        for path in files:
+            with self.subTest(file=path.relative_to(self.ROOT).as_posix()):
+                meta, _ = parse(path.read_text(encoding="utf-8"))
+                self.assertTrue(meta)
+
+    def test_a_quoted_value_may_hold_a_colon_and_a_space(self):
+        meta, _ = parse('---\ndescription: "Read-only: it writes nothing"\n---\n')
+        self.assertEqual(meta["description"], "Read-only: it writes nothing")
 
 
 if __name__ == "__main__":

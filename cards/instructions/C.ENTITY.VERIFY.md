@@ -1,7 +1,7 @@
 ---
 id: C.ENTITY.VERIFY
 kind: instruction
-apply_when: checking what was stored: records created or changed by the action
+apply_when: "checking what was stored: records created or changed by the action"
 ---
 ## Semantics
 

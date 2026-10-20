@@ -1,7 +1,7 @@
 ---
 id: C.CLOCK.ADVANCE
 kind: instruction
-apply_when: the outcome depends on time passing: expiry, timeouts, retries, reminders
+apply_when: "the outcome depends on time passing: expiry, timeouts, retries, reminders"
 ---
 ## Semantics
 
