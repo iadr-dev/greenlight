@@ -64,6 +64,7 @@ MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, inte
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
 INSTALLED_PACKAGES = "node_modules"             # installed packages of a node project, wherever the folder is
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
+PERSON_FILES = (MANAGED_CONFIG, "standards.md")   # in .bdd/, edited by the person only
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
@@ -156,7 +157,7 @@ class Project:
         inside = key[len(data_root) + 1:]
         name = inside.rsplit("/", 1)[-1]
         return (inside.startswith(tuple(d + "/" for d in MANAGED_DIRS)) or name in MANAGED_NAMES or name.endswith(MANAGED_SUFFIXES)
-                or inside == MANAGED_CONFIG)
+                or inside in PERSON_FILES)
 
     def category(self, path: Path) -> str:
         key = path_key(path)
@@ -183,7 +184,7 @@ def locked_message(project: Project, path: Path, lock: Locked) -> str:
 
 def managed_message(project: Project, path: Path) -> str:
     return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals, "
-            "project configuration). Use the bdd commands instead of editing it; the person can edit it "
+            "project configuration, engineering standards). Use the bdd commands instead of editing it; the person can edit it "
             "themselves outside the agent.")
 
 
@@ -352,8 +353,9 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
             name = match.group(0)
             lock = by_name.get(name)
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
-        if ".bdd/config.toml" in text:
-            return project.root / cfg.BDD_DIR / MANAGED_CONFIG, None
+        for person_file in PERSON_FILES:
+            if f".bdd/{person_file}" in text:
+                return project.root / cfg.BDD_DIR / person_file, None
         for managed in MANAGED_DIRS:
             if f"/{managed}/" in text:
                 return project.root / cfg.BDD_DIR / managed, None

@@ -17,6 +17,7 @@ SECTIONS = {
     "rules.md": ["Business rules", "Non-functional requirements", "Out of scope"],
     "test-design.md": ["Coverage check"],
     "design.md": ["Components and data flow", "Key interaction"],
+    "standards.md": ["Language and toolchain", "Style", "Quality rules", "Deprecation policy", "Dependencies"],
     "system.md": ["Interfaces", "Dependencies", "Clock", "Seams that do not exist yet"],
     "tasks.md": [],
     "report.md": ["Traceability", "Gates, locks and approvals", "Checklist", "Findings", "Cost"],

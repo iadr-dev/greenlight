@@ -131,11 +131,13 @@ def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] =
     """(exit status, combined output). A command that cannot start or runs too long is a usage problem.
     Variables whose names start with one of ``scrub`` (such as PYTEST_ADDOPTS) are not passed on: they can change
     which tests run."""
-    if not shutil.which(words[0]):
+    program = shutil.which(words[0])
+    if not program:
         raise UsageError(f"cannot run {words[0]!r}: it is not on PATH; install the adapter's requirements first")
     try:
         env = runner_environment(scrub)
-        done = subprocess.run(words, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        # the program as found on PATH, so a script shim such as npm.cmd or gradlew.bat starts on Windows without a shell
+        done = subprocess.run([program, *words[1:]], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
         raise UsageError(f"the test run took longer than {timeout} s and was stopped") from exc

@@ -88,6 +88,13 @@ To put code that already exists under greenlight before you change it, describe 
 The flow is the same, except that every scenario describes what the code does today (tagged `@existing`), the tests
 pass from the start and no production code is touched. You still approve the rules and the examples.
 
+## State your engineering standards
+
+`bdd init` also creates `.bdd/standards.md` (in an existing project: `bdd init --standards`). Read it, describe your
+language and toolchain version, style, quality rules and deprecation policy, and change `Status: DRAFT` to
+`Status: APPROVED`. If you use a formatter, linter or type checker, name it in `[adapters.quality.NAME]` tables so
+`bdd check` and the gates enforce it; see [adapters](adapters.md).
+
 ## 6. Change your mind later
 
 ```text

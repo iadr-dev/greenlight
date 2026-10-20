@@ -22,6 +22,7 @@ BUDGET_MS_WINDOWS = 300
 LATENCY = "hook latency"
 DENY_RULES = "deny rules"
 ENFORCEMENT = "enforcement"
+STANDARDS = "standards"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
 RECOMMENDED_DENY = (
@@ -152,12 +153,26 @@ def project_enforcement(project: Path) -> Check:
                      "Fix .bdd/config.toml (or run `bdd migrate` if it is from an older greenlight).")
 
 
+def check_standards(root: Path) -> Check:
+    """Are the project's engineering standards written and approved? Only the person can edit the file."""
+    path = root / cfg.BDD_DIR / "standards.md"
+    fix = ("Run `bdd init --standards` to add the template, edit it to describe how this project's code is written, and "
+           "change its `Status: DRAFT` line to `Status: APPROVED`. Agents cannot write this file.")
+    if not path.is_file():
+        return Check(STANDARDS, "warn", ".bdd/standards.md does not exist: no language, style or deprecation rules are stated", fix)
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if any(line.strip().casefold() == "status: approved" for line in text.splitlines()):
+        return Check(STANDARDS, "ok", ".bdd/standards.md is approved")
+    return Check(STANDARDS, "warn", ".bdd/standards.md is still a draft", fix)
+
+
 def run_checks() -> list[Check]:
     wrapper = Path(__file__).resolve().parents[1] / "bdd"
     samples, error = measure_wrapper(wrapper)
     project = cfg.find_root()
     deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
     mode = [project_enforcement(project)] if project else []
+    standards = [check_standards(project)] if project else []
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
@@ -165,6 +180,7 @@ def run_checks() -> list[Check]:
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
         *mode,
+        *standards,
         *deny,
     ]
 

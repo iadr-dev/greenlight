@@ -1,0 +1,307 @@
+import contextlib
+import io
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from bddlib import cli, doctor, gates, guard, initcmd, quality, redrecord, state, tripwire
+from bddlib import config as cfg
+from bddlib.errors import UsageError
+
+from tests.helpers import ProjectCase
+from tests.test_redrecord import run_git
+
+PASSING = "import sys; sys.exit(0)"
+FAILING = "import sys; print('E501 line too long'); sys.exit(3)"
+
+
+def command(code: str) -> str:
+    """A TOML line that runs a bit of Python as a check (single quotes only inside the code)."""
+    return 'command = "{python} -c \\"' + code + '\\""'
+
+
+TABLE = f"""
+[adapters.quality.format]
+{command(PASSING)}
+
+[adapters.quality.lint]
+{command(PASSING)}
+timeout = 60
+"""
+
+
+def table(lint: str = PASSING) -> str:
+    return f"""
+[adapters.quality.format]
+{command(PASSING)}
+
+[adapters.quality.lint]
+{command(lint)}
+"""
+
+
+class RulesTest(ProjectCase):
+    def test_the_table_is_optional_and_read_in_order_when_present(self):
+        self.assertIsNone(cfg.load(self.root).quality)
+        self.config(tail=TABLE)
+        rules = cfg.load(self.root).quality
+        self.assertEqual([(c.name, c.timeout) for c in rules.checks], [("format", 600), ("lint", 60)])
+        self.assertEqual(rules.adapter, "x")
+
+    def test_bad_tables_are_config_errors(self):
+        for body, message in (("[adapters.quality]\n", "at least one named check"),
+                              ("[adapters.quality.Lint]\ncommand = 'x'\n", "named in lower case"),
+                              ("[adapters.quality.lint]\ncommand = ''\n", "needs command"),
+                              ("[adapters.quality.lint]\ncommand = 3\n", "needs command"),
+                              ("[adapters.quality.lint]\ncommand = 'x'\ntimeout = 0\n", "timeout"),
+                              ("[adapters.quality]\nlint = 'x'\n", "named in lower case")):
+            with self.subTest(body=body):
+                self.config(tail=body)
+                with self.assertRaises(cfg.ConfigError) as cm:
+                    cfg.load(self.root)
+                self.assertIn(message, str(cm.exception))
+
+
+class CommandTest(ProjectCase):
+    def test_placeholders_fill_words_and_cannot_add_words(self):
+        check = cfg.QualityCheck("lint", "{python} tool --root={root} {project_python}")
+        words = quality.build_command(check, self.root)
+        self.assertEqual(len(words), 4)
+        self.assertEqual(words[2], f"--root={self.root}")
+
+    def test_a_root_with_spaces_and_shell_characters_stays_one_word(self):
+        check = cfg.QualityCheck("lint", "tool {root}")
+        odd = Path("C:/a b; rm -rf") / "project"
+        with mock.patch.object(quality.runner, "project_python", return_value="python"):
+            self.assertEqual(quality.build_command(check, odd), ["tool", str(odd)])
+
+
+class GitProjectCase(ProjectCase):
+    """A project under git with the quality table configured."""
+
+    def setUp(self):
+        super().setUp()
+        self.write(".gitignore", ".bdd/.runs/\n")
+        self.write("src/app.py", "def total(x):\n    return x\n")
+        self.config(tail=TABLE)
+        run_git(self.root, "init", "-q")
+        run_git(self.root, "add", "-A")
+        run_git(self.root, "commit", "-q", "-m", "initial")
+
+    def check(self, *args: str) -> tuple[int, str, str]:
+        out, err, here = io.StringIO(), io.StringIO(), os.getcwd()
+        os.chdir(self.root)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["check", "FEAT-007", *args])
+        finally:
+            os.chdir(here)
+        return code, out.getvalue(), err.getvalue()
+
+    def record(self) -> dict:
+        return json.loads(quality.result_path(self.root, "FEAT-007").read_text(encoding="utf-8"))
+
+
+class RunTest(GitProjectCase):
+    def test_every_check_runs_and_the_result_is_recorded(self):
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertIn("quality checks passed", out)
+        record = self.record()
+        self.assertTrue(record["passed"])
+        self.assertEqual([(c["name"], c["exit"]) for c in record["checks"]], [("format", 0), ("lint", 0)])
+        for key in ("source_hash", "inputs", "standards", "interpreter"):
+            self.assertIn(key, record)
+
+    def test_the_exit_status_is_the_verdict_and_the_tool_output_is_shown(self):
+        self.config(tail=table(FAILING))
+        code, out, _ = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("FAIL lint: exit 3", out)
+        self.assertIn("E501 line too long", out)
+        self.assertIn("ok   format", out)
+        self.assertFalse(self.record()["passed"])
+
+    def test_a_tool_that_is_not_installed_is_a_failed_check_with_the_reason(self):
+        self.config(tail="[adapters.quality.lint]\ncommand = 'no-such-linter-xyz {root}'\n")
+        code, out, _ = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("not on PATH", out)
+        self.assertFalse(self.record()["checks"][0]["passed"])
+
+    def test_a_tool_that_is_a_script_shim_on_the_path_starts_without_a_shell(self):
+        shim = Path(self.root) / ("shimtool.cmd" if os.name == "nt" else "shimtool")
+        shim.write_text("@exit /b 0\r\n" if os.name == "nt" else "#!/bin/sh\nexit 0\n", encoding="utf-8", newline="")
+        shim.chmod(0o755)
+        self.config(tail="[adapters.quality.lint]\ncommand = 'shimtool'\n")
+        with mock.patch.dict(os.environ, {"PATH": str(self.root) + os.pathsep + os.environ["PATH"]}):
+            self.assertEqual(self.check()[0], 0)
+
+    def test_a_check_that_takes_too_long_fails(self):
+        self.config(tail="[adapters.quality.lint]\n" + command("import time; time.sleep(30)") + "\ntimeout = 1\n")
+        code, out, _ = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("took longer than 1 s", out)
+
+    def test_variables_that_steer_a_program_do_not_reach_the_tools(self):
+        probe = "import os, sys; sys.exit(7 if 'PYTHONPATH' in os.environ else 0)"
+        self.config(tail=table(probe))
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/elsewhere"}):
+            self.assertEqual(self.check()[0], 0)
+
+    def test_it_needs_the_table_and_a_feature(self):
+        self.config()
+        code, _, err = self.check()
+        self.assertEqual((code, "no [adapters.quality.NAME] table" in err), (2, True))
+        self.config(tail=TABLE)
+        out, here = io.StringIO(), os.getcwd()
+        os.chdir(self.root)
+        try:
+            with contextlib.redirect_stderr(out):
+                self.assertEqual(cli.main(["check", "FEAT-999"]), 2)
+        finally:
+            os.chdir(here)
+
+    def test_check_shows_the_record_and_goes_stale_when_the_source_changes(self):
+        self.check()
+        self.assertEqual(self.check("--check")[0], 0)
+        self.write("src/app.py", "def total(x):\n    return x * 2\n")
+        code, _, err = self.check("--check")
+        self.assertEqual(code, 1)
+        self.assertIn("out of date", err)
+
+
+class GateProblemsTest(GitProjectCase):
+    def reasons(self) -> list[str]:
+        return quality.problems(self.root, "FEAT-007")
+
+    def test_without_the_table_nothing_is_asked(self):
+        self.config()
+        self.assertEqual(self.reasons(), [])
+
+    def test_a_current_passing_result_is_needed(self):
+        self.assertIn("have not been run", self.reasons()[0])
+        self.config(tail=table(FAILING))
+        self.check()
+        self.assertIn("quality check(s) failed: lint", self.reasons()[0])
+        self.config(tail=table(PASSING))
+        self.check()
+        self.assertEqual(self.reasons(), [])
+
+    def test_a_change_to_the_source_the_tests_or_the_standards_makes_it_stale(self):
+        self.check()
+        self.write("src/app.py", "def total(x):\n    return x + 1\n")
+        self.assertIn("out of date", self.reasons()[0])
+        self.check()
+        self.write("steps/steps.py", "def then_ok():\n    assert 1 == 1\n")
+        self.assertIn("out of date", self.reasons()[0])
+        self.check()
+        self.write(".bdd/standards.md", "Status: APPROVED\n")
+        self.assertIn("out of date", self.reasons()[0])
+
+    def test_changing_which_checks_are_configured_needs_a_new_run(self):
+        self.check()
+        self.config(tail=TABLE + "\n[adapters.quality.typecheck]\ncommand = 'x'\n")
+        self.assertIn("checks changed", self.reasons()[0])
+
+    def test_a_damaged_record_is_a_problem_not_a_crash(self):
+        self.check()
+        quality.result_path(self.root, "FEAT-007").write_text("[]", encoding="utf-8")
+        self.assertIn("quality result", self.reasons()[0])
+
+
+class GateTest(GitProjectCase):
+    def test_the_implement_and_verify_gates_refuse_without_a_current_result(self):
+        self.walk_to("tasks")
+        with self.assertRaises(UsageError) as cm:
+            self.gate("implement")
+        self.assertIn("have not been run", str(cm.exception))
+        self.check()
+        self.assertEqual(self.gate("implement")["gates"]["implement"]["result"], "pass")
+        self.write("src/app.py", "def total(x):\n    return x * 3\n")
+        with self.assertRaises(UsageError) as cm:
+            self.gate("verify")
+        self.assertIn("quality result is out of date", str(cm.exception))
+
+    def test_an_adopted_feature_is_not_held_to_it(self):
+        data = state.load(self.feature_dir)
+        data["kind"] = "adopt"
+        reasons = gates.gate_problems(self.root, self.feature_dir, data, "implement")
+        self.assertFalse(any("quality" in r for r in reasons))
+        data["kind"] = "feature"
+        reasons = gates.gate_problems(self.root, self.feature_dir, data, "implement")
+        self.assertTrue(any("quality" in r for r in reasons))
+
+
+class StandardsFileTest(ProjectCase):
+    def write_as(self, agent: str | None, tool: str = "Write") -> str | None:
+        payload = {"tool_name": tool, "cwd": str(self.root),
+                   "tool_input": {"file_path": str(self.root / ".bdd" / "standards.md")}}
+        if agent:
+            payload["agent_type"] = f"greenlight:{agent}"
+        return guard.evaluate(payload)
+
+    def test_no_agent_and_not_the_orchestrator_may_write_it(self):
+        for agent in (None, "implementer", "step-engineer", "system-analyst", "spec-auditor"):
+            with self.subTest(agent=agent):
+                self.assertIn("managed by the bdd command line", self.write_as(agent))
+
+    def test_a_shell_command_naming_it_is_refused(self):
+        reason = guard.evaluate({"tool_name": "Bash", "cwd": str(self.root),
+                                 "tool_input": {"command": "echo 'Status: APPROVED' > .bdd/standards.md"}})
+        self.assertIn("managed by", reason)
+
+    def test_the_tripwire_watches_it(self):
+        self.write(".bdd/standards.md", "Status: DRAFT\n")
+        watched = {p.name for p in tripwire.watched_files(self.root, None)}
+        self.assertIn("standards.md", watched)
+
+
+class DoctorTest(ProjectCase):
+    def test_missing_draft_and_approved(self):
+        self.assertEqual(doctor.check_standards(self.root).status, "warn")
+        self.assertIn("does not exist", doctor.check_standards(self.root).detail)
+        self.write(".bdd/standards.md", "# Engineering standards\n\nStatus: DRAFT\n")
+        self.assertIn("still a draft", doctor.check_standards(self.root).detail)
+        self.write(".bdd/standards.md", "# Engineering standards\n\nStatus: APPROVED\n")
+        self.assertEqual(doctor.check_standards(self.root).status, "ok")
+
+
+class InitTest(unittest.TestCase):
+    def test_a_new_project_gets_the_template_and_an_existing_one_can_add_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            created = initcmd.write_project(root, "guided", None)
+            self.assertIn(".bdd/standards.md", created)
+            text = (root / ".bdd" / "standards.md").read_text(encoding="utf-8")
+            self.assertIn("Status: DRAFT", text)
+            (root / ".bdd" / "standards.md").write_text("mine\n", encoding="utf-8")
+            self.assertIsNone(initcmd.add_standards(root))                              # never overwritten
+            self.assertEqual((root / ".bdd" / "standards.md").read_text(encoding="utf-8"), "mine\n")
+            (root / ".bdd" / "standards.md").unlink()
+            self.assertEqual(initcmd.add_standards(root), ".bdd/standards.md")
+
+    def test_the_flag_needs_a_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            here = os.getcwd()
+            os.chdir(tmp)
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(cli.main(["init", "--standards"]), 2)
+            finally:
+                os.chdir(here)
+
+
+class GuardResultTest(ProjectCase):
+    def test_an_agent_cannot_write_the_result(self):
+        path = self.root / ".bdd" / ".runs" / "FEAT-007" / "quality.json"
+        reason = guard.evaluate({"tool_name": "Write", "cwd": str(self.root), "tool_input": {"file_path": str(path)}})
+        self.assertIn("managed by the bdd command line", reason)
+
+
+if __name__ == "__main__":
+    unittest.main()
