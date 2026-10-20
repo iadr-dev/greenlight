@@ -1,0 +1,49 @@
+name = "java-cucumber-spring"
+version = 1
+profiles = ["base", "api", "data"]            # every instruction of these profiles is bound in src/test/java/greenlight/steps/CoreSteps.java
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["pom.xml", "build.gradle", "build.gradle.kts"]
+contains = ["spring-boot"]
+
+[requires]
+packages = ["io.cucumber:cucumber-java", "io.cucumber:cucumber-spring", "io.cucumber:cucumber-junit-platform-engine", "org.junit.platform:junit-platform-suite", "org.springframework.boot:spring-boot-starter-test"]
+optional = ["org.springframework.boot:spring-boot-starter-webmvc (or spring-boot-starter-web) for the api profile"]
+
+[paths]
+features = "src/test/resources/features"
+steps = "src/test/java/greenlight/steps"
+drivers = "src/test/java/greenlight/drivers"
+support = ["src/test/resources/junit-platform.properties", "src/test/java/greenlight/RunCucumberTest.java", "src/test/java/greenlight/GreenlightSpring.java", "src/test/java/greenlight/GreenlightTestConfig.java"]
+
+[run]
+# Maven runs the one suite class, RunCucumberTest, which starts the Spring context once and runs the features. Cucumber's
+# own settings select the scenarios by tag (and by name, when isolated) and write the JUnit report to {out}. The bound
+# suite class, the Cucumber settings and the Spring wiring are support files; the pom.xml is the project's build file:
+# once its dependencies are final, add it to `support` in .bdd/config.toml so that a build setting cannot skip the tests.
+by_tag = 'mvn -B -ntp test -Dtest=RunCucumberTest -Dsurefire.failIfNoSpecifiedTests=false -Dcucumber.filter.tags=@{tag}'
+report = '-Dcucumber.plugin=junit:{out}'
+shuffle = '-Dcucumber.execution.order=random -Dcucumber.execution.order.random.seed={seed}'
+isolated = "-Dcucumber.filter.name='\\A{scenario:regex}\\z'"           # the name, escaped, as a whole-name pattern
+timeout = 1800
+
+[classify]                                    # ordered; defects first; applied to the failure text
+test_defect = [
+  'NotMapped',
+  'UndefinedStepException|Undefined step|DuplicateStepDefinitionException|AmbiguousStepDefinitionsException',
+  'Failed to load ApplicationContext|BeanCreationException|NoSuchBeanDefinitionException|UnsatisfiedDependencyException',
+  'ClassNotFoundException|NoClassDefFoundError|NoSuchMethodError|ExceptionInInitializerError',
+  'COMPILATION ERROR|cannot find symbol|package .* does not exist',
+  '(?i)no tests (were )?(found|executed)',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError|AssertionFailedError',
+  'status (404|405|501)',
+]
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*@(?P<kind>Given|When|Then)\b'
+assert_patterns = ['[Aa]ssert', 'assertThat', 'Compare\.']
+sleep_patterns = ['Thread\.sleep\(', 'TimeUnit\.\w+\.sleep\(']
+stub_patterns = ['@(?:MockBean|MockitoBean|SpyBean|MockitoSpyBean)\s+(?:private\s+)?([\w.]+)', 'Mockito\.(?:mock|spy)\(\s*([\w.]+)\.class']

@@ -1,0 +1,49 @@
+name = "kotlin-android"
+version = 1
+profiles = ["base", "lib", "data"]            # every instruction of these profiles is bound in src/test/kotlin/greenlight/steps/CoreSteps.kt
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
+contains = ["com.android.application", "com.android.library", "com.android.tools.build"]
+
+[requires]
+packages = ["io.cucumber:cucumber-java", "io.cucumber:cucumber-picocontainer", "io.cucumber:cucumber-junit-platform-engine", "org.junit.platform:junit-platform-suite"]
+optional = ["a Room (or other) database whose statements are reported to QueryCounter, for the data profile"]
+
+[paths]
+features = "src/test/resources/features"
+steps = "src/test/kotlin/greenlight/steps"
+drivers = "src/test/kotlin/greenlight/drivers"
+support = ["greenlight.gradle.kts", "src/test/resources/junit-platform.properties", "src/test/kotlin/greenlight/RunCucumberTest.kt"]
+
+[run]
+# Gradle runs the one suite class, RunCucumberTest, as a local JVM unit test (no emulator or device). Cucumber's own
+# settings select the scenarios by tag (and by name, when isolated) and write the JUnit report to {out}; the bound script
+# greenlight.gradle.kts forwards them to the test JVM. For a plain Kotlin/JVM module replace testDebugUnitTest with test.
+# The module's build.gradle.kts is the project's build file: once its dependencies are final, add it to `support` in
+# .bdd/config.toml so that a build setting cannot skip the tests.
+by_tag = './gradlew -q testDebugUnitTest --tests greenlight.RunCucumberTest -Pcucumber.filter.tags=@{tag}'
+report = '-Pcucumber.plugin=junit:{out}'
+shuffle = '-Pcucumber.execution.order=random -Pcucumber.execution.order.random.seed={seed}'
+isolated = "-Pcucumber.filter.name='\\A{scenario:regex}\\z'"           # the name, escaped, as a whole-name pattern
+timeout = 1800
+
+[classify]                                    # ordered; defects first; applied to the failure text
+test_defect = [
+  'NotMapped',
+  'UndefinedStepException|Undefined step|DuplicateStepDefinitionException|AmbiguousStepDefinitionsException',
+  'ClassNotFoundException|NoClassDefFoundError|NoSuchMethodError|ExceptionInInitializerError',
+  'e: file:.*\.kt|Unresolved reference|Compilation error|Execution failed for task .*compile',
+  'Method .* not mocked',
+  '(?i)no tests (were )?(found|executed)',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError|AssertionFailedError',
+]
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*@(?P<kind>Given|When|Then)\b'
+assert_patterns = ['[Aa]ssert', 'Compare\.', 'check\(', 'require\(']
+sleep_patterns = ['Thread\.sleep\(', 'delay\(\d']
+stub_patterns = ['mockk<\s*([\w.]+)', 'Mockito\.mock\(\s*([\w.]+)::class', '\bmock\(\s*([\w.]+)::class']

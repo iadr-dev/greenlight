@@ -10,10 +10,19 @@ broken test.
 |---|---|---|
 | `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
+| `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
+| `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests (no device); profiles `base`, `lib`, `data` |
 | `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
 repository and why. If nothing fits, greenlight says so; it does not pretend.
+
+## The JVM adapters
+
+`java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters runs alone. Two limits are worth knowing before you choose:
+
+- **Android.** The scenarios are local JVM unit tests. Code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine, and screens (Compose, Espresso) need a device or emulator and stay outside this adapter. The guide says exactly what is covered.
+- **Network.** The JVM has no process-wide hook for raw sockets, so the Spring adapter's network guard covers the JDK HTTP client and `HttpURLConnection` only; run the tests without network access in CI for the rest.
 
 ## The generic-junit adapter
 
@@ -152,4 +161,4 @@ detection rule, required packages, paths (features, steps, drivers, support file
 `bdd scan`, and the classification patterns (`test_defect`, `expected_fail`). Copy `adapters/python-pytest-bdd` as a
 starting point, bind every instruction of the profiles you declare (a test checks this for the bundled adapter), and
 describe the red phase in the guide. Placeholders in run commands are filled one word at a time and never go through
-a shell.
+a shell, and a value that looks like a placeholder is not filled in again. A runner that takes a name filter as a regular expression uses `{scenario:regex}`, the scenario name with every regular-expression metacharacter escaped (`isolated = "-Dcucumber.filter.name='\\A{scenario:regex}\\z'"`, where the doubled backslashes are TOML's); never wrap `{scenario}` in `\Q...\E` yourself, because a name containing `\E` would end the quotation.
