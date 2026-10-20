@@ -25,7 +25,7 @@ def bound_instructions(path: Path) -> set[str]:
     found: set[str] = set()
     for steps in (path / "templates").rglob("steps"):
         for source in steps.rglob("*"):
-            if source.is_file() and source.suffix in {".py", ".ts", ".js", ".mjs"}:
+            if source.is_file() and source.suffix in {".py", ".ts", ".js", ".mjs", ".go", ".cs"}:
                 found |= set(STEP_COMMENT.findall(source.read_text(encoding="utf-8")))
     return found
 

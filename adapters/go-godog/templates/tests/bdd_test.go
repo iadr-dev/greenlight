@@ -68,6 +68,7 @@ func initializeScenario(sc *godog.ScenarioContext) {
 		return drivers.WithStep(ctx, step), nil // the data table or doc string of the step
 	})
 	steps.Register(sc)
+	steps.RegisterProject(sc)
 }
 
 func TestFeatures(t *testing.T) {

@@ -1,0 +1,38 @@
+using System.Text.Json.Nodes;
+
+namespace Greenlight.Tests.Drivers;
+
+public sealed record Route(string Method, string Path);
+
+public sealed record ErrorRule(int[]? Statuses = null, string? ExceptionType = null, int? ExitCode = null, string? Text = null);
+
+public static class Operations
+{
+    public static readonly Dictionary<string, Route> Api = new()
+    {
+        ["place order"] = new("POST", "/orders"),
+        ["list orders"] = new("GET", "/orders"),
+        ["look up time"] = new("GET", "/time"),
+    };
+
+    public static readonly Dictionary<string, string[]> Commands = new()
+    {
+        ["show info"] = ["dotnet", "--info"],
+        ["misuse the tool"] = ["dotnet", "nosuchsubcommand"],
+    };
+
+    public static readonly Dictionary<string, Func<JsonNode?, object?>> Lib = new()
+    {
+        ["describe"] = input => new JsonObject { ["name"] = input!["name"]!.DeepClone(), ["lines"] = new JsonArray(new JsonObject { ["sku"] = "a1" }) },
+        ["refuse"] = input => throw new InvalidOperationException($"refused: {input}"),
+    };
+
+    public static readonly Dictionary<string, string> Files = new() { ["report"] = "out/report.txt" };
+
+    public static readonly Dictionary<string, ErrorRule> Errors = new()
+    {
+        ["unauthorised"] = new(Statuses: [401, 403]),
+        ["unknown command"] = new(Text: "nosuchsubcommand"),
+        ["refusal"] = new(Text: "refused"),
+    };
+}
