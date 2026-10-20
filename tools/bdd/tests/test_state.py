@@ -102,5 +102,21 @@ class AssumptionCostModeTest(ProjectCase):
             state.switch_autonomy(self.feature_dir, "reckless", "why")
 
 
+class NextIdTest(ProjectCase):
+    def test_the_next_id_follows_the_highest_in_use(self):
+        self.assertEqual(state.next_id(self.root), "FEAT-008")                      # FEAT-007 is the fixture feature
+        state.create(self.root, "FEAT-012", "Gap", "standard")
+        self.assertEqual(state.next_id(self.root), "FEAT-013")
+
+    def test_a_project_without_features_starts_at_one_and_ignores_stray_folders(self):
+        import shutil
+        shutil.rmtree(store.features_dir(self.root))
+        self.assertEqual(state.next_id(self.root), "FEAT-001")
+        (store.features_dir(self.root)).mkdir(parents=True)
+        (store.features_dir(self.root) / "notes").mkdir()
+        (store.features_dir(self.root) / "FEAT-0042-odd").mkdir()
+        self.assertEqual(state.next_id(self.root), "FEAT-043")
+
+
 if __name__ == "__main__":
     unittest.main()

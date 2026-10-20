@@ -72,5 +72,35 @@ class PlaybookTest(unittest.TestCase):
                     self.assertIn(card, index)
 
 
+class FeatureSkillTest(unittest.TestCase):
+    """The orchestrator's table agrees with the phases, the agents and the gates of the tool."""
+
+    TEXT = (REPO / "skills" / "feature" / "SKILL.md").read_text(encoding="utf-8")
+    ROWS = re.findall(r"^\| ([a-z-]+) \| ([a-z-]+(?:, one task at a time)?|you) \|", TEXT, re.MULTILINE)
+
+    def test_every_phase_but_done_has_a_row_with_its_agent_in_order(self):
+        self.assertEqual([phase for phase, _ in self.ROWS], [p for p in state.PHASES if p != "done"])
+        for phase, who in self.ROWS:
+            agent = who.split(",")[0]
+            with self.subTest(phase=phase):
+                if agent != "you":
+                    self.assertTrue((REPO / "agents" / f"{agent}.md").is_file(), agent)
+                    self.assertRegex((PHASES / f"{phase}.md").read_text(encoding="utf-8"), rf"(?m)^Agent: \*\*{agent}\*\*")
+
+    def test_every_gate_it_records_is_a_machine_gate_and_every_phase_gate_is_covered(self):
+        gates = set(re.findall(r"bdd gate FEAT-n ([a-z-]+) --result", self.TEXT))
+        self.assertEqual(gates, set(state.MACHINE_GATES))
+
+    def test_the_human_gates_and_the_commands_it_gives_the_person_are_the_real_ones(self):
+        for gate in ("rules", "examples"):
+            self.assertIn(f"/greenlight:approve FEAT-n {gate}", self.TEXT)
+        for command in ("state next-id", "state init", "approve FEAT-n --verify", "mode FEAT-n --switch"):
+            self.assertIn(command, self.TEXT)
+        self.assertIn("state", cli.COMMANDS)
+
+    def test_the_skill_never_hands_the_agents_the_job_of_recording(self):
+        self.assertIn("you are the only one who records", self.TEXT)
+
+
 if __name__ == "__main__":
     unittest.main()

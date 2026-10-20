@@ -47,6 +47,7 @@ def state_parser() -> argparse.ArgumentParser:
     init.add_argument("feature")
     init.add_argument("--title", required=True)
     init.add_argument("--autonomy", choices=state.AUTONOMY, help="default: from .bdd/config.toml")
+    sub.add_parser("next-id", help="print the next free feature id")
     show = sub.add_parser("show", help="print where a feature stands")
     show.add_argument("feature")
     show.add_argument("--json", action="store_true")
@@ -99,6 +100,9 @@ def do_state(args: argparse.Namespace) -> int:
         autonomy = args.autonomy or cfg.load(root).autonomy
         feature_dir = state.create(root, args.feature, args.title, autonomy)
         print(f"created {args.feature} in {lockfile.relative(root, feature_dir)}")
+        return 0
+    if args.action == "next-id":
+        print(state.next_id(root))
         return 0
     feature_dir = feature_dir_of(root, args.feature)
     info = summary(root, feature_dir, state.load(feature_dir))
