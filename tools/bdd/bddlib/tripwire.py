@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 from . import claudepaths, config as cfg, lockfile, runner, store
-from .errors import StoreError
+from .errors import StoreError, UsageError
 
 INTEGRITY_DIR = ".integrity"
 BASELINE = "baseline.json"
@@ -50,13 +50,34 @@ def _files_under(folder: Path) -> list[Path]:
     return found
 
 
+PACKAGES = ("_pytest", "pytest", "pytest_bdd")           # what runs the tests and decides which ones
+
+
+def environment_files(root: Path) -> list[Path]:
+    """The project's own interpreter and what steers it: pyvenv.cfg, startup hooks (.pth, sitecustomize) and the test
+    runner's packages. Only when the environment lives inside the project."""
+    try:
+        interpreter = Path(runner.project_python(root))
+    except UsageError:
+        return []
+    if not interpreter.is_file() or root.resolve() not in interpreter.resolve().parents:
+        return []
+    environment = interpreter.parent.parent
+    found = [interpreter, environment / "pyvenv.cfg"]
+    for site in [environment / "Lib" / "site-packages", *environment.glob("lib/python*/site-packages")]:
+        if not site.is_dir():
+            continue
+        found += [*site.glob("*.pth"), site / "sitecustomize.py", site / "usercustomize.py"]
+        for package in PACKAGES:
+            found += _files_under(site / package)
+    return [p for p in found if p.is_file()]
+
+
 def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     """Every existing file whose change would weaken enforcement."""
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
     candidates += _files_under(root / ".claude" / "hooks")
-    interpreter = Path(runner.project_python(root))
-    if interpreter.is_file() and root.resolve() in interpreter.resolve().parents:
-        candidates.append(interpreter)                       # the program that produces the test evidence
+    candidates += environment_files(root)
     if plugin_root is not None:
         candidates += [plugin_root / rel for rel in PLUGIN_FILES]
         for tree in PLUGIN_TREES:

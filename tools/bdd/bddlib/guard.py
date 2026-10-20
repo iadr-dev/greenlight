@@ -160,6 +160,9 @@ class Project:
             return "environment"
         if key in {path_key(f) for f in self.config.support_files}:
             return "steps"
+        relative = self.relative(path).casefold()
+        if any(fnmatch.fnmatchcase(relative, pattern.casefold()) for pattern in self.config.support_patterns):
+            return "steps"
         for category, dirs in (("features", self.config.feature_dirs), ("steps", self.config.step_dirs)):
             if any(key.startswith(path_key(d) + "/") for d in dirs):
                 return category
@@ -206,6 +209,14 @@ def check_enforcement_files(path: Path) -> str | None:
         if ".claude" in names[:-1] and names[-1] in SETTINGS_NAMES:
             return enforcement_message(path, "is a Claude Code settings file")
     return None
+
+
+_INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda|npm|pnpm|yarn)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
+                      r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
+_ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv)[/\\]", re.IGNORECASE)
+INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv): "
+                   "that is the person's decision and it would change what the tests run on. Report the missing "
+                   "requirement instead.")
 
 
 def agent_name(payload: dict) -> str | None:
@@ -364,7 +375,7 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
-def check_bash(project: Project, command: str) -> str | None:
+def check_bash(project: Project, command: str, agent: str | None = None) -> str | None:
     """Best effort: block a command that runs an approval or a nested Claude session, or that both
     names a protected file and looks like it writes."""
     injection = check_injection({"command": command})
@@ -373,8 +384,12 @@ def check_bash(project: Project, command: str) -> str | None:
     if starts_claude_session(command):
         return NESTED_SESSION_MESSAGE
     scrubbed = _NOISE.sub(" ", command)
+    if agent and _INSTALL.search(scrubbed):
+        return INSTALL_MESSAGE
     if not _SHELL_WRITES.search(scrubbed):
         return None
+    if agent and _ENVIRONMENT_PATH.search(scrubbed):
+        return INSTALL_MESSAGE
     if command_touches_enforcement(scrubbed):
         return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
                                    "(Claude Code hook settings or the plugin itself)")
@@ -405,7 +420,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
     if tool == "Bash" and tool_input.get("command"):
-        return check_bash(project, tool_input["command"])
+        return check_bash(project, tool_input["command"], agent_name(payload))
     return None
 
 

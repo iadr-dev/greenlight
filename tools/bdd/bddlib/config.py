@@ -42,6 +42,7 @@ class RunRules:
     timeout: int = 600
     test_defect: tuple[str, ...] = ()        # failure text of a broken test (first match wins, checked first)
     expected_fail: tuple[str, ...] = ()      # failure text of a test that fails because the feature is missing
+    scrub_env: tuple[str, ...] = ()          # environment variables with these prefixes never reach the runner
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,8 @@ class Config:
     scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
     version: int = SCHEMA_VERSION            # the schema this project's .bdd/ is at
     support_files: tuple[Path, ...] = ()     # the adapter's own test plumbing (conftest.py, ...): bound like steps
+    support_patterns: tuple[str, ...] = ()   # patterns (relative, with * and ?) for plumbing files that may not exist yet
+    python: str = ""                         # the interpreter the project's tests run with (blank: .venv, venv, or bdd's own)
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
 
     @property
@@ -101,6 +104,13 @@ def _scan_rules(root: Path, adapter: dict, path: Path) -> ScanRules | None:
                      _patterns(table, "stub_patterns", path))
 
 
+def _prefixes(table: dict, path: Path) -> tuple[str, ...]:
+    values = table.get("scrub_env", [])
+    if not isinstance(values, list) or not all(isinstance(v, str) and v for v in values):
+        raise ConfigError(f"{path}: [adapters.run] scrub_env must be a list of variable name prefixes")
+    return tuple(values)
+
+
 def _run_rules(adapter: dict, path: Path) -> RunRules | None:
     table = adapter.get("run")
     if table is None:
@@ -117,17 +127,31 @@ def _run_rules(adapter: dict, path: Path) -> RunRules | None:
     classify = adapter.get("classify", {})
     return RunRules(str(adapter.get("name", "")), table["by_tag"], table["report"], table.get("shuffle", ""),
                     table.get("isolated", ""), timeout, _patterns(classify, "test_defect", path),
-                    _patterns(classify, "expected_fail", path))
+                    _patterns(classify, "expected_fail", path), _prefixes(table, path))
 
 
-def _support_files(root: Path, data: dict, path: Path) -> tuple[Path, ...]:
-    found: list[Path] = []
+def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+    """(files, patterns): the plumbing files named by the adapters, and the patterns that also match files made later."""
+    files: list[Path] = []
+    patterns: list[str] = []
     for adapter in data.get("adapters", []):
         names = adapter.get("support", [])
         if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-            raise ConfigError(f"{path}: support must be a list of file names")
-        found += [root / n for n in names]
-    return tuple(found)
+            raise ConfigError(f"{path}: support must be a list of file names or patterns")
+        for name in names:
+            if any(c in name for c in "*?["):
+                patterns.append(name)
+                files += [p for p in root.glob(name) if p.is_file()]
+            else:
+                files.append(root / name)
+    return tuple(files), tuple(patterns)
+
+
+def _python(data: dict, path: Path) -> str:
+    value = data.get("python", "")
+    if not isinstance(value, str):
+        raise ConfigError(f"{path}: python must be the path of an interpreter")
+    return value
 
 
 def _schema_version(data: dict, path: Path) -> int:
@@ -190,13 +214,15 @@ def load(root: Path | str | None) -> Config:
         feature_dirs=tuple(root / a["features"] for a in data.get("adapters", []) if "features" in a),
         step_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("steps", "drivers") if key in a),
         test_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("features", "steps", "drivers")
-                        if key in a) + _support_files(root, data, path),
+                        if key in a) + _support(root, data, path)[0],
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
         enforcement=enforcement,
         scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
         version=version,
-        support_files=_support_files(root, data, path),
+        support_files=_support(root, data, path)[0],
+        support_patterns=_support(root, data, path)[1],
+        python=_python(data, path),
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
     )

@@ -78,7 +78,7 @@ class ApplyTest(unittest.TestCase):
         self.assertIn("tests/drivers/system.py", created)
         self.assertEqual((self.root / "tests" / "conftest.py").read_text(encoding="utf-8"), "# mine\n")
         self.assertEqual(cfg.load(self.root).runs[0].adapter, "python-pytest-bdd")
-        self.assertEqual({p.name for p in cfg.load(self.root).support_files}, {"conftest.py", "test_features.py", "__init__.py"})
+        self.assertEqual({p.name for p in cfg.load(self.root).support_files}, {"pytest.ini", "conftest.py", "test_features.py", "__init__.py"})
         with self.assertRaises(UsageError) as cm:
             adapter.apply(self.root, "python-pytest-bdd")
         self.assertIn("already in .bdd/config.toml", str(cm.exception))

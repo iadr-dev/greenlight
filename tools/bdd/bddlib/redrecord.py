@@ -27,7 +27,8 @@ def git(root: Path, *args: str) -> str:
 
 
 def is_production(name: str, excluded: list[str]) -> bool:
-    return not any(name.startswith(prefix) for prefix in excluded)
+    """Folders (entries ending in a slash) match by prefix, files only by their exact name."""
+    return not any(name.startswith(entry) if entry.endswith("/") else name == entry for entry in excluded)
 
 
 def excluded_prefixes(root: Path, test_dirs: tuple[Path, ...]) -> list[str]:

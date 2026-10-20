@@ -14,12 +14,15 @@ optional = ["time-machine", "respx", "httpx"]
 features = "tests/features"
 steps = "tests/steps"
 drivers = "tests/drivers"
-support = ["tests/conftest.py", "tests/test_features.py", "tests/__init__.py"]
+support = ["tests/pytest.ini", "tests/conftest.py", "tests/test_features.py", "tests/__init__.py", "tests/*/conftest.py"]
 
 [run]
-# {project_python} is the project's own environment (GREENLIGHT_PYTHON, the active or a .venv/venv one), so the tests
-# see the project's packages; the tags of a scenario are pytest markers.
-by_tag = '{project_python} -m pytest -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
+# {project_python} is the project's own environment (`python = ` in .bdd/config.toml, else .venv or venv), so the tests
+# see the project's packages. pytest takes its settings only from tests/pytest.ini (-c), reads conftest files only
+# from tests/ (--confcutdir) and gets no PYTEST_* variables (scrub_env): everything that decides which scenarios run
+# is a bound file. The tags of a scenario are pytest markers.
+by_tag = '{project_python} -m pytest -c tests/pytest.ini --rootdir {root} --confcutdir tests -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
+scrub_env = ["PYTEST_"]
 report = '--junitxml={out}'
 shuffle = '--bdd-shuffle-seed {seed}'
 isolated = '--bdd-scenario "{scenario}"'

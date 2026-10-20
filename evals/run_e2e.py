@@ -47,7 +47,7 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def build_project(tmp: Path) -> tuple[Path, dict]:
+def build_project(tmp: Path) -> tuple[Path, dict, str]:
     project = tmp / "project"
     shutil.copytree(APP, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     venv = tmp / ".venv"
@@ -57,22 +57,21 @@ def build_project(tmp: Path) -> tuple[Path, dict]:
     run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
     env = os.environ.copy()
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
-    env["VIRTUAL_ENV"] = str(venv)                                 # the project's tests run in this environment
     env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
     env.pop("CLAUDE_PLUGIN_DATA", None)
     env["PYTHONUTF8"] = "1"
-    return project, env
+    return project, env, str(python)
 
 
 def bdd(project: Path, env: dict, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     return run(["sh", str(REPO / "tools" / "bdd" / "bdd"), *args], project, env, check=check)
 
 
-def set_up(project: Path, env: dict, autonomy: str) -> None:
+def set_up(project: Path, env: dict, autonomy: str, python: str) -> None:
     run([*GIT, "init", "-q"], project, env)
     run([*GIT, "add", "-A"], project, env)
     run([*GIT, "commit", "-q", "-m", "reference app"], project, env)
-    bdd(project, env, "init", "--adapter", "python-pytest-bdd", "--autonomy", autonomy)
+    bdd(project, env, "init", "--adapter", "python-pytest-bdd", "--autonomy", autonomy, "--python", python)
     smoke = bdd(project, env, "init", "--smoke")
     print(smoke.stdout.strip())
     run([*GIT, "add", "-A"], project, env)
@@ -153,8 +152,8 @@ def main() -> int:
     model = MODELS[args.model]
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
-        project, env = build_project(tmp)
-        set_up(project, env, args.autonomy)
+        project, env, python = build_project(tmp)
+        set_up(project, env, args.autonomy, python)
         output = ask(project, env, request, model, args.autonomy, args.minutes)
         row = {"request": args.request, "model": args.model, "claude": {k: output.get(k) for k in (
             "exit", "seconds", "is_error", "num_turns", "total_cost_usd", "subtype")}, **collect(project, env)}

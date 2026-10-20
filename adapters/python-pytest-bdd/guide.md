@@ -31,9 +31,22 @@ A scenario must fail for the right reason before any production code exists:
 
 ## What is bound
 
-The bind lock covers `tests/steps/`, `tests/drivers/` and the plumbing files `tests/conftest.py`,
-`tests/test_features.py` and `tests/__init__.py` (the adapter's `support` paths), so nothing that decides how the
-scenarios run can be changed once the red is proven. `bdd lock FEAT-n --scope bind --bound` locks exactly these.
+The bind lock covers `tests/steps/`, `tests/drivers/` and the plumbing files: `tests/pytest.ini`,
+`tests/conftest.py`, `tests/test_features.py`, `tests/__init__.py` and any `tests/*/conftest.py` (the adapter's
+`support` paths and patterns), so nothing that decides how the scenarios run can be changed once the red is proven.
+`bdd lock FEAT-n --scope bind --bound` locks exactly these. pytest is started with `-c tests/pytest.ini`,
+`--confcutdir tests` and no `PYTEST_*` environment variables, so a `pytest.ini`, `pyproject.toml`, `tox.ini` or
+`conftest.py` elsewhere in the project, or a variable set for one command, cannot change which scenarios run.
+
+## Which Python runs the tests
+
+The project's own environment, so the tests see the project's packages: `python = "..."` in `.bdd/config.toml`
+(write it with `bdd init --python PATH`), else a `.venv` or `venv` folder in the project, else the interpreter that
+runs `bdd`. Environment variables such as `VIRTUAL_ENV` are not consulted: a process can set them for one command, and
+this interpreter produces the evidence that gates accept. Each recorded run names its interpreter (path and hash), a
+gate refuses a run made with another one, the tripwire watches an in-project environment (the interpreter,
+`pyvenv.cfg`, `.pth` files, `sitecustomize.py` and the pytest packages) and agents may neither write into it nor
+install packages.
 
 ## Do not edit the core drivers
 
