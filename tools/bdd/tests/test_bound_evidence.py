@@ -113,21 +113,33 @@ class AgentCommandsTest(ProjectCase):
                 self.assertIn("may not install packages", self.bash(command, "implementer"))
                 self.assertIsNone(self.bash(command, None))
 
-    def test_node_package_commands_are_found_after_flags_and_prefixes(self):
-        spellings = ("npm --prefix tests install", "npm -g i left-pad", "npm --silent ci", "npm uninstall x", "npm update",
-                     "npm rebuild", "npm link ../x", "npm exec some-tool", "npx playwright install", "bunx create-thing",
-                     "pnpm dlx create-thing", "pnpm --filter app add zod", "yarn", "yarn --frozen-lockfile", "yarn add zod",
-                     "sudo npm i", "FOO=1 npm install", "cd tests && npm ci", "echo done; npm remove x", "(npm install)",
-                     "C:\\Tools\\npm.cmd install", "./node_modules/.bin/npx tsc")
-        for command in spellings:
+    def test_node_package_tools_are_refused_unless_a_safe_subcommand_is_clear(self):
+        refused = (
+            "npm install", "npm -w x i y", "npm --workspace=x install", "npm --prefix tests install", "npm -g i left-pad",
+            "npm --silent ci", "npm clean-install", "npm uninstall x", "npm update", "npm rebuild", "npm link ../x",
+            "npm init", "npm exec some-tool", "npm config set registry http://x", "npm audit fix", "npm pack",
+            "yarn", "yarn --frozen-lockfile", "yarn add zod", "yarn global add zod", "yarn build",
+            "pnpm dlx create-thing", "pnpm --filter app add zod", "pnpm i", "bun add zod", "bun x tool",
+            "npx playwright install", "pnpx thing", "bunx create-thing", "./node_modules/.bin/npx tsc", "corepack enable",
+            "npm --prefix tests run typecheck",                     # a flag in front: the subcommand's place is not clear
+            "sudo npm i", "FOO=1 npm install", "env npm install", "cd tests && npm ci", "echo done; npm remove x", "(npm install)",
+            "bash -c 'npm install'", 'sh -c "cd tests && npm ci"', "npm \\\n install",
+            '"npm" install', 'n""pm install', "'npm' 'i'", "$'np\\x6d' install",
+            "node node_modules/npm/bin/npm-cli.js install", "node /usr/lib/node_modules/pnpm/bin/pnpm.cjs add x",
+            "C:\\Tools\\npm.cmd install", "/usr/local/bin/npm i")
+        for command in refused:
             with self.subTest(command=command):
                 self.assertIn("may not install packages", self.bash(command, "step-engineer"))
-                self.assertIsNone(self.bash(command, None))
+                self.assertIsNone(self.bash(command, None))            # the orchestrator is not restricted
 
-    def test_node_commands_that_only_run_things_are_left_alone(self):
-        for command in ("npm run build", "npm run install-docs", "npm test -- --update", "npm --silent run lint",
-                        "npm --prefix tests run typecheck", "yarn run build", "yarn test", "pnpm test", "npm run build -- add",
-                        "node tests/run.mjs --tag FEAT-1 --out r.xml"):
+    def test_node_commands_that_run_scripts_or_only_read_are_allowed(self):
+        allowed = ("npm test", "npm t", "npm run build", "npm run-script lint", "npm run install-docs", "npm test -- --update",
+                   "npm --silent run lint", "npm run typecheck --prefix tests", "npm run build -- add", "npm ls", "npm list --depth 0",
+                   "npm why left-pad", "npm view left-pad version", "npm info left-pad", "npm outdated", "npm audit",
+                   "npm config get registry", "npm pack --dry-run", "npm --version", "npm -v", "yarn run build", "yarn test",
+                   "yarn why x", "pnpm test", "pnpm run build", "bun run build", "bun test",
+                   "node tests/run.mjs --tag FEAT-1 --out r.xml", "ls node_modules/npm", "cat package.json")
+        for command in allowed:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command, "implementer"))
 
