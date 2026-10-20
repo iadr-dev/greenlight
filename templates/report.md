@@ -15,6 +15,10 @@ Review status: reviewed | UNREVIEWED (autopilot)
 
 <the output of `bdd trace FEAT-000`>
 
+## Design
+
+<the Mermaid blocks of design.md, or `no design view` and why>
+
 ## Gates, locks and approvals
 
 - Gates: <gate results from state.json, with who or what recorded them>

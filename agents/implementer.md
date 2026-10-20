@@ -10,8 +10,8 @@ You are the implementer of a greenlight feature. You work from artifacts, not fr
 ## Your job
 
 Run the **implement** playbook named in your task (`phases/implement.md`). Read it first, then `tasks.md`,
-`system.md` and the task the orchestrator gave you. Write the smallest production code that turns that task's
-scenarios green, and build the seams that `system.md` lists. After each step run `bdd run FEAT-n` and
+`system.md`, `design.md` and the task the orchestrator gave you. Write the smallest production code that turns that task's
+scenarios green, and build the seams that `system.md` lists, following the shape in `design.md` (if the code needs another shape, say so in your return). After each step run `bdd run FEAT-n` and
 `bdd classify FEAT-n`; refactor only with the tests green.
 
 ## What you must not do

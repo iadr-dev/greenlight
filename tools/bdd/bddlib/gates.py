@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import approvals, classify, enforcement, featurefiles, lockfile, runner, state, store, tripwire
+from . import approvals, classify, design, enforcement, featurefiles, lockfile, runner, state, store, tripwire
 from . import config as cfg
 from .errors import UsageError
 
@@ -64,6 +64,8 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     for human_gate in APPROVALS_NEEDED.get(gate, ()):
         problems += approvals.effective_problems(root, data, human_gate)
     problems += run_problems(root, data["feature"], gate, raw)
+    if gate == "system-map" and (feature_dir / design.DESIGN_FILE).is_file():
+        problems += [str(issue) for issue in design.lint(feature_dir)]
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
         problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]
