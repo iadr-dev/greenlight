@@ -46,7 +46,8 @@ signed; protect the branch (required reviews, no direct pushes) for that. See [C
 **Can production code cheat the tests?**
 It runs inside the test process, so it could in principle detect that tests are running. The auditor reads the diff for
 that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to
-leave surviving mutants. See [adapters](adapters.md).
+leave surviving mutants. The Python adapter ships a wrapper for mutmut and the Playwright adapter one for Stryker, so
+turning the check on is an install and a few lines of configuration. See [adapters](adapters.md).
 
 **Does greenlight enforce a language standard, a style, or "the latest version, nothing deprecated"?**
 It enforces what the project declares. `.bdd/standards.md` (written and approved by you) states the language and
