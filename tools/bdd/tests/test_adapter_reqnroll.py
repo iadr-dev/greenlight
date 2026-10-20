@@ -18,56 +18,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import adapter, cli, initcmd, state
+from bddlib import adapter, initcmd
 from bddlib import config as cfg
+
+from tests import adapter_contract_support as support
 
 REPO = Path(__file__).resolve().parents[3]
 ADAPTER = REPO / "adapters" / "dotnet-reqnroll"
 TEMPLATES = ADAPTER / "templates"
 FIXTURES = Path(__file__).parent / "fixtures" / "dotnet-reqnroll"
 RUN_CONTRACT = bool(shutil.which("dotnet")) and os.environ.get("GREENLIGHT_DOTNET_ADAPTER_TESTS") == "1"
-
-ORDERS = """@FEAT-003
-Feature: Orders
-
-  @R-003.1
-  Rule: Orders can be placed
-
-    @EX-003.1.1
-    Scenario: An order is placed
-      When alice calls place order with:
-        | item | qty |
-        | tea  | 2   |
-      Then the request succeeds
-
-    @EX-003.1.2
-    Scenario: Seeding needs a seam
-      Given the following order exist:
-        | id |
-        | 1  |
-      When alice calls place order
-      Then the request succeeds
-
-    @EX-003.1.3
-    Scenario: A name nobody mapped
-      When alice calls cancel order
-      Then the request succeeds
-
-    @EX-003.1.4
-    Scenario: An assertion fails
-      When add is called with:
-        | a | b |
-        | 1 | 2 |
-      Then the result is:
-        \"\"\"
-        4
-        \"\"\"
-
-    @EX-003.1.5
-    Scenario: A step nobody wrote
-      When the moon is full
-      Then the request succeeds
-"""
 
 
 def load_wrapper():
@@ -84,18 +44,13 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(adapter.load(ADAPTER)["name"], "dotnet-reqnroll")
 
     def test_the_config_block_is_valid_and_complete(self):
-        text = adapter.config_block(adapter.load(ADAPTER))
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / ".bdd").mkdir()
-            (root / ".bdd" / "config.toml").write_text(text, encoding="utf-8")
-            config = cfg.load(root)
+        config = support.config_of(ADAPTER)
         (scan,), (run,) = config.scans, config.runs
         self.assertEqual(run.adapter, "dotnet-reqnroll")
         self.assertIn("tests/run_dotnet.py", run.by_tag)
         self.assertEqual((run.report, run.shuffle), ("--out {out}", "--seed {seed}"))
         self.assertIn("--scenario", run.isolated)
-        self.assertTrue({"DOTNET_STARTUP_HOOKS", "COMPlus_", "MSBUILD"} <= set(run.scrub_env))
+        self.assertLessEqual({"DOTNET_STARTUP_HOOKS", "COMPlus_", "MSBUILD"}, set(run.scrub_env))
         self.assertTrue(scan.assert_patterns and scan.sleep_patterns and scan.stub_patterns)
 
     def test_the_packages_are_pinned_and_locked(self):
@@ -121,7 +76,7 @@ class PackageTest(unittest.TestCase):
             self.assertIn(name, shipped)
         source = (TEMPLATES / "tests" / "steps" / "CoreSteps.cs").read_text(encoding="utf-8")
         expressions = re.findall(r'\[(?:Given|When|Then)\(@"([^"]+)"\)\]', source)
-        self.assertGreaterEqual(len(expressions), 22)
+        self.assertLessEqual(22, len(expressions))
         for expression in expressions:
             re.compile(expression)
             self.assertTrue(expression.startswith("^") and expression.endswith("$"), expression)
@@ -135,9 +90,11 @@ class PackageTest(unittest.TestCase):
         command = wrapper.build_command("dotnet", "FEAT-007", Path("out.xml"), "Order of 999")
         self.assertIn("-p:RestoreLockedMode=true", command)
         self.assertEqual(command[command.index("--logger") + 1], "junit;LogFilePath=out.xml")
-        with self.assertRaises(SystemExit):
-            with contextlib.redirect_stderr(io.StringIO()):
-                wrapper.parse(["--tag", "FEAT-007; rm -rf /", "--out", "x.xml"])
+
+    def test_the_wrapper_refuses_a_tag_that_is_not_a_feature_tag(self):
+        wrapper = load_wrapper()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            wrapper.parse(["--tag", "FEAT-007; rm -rf /", "--out", "x.xml"])
 
     def test_the_wrapper_says_when_dotnet_is_missing(self):
         wrapper = load_wrapper()
@@ -158,33 +115,16 @@ class PackageTest(unittest.TestCase):
                 started.update(command=command, env=env, stale_report_gone=not out.exists())
                 return types.SimpleNamespace(returncode=3)
 
-            with mock.patch.object(wrapper.shutil, "which", return_value="dotnet"), mock.patch.object(wrapper.subprocess, "run", fake_run),                     mock.patch.dict(os.environ, {"GREENLIGHT_BDD_SEED": "stale"}):
+            with mock.patch.object(wrapper.shutil, "which", return_value="dotnet"), mock.patch.object(wrapper.subprocess, "run", fake_run), \
+                    mock.patch.dict(os.environ, {"GREENLIGHT_BDD_SEED": "stale"}):
                 code = wrapper.main(["--tag", "FEAT-007", "--out", str(out), "--seed", "42"])
         self.assertEqual(code, 3, "the exit status of dotnet test is passed on")
         self.assertTrue(started["stale_report_gone"])
         self.assertEqual(started["env"]["GREENLIGHT_BDD_SEED"], "42")
 
     def test_a_step_that_asserts_is_not_flagged_and_one_that_does_not_is(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp).resolve()
-            (root / ".bdd").mkdir()
-            adapter.apply(root, "dotnet-reqnroll")
-            state.create(root, "FEAT-000", "Sample", "standard")
-            extra = root / "tests" / "steps" / "Extra.cs"
-            extra.write_text("[Binding]\npublic class Extra\n{\n    [Then(@\"^it is fine$\")]\n    public void Fine() { }\n}\n", encoding="utf-8", newline="\n")
-            here = os.getcwd()
-            os.chdir(root)
-            try:
-                with contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(cli.main(["scan", "FEAT-000"]), 1)
-                self.assertIn("S2", out.getvalue())
-                extra.unlink()
-                with contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(cli.main(["scan", "FEAT-000"]), 0, out.getvalue())
-                with contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(cli.main(["lint", "tests/features"]), 0, out.getvalue())
-            finally:
-                os.chdir(here)
+        text = '[Binding]\npublic class Extra\n{\n    [Then(@"^it is fine$")]\n    public void Fine() { }\n}\n'
+        support.assert_scan_tells_an_assertion_free_step(self, "dotnet-reqnroll", "tests/steps/Extra.cs", text)
 
     def test_init_suggests_it_for_a_dotnet_project_and_for_nothing_else(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,36 +145,8 @@ class PackageTest(unittest.TestCase):
 
 
 @unittest.skipUnless(RUN_CONTRACT, "needs the .NET SDK, package downloads and GREENLIGHT_DOTNET_ADAPTER_TESTS=1")
-class ContractTest(unittest.TestCase):
-    """A fresh scaffold: the sample passes, every core step works against an in-memory system, red looks like red."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.dir = tempfile.TemporaryDirectory()
-        cls.root = Path(cls.dir.name).resolve()
-        (cls.root / ".bdd").mkdir()
-        adapter.apply(cls.root, "dotnet-reqnroll")
-        for number, title in ((0, "Sample"), (2, "Core"), (3, "Orders")):
-            state.create(cls.root, f"FEAT-{number:03d}", title, "standard")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.dir.cleanup()
-
-    def bdd(self, *argv: str) -> tuple[int, str, str]:
-        out, err, here = io.StringIO(), io.StringIO(), os.getcwd()
-        os.chdir(self.root)
-        try:
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                code = cli.main(list(argv))
-        finally:
-            os.chdir(here)
-        return code, out.getvalue(), err.getvalue()
-
-    def results(self, feature: str) -> dict[str, str]:
-        code, out, err = self.bdd("classify", feature, "--json")
-        self.assertIn(code, (0, 1), err)
-        return {row["example"]: row["result"] for row in json.loads(out)["scenarios"]}
+class ContractTest(support.ContractSteps, unittest.TestCase):
+    ADAPTER = "dotnet-reqnroll"
 
     def use_system(self, full: bool) -> None:
         drivers, features = self.root / "tests" / "drivers", self.root / "tests" / "features"
@@ -252,42 +164,7 @@ class ContractTest(unittest.TestCase):
             operations = drivers / "Operations.cs"
             operations.write_text(operations.read_text(encoding="utf-8").replace(
                 '        // ["place order"] = new("POST", "/orders"),', '        ["place order"] = new("POST", "/orders"),'), encoding="utf-8", newline="\n")
-            (features / "orders.feature").write_text(ORDERS, encoding="utf-8", newline="\n")
-
-    def test_1_the_sample_feature_is_green_shuffled_and_isolated(self):
-        self.use_system(full=False)
-        code, out, err = self.bdd("run", "FEAT-000")
-        self.assertEqual(code, 0, out + err)
-        self.assertEqual(self.bdd("classify", "FEAT-000", "--expect", "green")[0], 0)
-        for flags in (("--shuffle", "--seed", "7"), ("--isolated",)):
-            with self.subTest(flags=flags):
-                code, out, err = self.bdd("run", "FEAT-000", *flags)
-                self.assertEqual(code, 0, out + err)
-                self.assertEqual(self.bdd("classify", "FEAT-000", "--expect", "green")[0], 0)
-
-    def test_2_red_looks_like_red(self):
-        self.use_system(full=False)
-        code, out, err = self.bdd("run", "FEAT-003")
-        self.assertIn(code, (0, 1), out + err)
-        self.assertEqual(self.results("FEAT-003"), {"EX-003.1.1": "expected-fail", "EX-003.1.2": "expected-fail",
-                                                     "EX-003.1.3": "test-defect", "EX-003.1.4": "expected-fail",
-                                                     "EX-003.1.5": "test-defect"})
-        self.assertEqual(self.bdd("classify", "FEAT-003", "--expect", "red")[0], 1)
-
-    def test_3_every_core_step_works_and_an_n_plus_one_is_caught(self):
-        self.use_system(full=True)
-        code, out, err = self.bdd("run", "FEAT-002")
-        self.assertIn(code, (0, 1), out + err)
-        results = self.results("FEAT-002")
-        self.assertEqual({k: v for k, v in results.items() if k != "EX-002.2.1"}, {f"EX-002.1.{n}": "pass" for n in range(1, 10)})
-        self.assertEqual(results["EX-002.2.1"], "expected-fail")
-
-    def test_4_the_scaffold_passes_the_scan_and_the_lint(self):
-        self.use_system(full=False)
-        (self.root / "tests" / "features" / "orders.feature").unlink()
-        code, out, _ = self.bdd("scan", "FEAT-000")
-        self.assertEqual((code, out.strip()), (0, "FEAT-000: no findings"), out)
-        self.assertEqual(self.bdd("lint", "tests/features")[0], 0)
+            (features / "orders.feature").write_text(support.ORDERS, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

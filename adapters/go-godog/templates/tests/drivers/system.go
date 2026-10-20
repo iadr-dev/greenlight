@@ -72,4 +72,6 @@ func (s *System) Published(event string) ([]any, error) {
 }
 
 // Reset is called after every scenario: drop data, close clients.
-func (s *System) Reset() {}
+func (s *System) Reset() {
+	// Nothing to drop in the default system: close what you opened in the seams above.
+}

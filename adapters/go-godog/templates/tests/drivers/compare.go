@@ -189,48 +189,60 @@ func orValue(path string) string {
 func subsetProblem(actual, expected any, path string) string {
 	switch want := expected.(type) {
 	case map[string]any:
-		have, ok := actual.(map[string]any)
-		if !ok {
-			return orValue(path) + " should be an object"
-		}
-		keys := make([]string, 0, len(want))
-		for key := range want {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			value, present := have[key]
-			if !present {
-				return joinPath(path, key) + " is missing"
-			}
-			if problem := subsetProblem(value, want[key], joinPath(path, key)); problem != "" {
-				return problem
-			}
-		}
-		return ""
+		return objectProblem(actual, want, path)
 	case []any:
-		have, ok := actual.([]any)
-		if !ok {
-			return orValue(path) + " should be a list"
-		}
-		for _, item := range want {
-			found := false
-			for _, candidate := range have {
-				if subsetProblem(candidate, item, path) == "" {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return fmt.Sprintf("%s has no item matching %s", orValue(path), SortKey(item))
-			}
-		}
-		return ""
+		return listProblem(actual, want, path)
 	}
 	if reflect.DeepEqual(actual, expected) {
 		return ""
 	}
 	return fmt.Sprintf("%s is %s, expected %s", orValue(path), SortKey(actual), SortKey(expected))
+}
+
+// objectProblem says why actual does not hold every field of want, or "" when it does.
+func objectProblem(actual any, want map[string]any, path string) string {
+	have, ok := actual.(map[string]any)
+	if !ok {
+		return orValue(path) + " should be an object"
+	}
+	keys := make([]string, 0, len(want))
+	for key := range want {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value, present := have[key]
+		if !present {
+			return joinPath(path, key) + " is missing"
+		}
+		if problem := subsetProblem(value, want[key], joinPath(path, key)); problem != "" {
+			return problem
+		}
+	}
+	return ""
+}
+
+// listProblem says why actual lacks an item matching one of want, or "" when it has them all.
+func listProblem(actual any, want []any, path string) string {
+	have, ok := actual.([]any)
+	if !ok {
+		return orValue(path) + " should be a list"
+	}
+	for _, item := range want {
+		if !containsMatch(have, item, path) {
+			return fmt.Sprintf("%s has no item matching %s", orValue(path), SortKey(item))
+		}
+	}
+	return ""
+}
+
+func containsMatch(candidates []any, item any, path string) bool {
+	for _, candidate := range candidates {
+		if subsetProblem(candidate, item, path) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // AssertTextContains fails unless the text contains the expected text, ignoring line endings and blank lines.
