@@ -45,7 +45,8 @@ jobs:
       - name: Gates for every finished feature
         run: |
           bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
-          for id in $("$bdd" status --done); do
+          ids=$("$bdd" status --done)   # an assignment: a failing status stops the job instead of looping over nothing
+          for id in $ids; do
             "$bdd" approve "$id" --check
             "$bdd" lock "$id" --check --require
             "$bdd" run "$id"

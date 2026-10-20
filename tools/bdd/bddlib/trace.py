@@ -85,11 +85,29 @@ def rule_of(example: str) -> str:
     return f"R-{feature}.{rule}"
 
 
-def build(root: Path, feature_dir: Path, feature_id: str) -> dict:
+def member_rows(members: tuple, feature_id: str) -> tuple[list[dict], list[Gap]]:
+    """The scenarios of the other repositories of a workspace, their paths prefixed with the member's name."""
+    from . import workspace
+    rows: list[dict] = []
+    gaps: list[Gap] = []
+    for member in members:
+        why = workspace.unobserved(member)
+        if why:
+            gaps.append(Gap("T008", f"{member.name} is not observed here ({why}); its scenarios are not in this matrix"))
+            continue
+        found, problems = scenario_rows(member.path, featurefiles.spec_files(member.path, feature_id))
+        rows += [{**row, "path": f"{member.name}:{row['path']}"} for row in found]
+        gaps += [Gap(g.code, f"{member.name}: {g.message}") for g in problems]
+    return rows, gaps
+
+
+def build(root: Path, feature_dir: Path, feature_id: str, members: tuple = ()) -> dict:
     rules = read_ids(feature_dir / "rules.md", RULE_LINE)
     designed = read_ids(feature_dir / "test-design.md", EXAMPLE_LINE)
     tasks = read_tasks(feature_dir / "tasks.md")
     scenarios, gaps = scenario_rows(root, featurefiles.spec_files(root, feature_id))
+    more, member_gaps = member_rows(members, feature_id)
+    scenarios, gaps = scenarios + more, gaps + member_gaps
     by_example: dict[str, list[dict]] = {}
     for row in scenarios:
         if row["example"]:
