@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- User documentation: a rewritten README and `docs/` pages for the quickstart, concepts, the step vocabulary (generated from `vocabulary/core.json`), adapters, upgrading, the FAQ and troubleshooting.
+
 - The design view (decision D24): the system-analyst now writes `design.md` (Mermaid: components and data flow, key interaction, data model) next to `system.md`, from `templates/design.md`; `bdd design FEAT-n` checks it (fences closed, known diagram type, balanced brackets, nothing active such as `click`, `href`, `%%{init`, and every `%% interface: NAME` comment names a row of the Interfaces table in `system.md`); the system-map gate refuses a view that fails the check; the step-engineer and the implementer read it, `guided` shows it to the person before binding, the report includes it, and checklist item S7 asks the auditor whether the code follows it.
 
 - Evidence hardening, third round (decision D23): the test runner never receives `PYTHON*` (except `PYTHONUTF8` and `PYTHONIOENCODING`), `LD_*`, `DYLD_*`, `BASH_ENV`, `ENV` or `NODE_OPTIONS`, and the Python adapter starts Python with `-X utf8 -I` (isolated: no working directory on the import path); the guard, the lock and the run digest share one pattern matcher (`**` is refused), and a step, driver or plumbing file that matches but was never locked is a violation in `bdd lock --check` and the gates; the tripwire also watches installed packages' `entry_points.txt` and pytest's dependencies. Under `auto` and `autopilot` an existing test that encodes the replaced behaviour is updated through the change flow instead of being left as a must-fix.

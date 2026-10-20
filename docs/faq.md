@@ -1,0 +1,51 @@
+# FAQ
+
+**Does the AI approve its own rules and examples?**
+No. Under `guided` and `standard` only you can, by typing `/greenlight:approve FEAT-n rules|examples`. A hook records
+what you typed and checks it against the session transcript; a command run by the AI, or typed text quoted in a tool
+result, does not count. Under `auto` and `autopilot` the orchestrator records the approvals as *automatic* and the
+report says so (autopilot reports are marked UNREVIEWED).
+
+**What stops the AI from editing a test to make it pass?**
+Locks. Approving the examples locks the feature files; the bind gate locks steps, drivers and the adapter's plumbing.
+The guard blocks writes to locked files, the implementer agent cannot write tests at all, and a tripwire checks the
+effect after every tool call, whatever command caused it. A changed locked file blocks the implement and verify gates.
+
+**Is it a sandbox?**
+No. greenlight makes tampering visible and blocks the common routes; it cannot stop someone who can run arbitrary code
+as you. Production code runs inside the test process, so code written to detect and game the run is possible in
+principle; the auditor reads the diff for that. For guarantees that hold even then, add the deny rules `bdd doctor`
+shows to `.claude/settings.json` (only you can add them) and run the gates in CI.
+
+**Hard or soft enforcement: which am I in?**
+`/greenlight:status` and the report say. Hard needs the hooks to be active. If hooks cannot run (for example Git for
+Windows is not installed) greenlight works in soft mode: violations are detected afterwards, not prevented. You can pin
+`enforcement = "hard"` in `.bdd/config.toml` to refuse self-reported approvals.
+
+**Which languages and test stacks are supported?**
+Today: Python with pytest and pytest-bdd (services, libraries, command-line tools). See [adapters](adapters.md) for what
+is planned. The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
+
+**Do I have to write Gherkin?**
+No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.
+
+**Can I add my own step phrases?**
+Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
+drivers can execute.
+
+**Can I use it on an existing code base?**
+Yes for new features and changes. Scenarios that describe behaviour the system already has are tagged `@existing` so
+they may pass before implementation. A skill to adopt a whole existing code base is not available yet.
+
+**What does it cost?**
+A feature runs several agents; a small feature with Sonnet-class models is a modest number of turns, a large one is
+not. `bdd cost` records what each phase used and the report shows it. The autonomy level and `--quick` control how much
+ceremony you pay for.
+
+**How do I stop or undo a feature?**
+Nothing is applied outside your working tree: the feature is files under `.bdd/` plus tests and code in git. Use git to
+revert. To change approved work while keeping the history, use `/greenlight:change`.
+
+**Why Python in a tool for any language?**
+It is installed nearly everywhere, the standard library is enough (TOML, JSON, XML), and one deterministic
+implementation of the checks is easier to trust than prompts that re-derive them.
