@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-20
+
+First release: the full flow from feature request to verified code with the `python-pytest-bdd` adapter. See the entries below.
+
 ### Added
 - User documentation: a rewritten README and `docs/` pages for the quickstart, concepts, the step vocabulary (generated from `vocabulary/core.json`), adapters, upgrading, the FAQ and troubleshooting.
 
