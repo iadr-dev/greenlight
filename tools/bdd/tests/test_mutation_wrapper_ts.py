@@ -141,7 +141,7 @@ class RealStrykerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as elsewhere:
             report = Path(elsewhere).resolve() / "report.json"
             done = subprocess.run([NODE, "tests/tools/mutate-ts.mjs", "--report", str(report), "--test-command",
-                                   "node --test test/", "--", "src/discount.js"], cwd=self.root, capture_output=True,
+                                   "node --test", "--", "src/discount.js"], cwd=self.root, capture_output=True,
                                   text=True, check=False)
             print(f"\nStryker {STRYKER}: {done.stdout.strip()}", file=sys.stderr)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
