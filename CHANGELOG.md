@@ -16,6 +16,8 @@ versions follow [SemVer](https://semver.org/).
 First release: the full flow from feature request to verified code with the `python-pytest-bdd` adapter. See the entries below.
 
 ### Added
+- The `adopt` skill (decision D27): `/greenlight:adopt "<area>"` brings one bounded area of an existing code base under greenlight by describing what it already does. It runs the normal phases with the normal agents and human gates, with `phases/adopt.md` as the plan: every scenario is tagged `@existing`, the tests pass from the start, and no production code changes. New: `bdd state init --adopt` (a feature `kind`), `bdd adopt FEAT-n --check` (A1 every scenario is `@existing`, A2 the bind gate recorded the production source, A3 the source is unchanged), enforcement of those checks in the implement and verify gates of an adoption feature, and checklist item S8 for the auditor.
+
 - User documentation: a rewritten README and `docs/` pages for the quickstart, concepts, the step vocabulary (generated from `vocabulary/core.json`), adapters, upgrading, the FAQ and troubleshooting.
 
 - The design view (decision D24): the system-analyst now writes `design.md` (Mermaid: components and data flow, key interaction, data model) next to `system.md`, from `templates/design.md`; `bdd design FEAT-n` checks it (fences closed, known diagram type, balanced brackets, nothing active such as `click`, `href`, `%%{init`, and every `%% interface: NAME` comment names a row of the Interfaces table in `system.md`); the system-map gate refuses a view that fails the check; the step-engineer and the implementer read it, `guided` shows it to the person before binding, the report includes it, and checklist item S7 asks the auditor whether the code follows it.

@@ -77,6 +77,17 @@ bound changed afterwards, and the evidence is in `.bdd/features/FEAT-001-*/repor
 `bdd install-skills codex` (or `agents-md`) installs greenlight's instructions for Codex and other agent tools. They
 run without hooks, so enforcement is soft; see [concepts](concepts.md).
 
+## Starting from existing code
+
+To put code that already exists under greenlight before you change it, describe one area first:
+
+```text
+/greenlight:adopt "the orders module"
+```
+
+The flow is the same, except that every scenario describes what the code does today (tagged `@existing`), the tests
+pass from the start and no production code is touched. You still approve the rules and the examples.
+
 ## 6. Change your mind later
 
 ```text

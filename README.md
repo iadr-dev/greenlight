@@ -42,6 +42,7 @@ Git Bash. Without Git for Windows greenlight still works, but only with soft enf
 /greenlight:feature "what you want"               # run a feature through the phases
 /greenlight:approve FEAT-001 rules                # you, after reading rules.md
 /greenlight:approve FEAT-001 examples             # you, after reading the scenarios
+/greenlight:adopt "orders module"                 # describe code that already exists, change nothing
 /greenlight:status                                # where everything stands
 /greenlight:change FEAT-001 "what changes, why"   # change approved work, keeping the history
 ```

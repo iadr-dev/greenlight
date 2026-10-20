@@ -47,6 +47,8 @@ def state_parser() -> argparse.ArgumentParser:
     init.add_argument("feature")
     init.add_argument("--title", required=True)
     init.add_argument("--autonomy", choices=state.AUTONOMY, help="default: from .bdd/config.toml")
+    init.add_argument("--adopt", action="store_true",
+                      help="the feature describes behaviour the system already has; production code must stay as it is")
     sub.add_parser("next-id", help="print the next free feature id")
     show = sub.add_parser("show", help="print where a feature stands")
     show.add_argument("feature")
@@ -86,7 +88,8 @@ def render(info: dict) -> str:
     level = enforced["level"] + ("" if enforced["level"] == "hard" else
                                  " (violations are detected, not prevented: " + "; ".join(enforced["reasons"]) + ")")
     lines = [f"{info['feature']} {info['title']}",
-             f"phase: {info['phase']}    autonomy: {info['autonomy']['level']}",
+             f"phase: {info['phase']}    autonomy: {info['autonomy']['level']}"
+             + ("    kind: adopt (describes existing behaviour)" if info.get("kind") == "adopt" else ""),
              f"gates: {gate_text}", f"approvals: {describe_approvals(info['approvals'])}",
              f"assumptions: {len(info['assumptions'])}", f"locks: {lock_text}",
              f"red: {describe_red(info['red'])}", f"enforcement: {level}",
@@ -98,7 +101,7 @@ def do_state(args: argparse.Namespace) -> int:
     root = project_root()
     if args.action == "init":
         autonomy = args.autonomy or cfg.load(root).autonomy
-        feature_dir = state.create(root, args.feature, args.title, autonomy)
+        feature_dir = state.create(root, args.feature, args.title, autonomy, "adopt" if args.adopt else "feature")
         print(f"created {args.feature} in {lockfile.relative(root, feature_dir)}")
         return 0
     if args.action == "next-id":

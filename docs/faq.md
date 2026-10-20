@@ -39,8 +39,11 @@ Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions
 drivers can execute.
 
 **Can I use it on an existing code base?**
-Yes for new features and changes. Scenarios that describe behaviour the system already has are tagged `@existing` so
-they may pass before implementation. A skill to adopt a whole existing code base is not available yet.
+Yes. New features and changes work as on any project; scenarios that describe behaviour the system already has are
+tagged `@existing` so they may pass before implementation. To bring existing code under greenlight, run
+`/greenlight:adopt "<module, API area or command>"`, one bounded area at a time: it writes rules and examples that say
+what the code does today (you approve them), tests that pass from the start, and locks, without changing any production
+code. Afterwards a change to that area goes through `/greenlight:feature` with a safety net behind it.
 
 **What does it cost?**
 A feature runs several agents; a small feature with Sonnet-class models is a modest number of turns, a large one is

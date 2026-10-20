@@ -26,6 +26,7 @@ COMMANDS = {
     "scan": ("reportcmd", "run_scan"),
     "design": ("design", "run"),
     "install-skills": ("installskills", "run"),
+    "adopt": ("adopt", "run"),
     "migrate": ("migrate", "run"),
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),

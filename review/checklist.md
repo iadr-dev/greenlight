@@ -37,6 +37,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | S5 | No test is a tautology, compares a value with itself, checks only a status code, or swallows a failure; for each test, name the smallest realistic bug that should make it fail, and it would | yes | read the steps and drivers; judge each as strong, weak or fake in the notes |
 | S6 | Mocks sit only at declared external boundaries, never on the system under test; tests were not written from the implementation | yes | read the drivers and the diff |
 | S7 | A design view exists, `bdd design` is clean, and the code follows it or the difference is explained | no | `bdd design FEAT-n`, then compare `design.md` with the diff |
+| S8 | Adoption features only (`bdd state show` says `kind: adopt`): every scenario is `@existing`, `bdd adopt FEAT-n --check` is clean, and no rule describes behaviour the code does not have | yes | `bdd adopt FEAT-n --check`, then read each rule against the code it cites |
 
 ## L - Locks, gates and approvals
 
