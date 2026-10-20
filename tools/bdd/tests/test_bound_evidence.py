@@ -132,6 +132,8 @@ class AgentCommandsTest(ProjectCase):
             "node .yarn/releases/yarn-3.6.1.cjs install", "node tools/yarn.js add x", "node tools/npx-cli.js thing",
             "npm audit fix", "npm audit --fix", "npm audit --fix --force", "npm audit signatures", "npm audit --json fix",
             "node node_modules/npm/bin/npm-cli install", "node node_modules/npm/bin/npx-cli x", "node node_modules/npm/lib/cli.js i",
+            "node --no-warnings node_modules/npm/bin/npm-cli.js install", "node --no-warnings node_modules/npm/lib/cli.js install",
+            "node -r ./hook.js --max-old-space-size=512 node_modules/pnpm/dist/pnpm.mjs add x", "bun --bun node_modules/yarn/lib/cli.js add x",
             "node ./node_modules/pnpm/bin/pnpm add x", "bun node_modules/yarn/bin/yarn.js add x", "node node_modules/npm/bin/npm-cli/ install",
             "printf 'npm install' | bash", "ls ./tools/npm; bash run.sh", "ls ./tools/npm | xargs echo", "cat tools/yarn.js > out.txt",
             "cat tools/yarn.js; node run.js")

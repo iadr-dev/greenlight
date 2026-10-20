@@ -295,7 +295,8 @@ def _command_refuses(simple: str, interpreting: bool) -> bool:
     for at, word in enumerate(words):
         if data and at > 0 and ("/" in word or "\\" in word):
             continue
-        program = node_program(word, at > 0 and _last_segment(words[at - 1]) in INTERPRETERS)
+        run_by_interpreter = any(_last_segment(earlier) in INTERPRETERS for earlier in words[:at])   # flags may sit in between
+        program = node_program(word, run_by_interpreter)
         if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
             return True
     return False
