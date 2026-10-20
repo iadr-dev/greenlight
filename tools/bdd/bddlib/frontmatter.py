@@ -44,6 +44,8 @@ def _plain(raw: str):
     """An unquoted value must be valid YAML as it stands: Claude Code and Codex read this with a real YAML parser,
     where ``: `` inside a plain value is an error, `` #`` starts a comment, and some first characters are syntax."""
     if raw[:1] in "\"'":
+        if len(raw) < 2 or raw[-1] != raw[0]:
+            raise FrontmatterError(f"value {raw!r} starts with a quote but does not end with it: quote the whole value")
         return _scalar(raw)
     if ": " in raw or " #" in raw or raw.endswith(":") or raw[:1] in "{&*!|>%@`":
         raise FrontmatterError(f"value {raw!r} is not valid YAML as written: put it in double quotes")

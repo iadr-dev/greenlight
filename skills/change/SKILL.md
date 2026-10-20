@@ -1,7 +1,7 @@
 ---
 name: change
 description: Change something that was already approved or locked - a rule, an example, a step or the code - without breaking the audit trail. Use when the user runs /greenlight:change FEAT-n "<what changes>" or when an agent returns a change request.
-argument-hint: FEAT-n "<what changes and why>"
+argument-hint: 'FEAT-n "<what changes and why>"'
 ---
 
 # greenlight change

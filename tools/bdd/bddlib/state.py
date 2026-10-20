@@ -54,6 +54,14 @@ def observe_hooks(root: Path, feature_dir: Path) -> bool:
     return bool(load(feature_dir).get("hooks_seen"))
 
 
+def next_id(root: Path) -> str:
+    """The next free feature id: one more than the highest in use, at least FEAT-001 (FEAT-000 is the sample)."""
+    base = store.features_dir(root)
+    used = [int(m.group(1)) for p in base.iterdir() if (m := re.match(r"FEAT-(\d+)(?:-|$)", p.name))] if base.is_dir() else []
+    number = max([0, *used]) + 1
+    return f"FEAT-{number:03d}"
+
+
 def create(root: Path, feature_id: str, title: str, autonomy: str) -> Path:
     store.parse_feature_id(feature_id)
     if autonomy not in AUTONOMY:
