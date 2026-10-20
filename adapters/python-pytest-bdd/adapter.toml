@@ -16,8 +16,9 @@ steps = "tests/steps"
 drivers = "tests/drivers"
 
 [run]
-# {python} is the interpreter that runs bdd; the tags of a scenario are pytest markers.
-by_tag = '{python} -m pytest -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
+# {project_python} is the project's own environment (GREENLIGHT_PYTHON, the active or a .venv/venv one), so the tests
+# see the project's packages; the tags of a scenario are pytest markers.
+by_tag = '{project_python} -m pytest -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
 report = '--junitxml={out}'
 shuffle = '--bdd-shuffle-seed {seed}'
 isolated = '--bdd-scenario "{scenario}"'

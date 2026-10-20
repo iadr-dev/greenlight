@@ -22,6 +22,7 @@ from .errors import UsageError
 
 RUNS_DIR = ".runs"
 LATEST = "latest.json"
+RED = "red.json"
 SCHEMA = 1
 TAIL_CHARS = 4000
 SKIPPED = {"__pycache__", "node_modules", ".git"}
@@ -51,6 +52,23 @@ def inputs_digest(root: Path, feature_id: str) -> str:
     return digest.hexdigest()
 
 
+def project_python(root: Path) -> str:
+    """The interpreter a Python project's tests should run with: its own environment, not the one running bdd.
+
+    In order: ``GREENLIGHT_PYTHON``, the active virtual environment (``VIRTUAL_ENV``), ``.venv`` or ``venv`` in the
+    project, and finally the interpreter that runs bdd."""
+    explicit = os.environ.get("GREENLIGHT_PYTHON")
+    if explicit and Path(explicit).is_file():
+        return explicit
+    environments = [Path(os.environ["VIRTUAL_ENV"])] if os.environ.get("VIRTUAL_ENV") else []
+    environments += [root / ".venv", root / "venv"]
+    for environment in environments:
+        for relative in ("Scripts/python.exe", "bin/python"):
+            if (environment / relative).is_file():
+                return str(environment / relative)
+    return sys.executable
+
+
 def pick_rules(config: cfg.Config, adapter: str | None) -> cfg.RunRules:
     if not config.runs:
         raise UsageError("no [adapters.run] table in .bdd/config.toml; the adapter says how to run its tests")
@@ -75,7 +93,8 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
         raise UsageError(f"adapter {rules.adapter} has no shuffle words in [adapters.run]")
     if scenario is not None and not rules.isolated:
         raise UsageError(f"adapter {rules.adapter} has no isolated words in [adapters.run]")
-    values = {"{root}": str(root), "{python}": sys.executable, "{tag}": tag, "{marker}": re.sub(r"\W", "_", tag),
+    values = {"{root}": str(root), "{python}": sys.executable, "{project_python}": project_python(root), "{tag}": tag,
+              "{marker}": re.sub(r"\W", "_", tag),
               "{out}": str(out), "{seed}": str(seed if seed is not None else ""), "{scenario}": scenario or ""}
     words = []
     for word in shlex.split(template):
@@ -125,6 +144,24 @@ def run_feature(root: Path, feature_id: str, scenarios: list[str], rules: cfg.Ru
               "cases": [{"name": c.name, "classname": c.classname, "outcome": c.outcome, "text": c.text} for c in cases]}
     store.write_json(latest_path(root, feature_id), record)
     return record
+
+
+def keep_red(root: Path, feature_id: str) -> dict:
+    """Keep the run that proved the red, so later runs (the green, the auditor's reruns) cannot overwrite the evidence."""
+    source = latest_path(root, feature_id)
+    target = runs_dir(root, feature_id) / RED
+    shutil.copyfile(source, target)
+    return {"file": RED, "sha256": hashlib.sha256(target.read_bytes()).hexdigest(), "at": store.utc_now()}
+
+
+def load_red(root: Path, feature_id: str, kept: dict | None) -> dict:
+    """The kept red run, if it is still what was recorded at the bind gate."""
+    path = runs_dir(root, feature_id) / RED
+    if not kept or not path.is_file():
+        raise UsageError(f"no red run was kept for {feature_id}: the bind gate has not passed with a recorded run")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != kept["sha256"]:
+        raise UsageError(f"the kept red run of {feature_id} does not match what the bind gate recorded")
+    return store.read_json(path, "the kept red run")
 
 
 def load_latest(root: Path, feature_id: str) -> dict:

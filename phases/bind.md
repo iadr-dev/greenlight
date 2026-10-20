@@ -17,14 +17,19 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    fails as an expected failure.
 2. Write project step modules for the domain steps, calling the same drivers. Steps only call drivers.
 3. Read `test-data`: each scenario creates its own data.
-4. Run the feature, recorded: `bdd run FEAT-n`. Then `bdd classify FEAT-n`.
-5. The **red gate**: every scenario must fail as `expected-fail`. Fix every `test-defect` and `unknown` (an
+4. Never edit the adapter's core drivers (`api.py`, `cli.py`, `lib.py`, `compare.py`, `world.py` and the like).
+   Project differences go in `system.py` (including `complete`, which fills in a request field the scenario left
+   out), `operations.py` and your own step modules. Do not install packages; if the requirements are missing,
+   say so.
+5. Run the feature, recorded: `bdd run FEAT-n`. Then `bdd classify FEAT-n`.
+6. The **red gate**: every scenario must fail as `expected-fail`. Fix every `test-defect` and `unknown` (an
    unmapped name, an import error, an undefined step). A scenario that passes is either behaviour that already
-   exists (tag it `@existing`; this needs a change request because the spec is locked) or a tautology to fix.
-6. Run the checks: `bdd scan FEAT-n` (assertion-free then steps, fixed waits, stubs of undeclared dependencies),
+   exists (it should have been tagged `@existing` in the examples phase; as the spec is locked, return a change
+   request for the orchestrator) or a tautology to fix.
+7. Run the checks: `bdd scan FEAT-n` (assertion-free then steps, fixed waits, stubs of undeclared dependencies),
    `bdd run FEAT-n --shuffle` and `bdd run FEAT-n --isolated` (they must not depend on each other); run
    `bdd run FEAT-n` again last so the recorded run is the plain one.
-7. Report that the red is valid; after checking it, the orchestrator locks the bound files with `bdd lock FEAT-n
+8. Report that the red is valid; after checking it, the orchestrator locks the bound files with `bdd lock FEAT-n
    --scope bind tests/steps tests/drivers` (the paths the adapter uses).
 
 ## Output files

@@ -16,11 +16,13 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    each chosen technique, including its Known pitfalls.
 2. Write `test-design.md` from `templates/test-design.md`: per rule, the techniques (card ids) and why they
    fit, then the examples, one line each starting with `EX-<feature>.<rule>.<n>` and naming the technique.
-3. Apply the technique's output shape: both sides and the edge of every boundary, one example per class, one
+3. Keep it proportionate: the smallest set of examples that covers every rule through its chosen techniques,
+   usually two to five per rule. Do not test behaviour the request did not touch.
+4. Apply the technique's output shape: both sides and the edge of every boundary, one example per class, one
    example per decision-table row or an exclusion, one example per state transition.
-4. Every rule with inputs gets a negative example (card `negative-cases`) or an exclusion with a reason.
-5. List excluded cases with their reasons. Fill in the coverage check.
-6. Report the tokens and time you spent; the orchestrator records them with `bdd cost`.
+5. Every rule with inputs gets a negative example (card `negative-cases`) or an exclusion with a reason.
+6. List excluded cases with their reasons. Fill in the coverage check.
+7. Report the tokens and time you spent; the orchestrator records them with `bdd cost`.
 
 ## Output files
 

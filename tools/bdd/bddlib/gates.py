@@ -89,6 +89,8 @@ def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: d
                                   "session": enforcement.current_session()}
         if red is not None:
             current["red"] = red
+        if name == "bind" and result == "pass" and cfg.load(root).runs:
+            current["red_run"] = runner.keep_red(root, current["feature"])
         if result == "pass":
             state.advance_phase(current, name)
 

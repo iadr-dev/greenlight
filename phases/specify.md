@@ -13,7 +13,9 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 
 1. Write `rules.md` from `templates/rules.md`: one rule per line that starts with its id (`R-<feature>.<n>`),
    each with why, source and priority. Measurable non-functional requirements get `N-<feature>.<n>`.
-2. Each rule states what must be true, in the person's language. A rule that names a screen, a table or a
+2. Write the rules the request implies, and those the pre-mortem shows are blocking; nothing else. A rule the
+   person did not ask for is a deferred question in the brief, not a rule. Each rule states what must be true, in
+   the person's language. A rule that names a screen, a table or a
    URL is a design: rewrite it.
 3. Add new domain terms to `.bdd/glossary.md`.
 4. Read `pre-mortem` and run it on the draft: imagine the feature failed, rank the causes as blocking, tracked

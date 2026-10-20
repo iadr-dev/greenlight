@@ -37,6 +37,11 @@ class System:
     def run_job(self, job: str) -> None:
         raise ExpectedMissing(f"the {job} job")
 
+    def complete(self, operation: str, fields: dict[str, Any]) -> dict[str, Any]:
+        """Fill in request fields the scenario did not give, for example the id of the order created earlier, so a
+        step like `alice calls look up order` needs no id. The default adds nothing."""
+        return fields
+
     # -- Then ----------------------------------------------------------------------------------
     def records(self, entity: str) -> list[dict[str, Any]]:
         """Every stored ``entity`` record, read through a seam that does not change anything."""

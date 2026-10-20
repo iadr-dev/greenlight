@@ -31,7 +31,8 @@ class ScanRules:
 class RunRules:
     """How to run an adapter's tests and read their failures (``[adapters.run]`` / ``[adapters.classify]``).
 
-    Commands are split into words before ``{root}``, ``{python}``, ``{tag}``, ``{out}``, ``{seed}`` and
+    Commands are split into words before ``{root}``, ``{python}`` (the interpreter running bdd),
+    ``{project_python}`` (the project's own environment), ``{tag}``, ``{marker}``, ``{out}``, ``{seed}`` and
     ``{scenario}`` are filled in, so a value can never add words to the command."""
     adapter: str
     by_tag: str                              # runs the tests carrying {tag}

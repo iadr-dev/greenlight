@@ -19,7 +19,9 @@ implementer's explanations, history or expected verdict. A missing input makes t
 2. For the cards cited in `test-design.md`, check the examples against each card's Known pitfalls.
 3. Check the AI-test smells: tautology, a then step without an assertion, weakened assertions, shared state,
    fixed waits, the system under test mocked, missing negative examples.
-4. Where it applies (time, concurrency, network, UI), run the stability rerun: `bdd run FEAT-n --shuffle` and
+4. The run that proved the red is kept: read it with `bdd classify FEAT-n --run red`. Your own reruns replace
+   the latest run, so finish with a plain `bdd run FEAT-n`. Where it applies (time, concurrency, network, UI),
+   run the stability rerun: `bdd run FEAT-n --shuffle` and
    `--isolated`, several times. Mutation testing on the changed files is optional; follow `mutation-check`.
 5. Write `report.md` from `templates/report.md`: the verdict, autonomy and enforcement level, the trace
    matrix, gates, locks and approvals (every human approval must be hook-grade or labelled self-reported, and
