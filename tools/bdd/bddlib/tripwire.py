@@ -37,7 +37,8 @@ BASELINE_WHAT = "integrity baseline"
 RESTORED_BY_ACCEPT = (BASELINE_WHAT, "baseline backup")      # accepting writes both copies afresh
 ACCEPTED_KEPT = 50
 PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml",
-                 f"{cfg.BDD_DIR}/standards.md", f"{cfg.BDD_DIR}/{sharedvocab.LOCK_NAME}")
+                 f"{cfg.BDD_DIR}/standards.md", f"{cfg.BDD_DIR}/{sharedvocab.LOCK_NAME}",
+                 ".codex/hooks.json", ".codex/config.toml")      # Codex's own: they keep its hooks running
 PLUGIN_FILES = ("hooks/hooks.json", ".claude-plugin/plugin.json", "tools/bdd/bdd", "tools/bdd/main.py")
 PLUGIN_TREES = ("tools/bdd/bddlib",)
 SKIPPED = {"__pycache__", "node_modules", ".git"}
@@ -100,6 +101,7 @@ def node_environment_files(root: Path) -> list[Path]:
 def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     """Every existing file whose change would weaken enforcement."""
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
+    candidates += [home / name for home in {claudepaths.codex_home(), Path.home() / ".codex"} for name in ("hooks.json", "config.toml")]
     candidates += _files_under(root / ".claude" / "hooks")
     candidates += environment_files(root) + node_environment_files(root)
     candidates += sharedvocab.protected_files(cfg.load(root).vocabulary_file)          # the shared vocabularies the project includes

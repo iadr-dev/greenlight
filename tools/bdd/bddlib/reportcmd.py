@@ -48,7 +48,7 @@ def approval_text(root: Path, data: dict) -> str:
         elif approvals.effective_problems(root, data, gate):
             parts.append(f"{gate}: {last['decision']}d but not valid" if last["decision"] == "approve" else f"{gate}: rejected")
         else:
-            parts.append(f"{gate}: approved")
+            parts.append(f"{gate}: approved" + (f" ({approvals.CODEX_LABEL})" if last["grade"] == "codex" else ""))
     return ", ".join(parts)
 
 

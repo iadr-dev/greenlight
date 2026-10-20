@@ -41,7 +41,7 @@ def do_verify(feature_dir) -> int:
     data = state.load(feature_dir)
     print(f"{data['feature']}: verified {decided} approval(s)")
     for a in data["approvals"]:
-        if a["grade"] == "hook":
+        if a["grade"] in ("hook", "codex"):
             print(f"  #{a['id']} {a['gate']} {a['decision']}: {a['origin']}" + (f" ({a['evidence']})" if a.get("evidence") else ""))
     return 0 if all(a["origin"] != "pending" for a in data["approvals"] if a["grade"] == "hook") else 1
 
@@ -56,6 +56,9 @@ def do_check(root, feature_dir) -> int:
         print(f"{data['feature']}: {gate}: {'NOT valid' if problems else 'valid'} ({how})")
         for problem in problems:
             print(f"  - {problem}")
+        if last and last["grade"] == "codex":
+            print("  - note: typed in Codex, where nothing proves who typed it; a reviewer has to confirm this approval "
+                  "(review the committed record and protect the branch)" + (f"\n    {last['evidence']}" if last.get("evidence") else ""))
     return 1 if any(found.values()) else 0
 
 

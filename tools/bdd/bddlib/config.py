@@ -148,6 +148,10 @@ class Config:
     autonomy: str = "standard"
     language: str = "auto"
     allow_headless_approvals: bool = False   # accept approvals typed into `claude -p` (CI-driven flows)
+    codex_interactive_sources: tuple[str, ...] = ()   # Codex session sources that are a person at a keyboard
+    codex_home: str | None = None            # where Codex keeps its sessions, if not ~/.codex
+    accept_codex: bool = False               # accept approvals typed in Codex (not provenance-verified) once hooks have run
+    codex_allowed_tools: tuple[str, ...] = ()  # Codex tools (for example MCP tools) the person has checked are harmless
     enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
     scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
     version: int = SCHEMA_VERSION            # the schema this project's .bdd/ is at
@@ -367,6 +371,20 @@ def version_problem(command: str, args: list[str]) -> str | None:
     return None
 
 
+def _words(table: dict, key: str, path: Path) -> tuple[str, ...]:
+    value = table.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ConfigError(f"{path}: [approvals] {key} must be a list of non-empty strings")
+    return tuple(value)
+
+
+def _optional_text(table: dict, key: str, path: Path) -> str | None:
+    value = table.get(key)
+    if value is not None and (not isinstance(value, str) or not value):
+        raise ConfigError(f"{path}: [approvals] {key} must be a non-empty string")
+    return value
+
+
 def load(root: Path | str | None) -> Config:
     """Read ``<root>/.bdd/config.toml``. Without a root or file, every profile is enabled."""
     if root is None:
@@ -400,6 +418,10 @@ def load(root: Path | str | None) -> Config:
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
+        codex_interactive_sources=_words(data.get("approvals", {}), "codex_interactive_sources", path),
+        codex_home=_optional_text(data.get("approvals", {}), "codex_home", path),
+        accept_codex=bool(data.get("approvals", {}).get("accept_codex", False)),
+        codex_allowed_tools=_words(data.get("approvals", {}), "codex_allowed_tools", path),
         enforcement=enforcement,
         scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
         version=version,

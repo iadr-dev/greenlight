@@ -22,6 +22,7 @@ BUDGET_MS_WINDOWS = 300
 LATENCY = "hook latency"
 DENY_RULES = "deny rules"
 ENFORCEMENT = "enforcement"
+CODEX_HOOKS = "codex hooks"
 STANDARDS = "standards"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
@@ -153,6 +154,28 @@ def project_enforcement(project: Path) -> Check:
                      "Fix .bdd/config.toml (or run `bdd migrate` if it is from an older greenlight).")
 
 
+def check_codex_hooks(codex_on_path: bool, installed: bool, observed: bool) -> Check | None:
+    """Codex is enforced only by hooks the person installed, and only once they have really run in this project."""
+    if not (codex_on_path or installed):
+        return None
+    if installed and observed:
+        return Check(CODEX_HOOKS, "ok", "greenlight's Codex hooks are installed and have run in this project")
+    if installed:
+        return Check(CODEX_HOOKS, "warn", "greenlight's Codex hooks are installed but have not run in this project yet",
+                     "Start Codex in this project and review and trust the hooks when it asks. Until a hook has run, "
+                     "work done in Codex is soft: detected afterwards, not prevented.")
+    return Check(CODEX_HOOKS, "warn", "Codex is available but greenlight's hooks are not installed: work done in Codex is soft",
+                 "Run `bdd install-hooks codex` to see the entries, then `bdd install-hooks codex --apply` to write them. "
+                 "Without them nothing is prevented in Codex, only detected afterwards (`bdd lock FEAT-n --check --require`).")
+
+
+def project_codex_hooks(project: Path) -> Check | None:
+    from . import installhooks
+    files = [installhooks.target(None), installhooks.target(project)]
+    return check_codex_hooks(shutil.which("codex") is not None, any(installhooks.installed(p) for p in files),
+                             (enforcement.marker_dir(project) / enforcement.CODEX_MARKER).is_file())
+
+
 def check_standards(root: Path) -> Check:
     """Are the project's engineering standards written and approved? Only the person can edit the file."""
     path = root / cfg.BDD_DIR / "standards.md"
@@ -173,6 +196,7 @@ def run_checks() -> list[Check]:
     deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
     mode = [project_enforcement(project)] if project else []
     standards = [check_standards(project)] if project else []
+    codex = [c for c in [project_codex_hooks(project)] if c] if project else []
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
@@ -180,6 +204,7 @@ def run_checks() -> list[Check]:
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
         *mode,
+        *codex,
         *standards,
         *deny,
     ]

@@ -27,6 +27,8 @@ COMMANDS = {
     "design": ("design", "run"),
     "pr": ("pr", "run"),
     "vocabulary": ("vocabcmd", "run"),
+    "codex-hook": ("codexhook", "main"),
+    "install-hooks": ("installhooks", "run"),
     "install-skills": ("installskills", "run"),
     "adopt": ("adopt", "run"),
     "check": ("quality", "run"),

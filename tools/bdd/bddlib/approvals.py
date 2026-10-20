@@ -23,12 +23,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config as cfg
-from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store, workspace
+from . import approvalcommand, claudepaths, codexorigin, enforcement, featurefiles, lockfile, state, store, workspace
 from .errors import UsageError
 
 GATES = state.HUMAN_GATES
 DECISIONS = ("approve", "reject")
-GRADES = ("hook", "self-reported", "auto")
+GRADES = ("hook", "self-reported", "auto", "codex")
 PREREQUISITE_GATES = {"rules": ("discover",), "examples": ("test-design",)}
 PHASE_OF = {"rules": "specify", "examples": "examples"}
 PENDING_TIMEOUT = timedelta(minutes=10)
@@ -116,7 +116,8 @@ def ensure_spec_locked(root: Path, feature_dir: Path, feature_id: str, files: di
 
 
 def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, *, session: str | None = None,
-           prompt_id: str | None = None, transcript_path: str | None = None, reason: str = "") -> dict:
+           prompt_id: str | None = None, transcript_path: str | None = None, reason: str = "",
+           source: dict | None = None) -> dict:
     """Append an approval (or a rejection) and apply its effects: phase change and, for approved
     examples, the spec lock. Returns the new record."""
     if gate not in GATES:
@@ -142,9 +143,9 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
-             "origin": {"hook": "pending"}.get(grade, grade), "artifacts": artifacts, "members": members,
+             "origin": {"hook": "pending", "codex": "codex-unverified"}.get(grade, grade), "artifacts": artifacts, "members": members,
              "session": session,
-             "prompt_id": prompt_id, "transcript_path": transcript_path,
+             "prompt_id": prompt_id, "transcript_path": transcript_path, "source": source,
              "mode": cfg.load(root).enforcement, "hooks_seen": bool(data.get("hooks_seen"))}
 
     def mutate(current: dict) -> None:
@@ -187,11 +188,41 @@ def auto_problem(root: Path, level: str | None) -> str | None:
     return None
 
 
+CODEX_LABEL = "codex, not provenance-verified"
+CI_CODEX_MESSAGE = ("the approval was typed in Codex, where nothing proves who typed it, so the check cannot accept it by itself: "
+                    "a reviewer has to accept it (pull request review and branch protection), and the project records that by "
+                    "committing `[approvals] accept_codex = true` in .bdd/config.toml")
+
+
+def provenance(approval: dict) -> str:
+    """How an approval got here, in the words status, the report and the pull request description use."""
+    return CODEX_LABEL if approval["grade"] == "codex" else str(approval["origin"])
+
+
+def codex_problem(root: Path) -> str | None:
+    """Why an approval typed in Codex cannot be accepted (None = it can).
+
+    Codex's hook is an ordinary command and the agent runs as the person, so nothing proves who typed it. It is therefore never
+    accepted on its own: ``hard`` refuses it outright, and every other mode needs the person's opt-in, ``[approvals]
+    accept_codex = true`` in ``.bdd/config.toml`` (guard-protected), whether hooks have run or not. Accepted, it is labelled
+    "codex, not provenance-verified" everywhere."""
+    config = cfg.load(root)
+    if config.enforcement == "hard":
+        return ('this project requires hard enforcement (.bdd/config.toml: enforcement = "hard"), and an approval typed in '
+                "Codex is not provenance-verified: the agent and the person are the same user there")
+    if not config.accept_codex:
+        return ("an approval typed in Codex is not provenance-verified (the agent and the person are the same user there). If "
+                "the person accepts that, they set `[approvals] accept_codex = true` in .bdd/config.toml")
+    return None
+
+
 def check_grade(root: Path, data: dict, grade: str) -> None:
     if grade == "auto":
         problem, label = auto_problem(root, data["autonomy"]["level"]), "an automatic"
     elif grade == "self-reported":
         problem, label = self_reported_problem(root, data), "a self-reported"
+    elif grade == "codex":
+        problem, label = codex_problem(root), "a Codex"
     else:
         return
     if problem:
@@ -301,22 +332,39 @@ def verdict_for(approval: dict, feature: str, earlier: list[dict]) -> tuple[str,
 def verify_origins(feature_dir: Path) -> int:
     """Check every pending hook approval against the transcript. Returns how many were decided."""
     data = state.load(feature_dir)
-    verdicts = {}
-    for index, approval in enumerate(data["approvals"]):
-        if approval["grade"] == "hook" and approval["origin"] == "pending":
-            verdict = verdict_for(approval, data["feature"], data["approvals"][:index])
-            if verdict:
-                verdicts[approval["id"]] = verdict
-    if not verdicts:
+    verdicts = pending_verdicts(data)
+    notes = codex_notes(data, feature_dir)
+    if not verdicts and not notes:
         return 0
 
     def mutate(current: dict) -> None:
         for approval in current["approvals"]:
             if approval["id"] in verdicts and approval["origin"] == "pending":
                 approval["origin"], approval["evidence"] = verdicts[approval["id"]]
+            if approval["id"] in notes and not approval.get("evidence"):
+                approval["evidence"] = notes[approval["id"]]
 
     state.update(feature_dir, mutate)
     return len(verdicts)
+
+
+def pending_verdicts(data: dict) -> dict[int, tuple[str, str]]:
+    """The origins that can be decided now for pending hook approvals, by approval id."""
+    verdicts = {}
+    for index, approval in enumerate(data["approvals"]):
+        if approval["grade"] == "hook" and approval["origin"] == "pending":
+            verdict = verdict_for(approval, data["feature"], data["approvals"][:index])
+            if verdict:
+                verdicts[approval["id"]] = verdict
+    return verdicts
+
+
+def codex_notes(data: dict, feature_dir: Path) -> dict[int, str]:
+    """Supporting evidence for approvals typed in Codex that have none yet. It describes what Codex's session file shows and
+    decides nothing: the origin of such an approval stays ``codex-unverified``."""
+    root = cfg.find_root(feature_dir)
+    return {a["id"]: codexorigin.supporting_evidence(root, a, data["feature"]) for a in data["approvals"]
+            if a["grade"] == "codex" and not a.get("evidence")}
 
 
 # -- are the human gates satisfied? -------------------------------------------------------
@@ -341,6 +389,9 @@ def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
 
 def grade_problems(root: Path, data: dict, gate: str, last: dict) -> list[str]:
     grade, origin = last["grade"], last["origin"]
+    if grade == "codex":
+        problem = codex_problem(root)
+        return [f"the {gate} approval was typed in Codex, which is not accepted: {problem}"] if problem else []
     if grade in ("auto", "self-reported"):
         problem = auto_problem(root, last.get("autonomy")) if grade == "auto" else self_reported_problem(root, data)
         label = "automatic" if grade == "auto" else "self-reported"
@@ -375,4 +426,10 @@ def recorded_problems(root: Path, data: dict) -> dict[str, list[str]]:
     approval against the project's rules, and the hashes of the approved files against the files now. A gate that is
     fine maps to an empty list."""
     wanted = required_gates(data)
-    return {g: effective_problems(root, data, g) for g in GATES if g in wanted or _last(data, g) is not None}
+    found = {g: effective_problems(root, data, g) for g in GATES if g in wanted or _last(data, g) is not None}
+    if not cfg.load(root).accept_codex:
+        for gate, problems in found.items():
+            last = _last(data, gate)
+            if last is not None and last["decision"] == "approve" and last["grade"] == "codex":
+                problems.append(CI_CODEX_MESSAGE)
+    return found

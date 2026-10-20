@@ -19,19 +19,26 @@ import re
 
 COMMAND = "/greenlight:approve"
 PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(?:[ \t]+(reject)(?:[ \t]+(\S.*))?)?")
+CODEX_COMMAND = "$greenlight-approve"
+CODEX_PROMPT = re.compile(r"\$greenlight-approve[ 	]+(FEAT-\d+)[ 	]+(rules|examples)(?:[ 	]+(reject)(?:[ 	]+(\S.*))?)?")
 _EXPANDED = re.compile(r"<command-message>[^<\n]*</command-message>\s*<command-name>/greenlight:approve</command-name>"
                        r"\s*<command-args>([^<\n]*)</command-args>")
 
 
-def parse(prompt: object) -> tuple[str, str, str | None] | None:
+def parse(prompt: object, pattern: re.Pattern[str] = PROMPT) -> tuple[str, str, str | None] | None:
     """(feature, gate, reject reason or None) when the whole prompt is an approval command."""
     if not isinstance(prompt, str):
         return None
-    match = PROMPT.fullmatch(prompt.strip())
+    match = pattern.fullmatch(prompt.strip())
     if match is None:
         return None
     feature, gate, reject, reason = match.groups()
     return feature, gate, (reason or "no reason given") if reject else None
+
+
+def parse_codex(prompt: object) -> tuple[str, str, str | None] | None:
+    """The same, for the way the person types it in Codex: ``$greenlight-approve FEAT-007 rules``."""
+    return parse(prompt, CODEX_PROMPT)
 
 
 def typed_text(entry: dict) -> str | None:

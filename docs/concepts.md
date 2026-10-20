@@ -134,6 +134,36 @@ you typed, you set `enforcement = "soft"` in `.bdd/config.toml` and confirm in p
 `bdd approve --self-reported`; `enforcement = "hard"` refuses that. Run the locks check in CI (see [CI](ci.md)) to
 catch afterwards what nothing prevents.
 
+### Enforcement in Codex
+
+Codex runs hooks too, from the person's own hook file, so greenlight can block and detect there. It cannot call the result
+*hard*. In Codex the agent and you run as the same user in the same shell, and a hook is an ordinary command that anything
+able to run commands could call with a made-up payload: nothing proves who typed an approval or that a gate was recorded
+under a hook, and whatever an agent could have written (a session file, a log) proves nothing either. So:
+
+- **Locks: hooks active, best effort.** `bdd install-hooks codex` shows the three entries it would add (before a tool runs,
+  after it, and when you submit a prompt); `--apply` writes them into `~/.codex/hooks.json` (or `--project` for the repo's
+  `.codex/hooks.json`) without touching your own entries, and `--uninstall` removes exactly those. Codex asks you to trust new
+  hooks. Then shell commands and patches are checked against the locks, and text sent to a running command is allowed only as polling or as a very small set of answers (`y`, `n`, `yes`, `no`, `q`, a number of one to three digits, a single Enter): interactive input into long-running sessions is restricted inside projects, which is the price of failing closed, so run anything else as a normal tool call; the rest of the checks apply (every project a call
+  touches, every reading of the command), Codex's own hook and settings files are watched by the tripwire, tools greenlight
+  has not looked at are refused (list one you have checked in `[approvals] codex_allowed_tools`), and agents may not run
+  greenlight's hook commands, start a nested `codex`, set `CODEX_HOME`, type `$greenlight-approve` through a tool, or write
+  under Codex's home, its sessions or any `.codex` folder. The Claude Code guard refuses the same things.
+- **Approvals typed in Codex** (`$greenlight-approve FEAT-001 rules`) are recorded with the grade `codex` and the origin
+  `codex-unverified`. They are never accepted on their own: refused in a project that says `enforcement = "hard"`, and in every other mode unless you opt in with `[approvals] accept_codex = true` in `.bdd/config.toml`. The CI check (`bdd approve --check`) fails on one until that acceptance is committed, so a reviewer has to accept it (pull request review and branch protection). Accepted, they are labelled "codex, not provenance-verified" in status, the report and the pull
+  request description, and never called verified.
+  `bdd approve FEAT-001 --check` flags them for the reviewer, and what Codex's session file shows about them is kept as
+  supporting evidence only. The guarantee is the committed record reviewed in CI and branch protection.
+- **Grade:** a feature with work done in Codex is reported soft, with the reason (`/greenlight:status`, the report,
+  `bdd doctor`). If your Codex keeps its home somewhere other than `~/.codex`, say where in `[approvals] codex_home`;
+  greenlight never trusts the environment for that. Per-agent write limits do not exist in Codex, and the text checks on shell
+  commands are best effort: a differently spelled command can get past them, which is what the tripwire, your deny rules and CI
+  are for. The text checks are frozen: they will not grow into a complete shell parser. Known gaps include commands built
+  up from variables or `eval`, scripts written first and run later, aliases or wrappers that run `codex` under another
+  name, and projects that a command finds by searching rather than by naming a path. Also: a project is found from the paths a command names, not from the operand of `cd` or `git -C` or from a bare word that is a folder; glob spellings of Codex's state folder or session file names in shell text, glob or link spellings in the
+  Claude Code guard's Codex-state check. Rely on the tripwire, your deny rules
+  and CI (`bdd approve --check`, `bdd lock --check --require`) for those.
+
 ## Agents
 
 Six agents do the phase work: product-analyst, qa-designer, system-analyst, step-engineer, implementer and
