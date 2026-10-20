@@ -72,6 +72,17 @@ checks it against the session transcript. Once the examples are approved, the fe
 When the report says `Verdict: PASS`, every rule has examples, every example has a passing test, nothing approved or
 bound changed afterwards, and the evidence is in `.bdd/features/FEAT-001-*/report.md`.
 
+## Starting from existing code
+
+To put code that already exists under greenlight before you change it, describe one area first:
+
+```text
+/greenlight:adopt "the orders module"
+```
+
+The flow is the same, except that every scenario describes what the code does today (tagged `@existing`), the tests
+pass from the start and no production code is touched. You still approve the rules and the examples.
+
 ## 6. Change your mind later
 
 ```text

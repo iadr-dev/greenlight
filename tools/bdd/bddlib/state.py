@@ -37,8 +37,11 @@ def path_of(feature_dir: Path) -> Path:
     return feature_dir / STATE_FILE
 
 
-def new_state(feature_id: str, title: str, autonomy: str) -> dict:
-    return {"schema": store.SCHEMA, "feature": feature_id, "title": title, "created_at": store.utc_now(),
+KINDS = ("feature", "adopt")        # adopt: describes behaviour the system already has; production code stays as it is
+
+
+def new_state(feature_id: str, title: str, autonomy: str, kind: str = "feature") -> dict:
+    return {"schema": store.SCHEMA, "feature": feature_id, "kind": kind, "title": title, "created_at": store.utc_now(),
             "phase": PHASES[0], "autonomy": {"level": autonomy, "switches": []}, "gates": {},
             "approvals": [], "assumptions": [], "cost": {}, "red": None, "hooks_seen": False,
             "changes": []}
@@ -62,10 +65,12 @@ def next_id(root: Path) -> str:
     return f"FEAT-{number:03d}"
 
 
-def create(root: Path, feature_id: str, title: str, autonomy: str) -> Path:
+def create(root: Path, feature_id: str, title: str, autonomy: str, kind: str = "feature") -> Path:
     store.parse_feature_id(feature_id)
     if autonomy not in AUTONOMY:
         raise UsageError(f"autonomy must be one of {', '.join(AUTONOMY)}")
+    if kind not in KINDS:
+        raise UsageError(f"kind must be one of {', '.join(KINDS)}")
     if not title.strip():
         raise UsageError("a feature needs a title")
     base = store.features_dir(root)
@@ -73,7 +78,7 @@ def create(root: Path, feature_id: str, title: str, autonomy: str) -> Path:
     if existing:
         raise UsageError(f"{feature_id} already exists ({existing[0]})")
     feature_dir = base / f"{feature_id}-{slug(title)}"
-    store.write_json(path_of(feature_dir), new_state(feature_id, title.strip(), autonomy))
+    store.write_json(path_of(feature_dir), new_state(feature_id, title.strip(), autonomy, kind))
     return feature_dir
 
 
