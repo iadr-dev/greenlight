@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Leak</title></head>
+  <body>
+    <p data-testid="result">waiting</p>
+    <script>
+      fetch('https://tracker.test/collect')
+        .then(() => { document.querySelector('[data-testid="result"]').textContent = 'sent'; })
+        .catch(() => { document.querySelector('[data-testid="result"]').textContent = 'blocked'; });
+    </script>
+  </body>
+</html>

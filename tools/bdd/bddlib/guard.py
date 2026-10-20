@@ -57,6 +57,7 @@ MANAGED_NAMES = {"state.json", "lock.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
+INSTALLED_PACKAGES = "node_modules"             # installed packages of a node project, wherever the folder is
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
@@ -156,7 +157,7 @@ class Project:
         key = path_key(path)
         if key.startswith(path_key(self.root / cfg.BDD_DIR) + "/"):
             return "data"
-        if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS):
+        if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS) or INSTALLED_PACKAGES in key.split("/"):
             return "environment"
         if key in {path_key(f) for f in self.config.support_files}:
             return "steps"
@@ -212,8 +213,8 @@ def check_enforcement_files(path: Path) -> str | None:
 
 _INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda|npm|pnpm|yarn)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
                       r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
-_ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv)[/\\]", re.IGNORECASE)
-INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv): "
+_ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv|node_modules)[/\\]", re.IGNORECASE)
+INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv, node_modules): "
                    "that is the person's decision and it would change what the tests run on. Report the missing "
                    "requirement instead.")
 

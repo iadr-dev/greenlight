@@ -121,6 +121,18 @@
       "path": "instructions/C.OUTPUT.CONTAINS.md"
     },
     {
+      "apply_when": "the interface behaves differently depending on what the browser or app has stored",
+      "id": "C.STATE.GLOBAL",
+      "kind": "instruction",
+      "path": "instructions/C.STATE.GLOBAL.md"
+    },
+    {
+      "apply_when": "the outcome is what the browser or app remembers rather than what it shows",
+      "id": "C.STATE.VERIFY",
+      "kind": "instruction",
+      "path": "instructions/C.STATE.VERIFY.md"
+    },
+    {
       "apply_when": "the request sent to an external dependency matters, not only its answer",
       "id": "C.STUB.CALLED",
       "kind": "instruction",
@@ -131,6 +143,30 @@
       "id": "C.STUB.RESPOND",
       "kind": "instruction",
       "path": "instructions/C.STUB.RESPOND.md"
+    },
+    {
+      "apply_when": "a person does something on a page such as clicking, typing, choosing or uploading",
+      "id": "C.UI.ACT",
+      "kind": "instruction",
+      "path": "instructions/C.UI.ACT.md"
+    },
+    {
+      "apply_when": "something must be hidden, removed or withheld from a person",
+      "id": "C.UI.NOT_SEE",
+      "kind": "instruction",
+      "path": "instructions/C.UI.NOT_SEE.md"
+    },
+    {
+      "apply_when": "the scenario starts on a page of a web, mobile or desktop interface",
+      "id": "C.UI.OPEN",
+      "kind": "instruction",
+      "path": "instructions/C.UI.OPEN.md"
+    },
+    {
+      "apply_when": "checking what a person sees on a page after an action",
+      "id": "C.UI.SEE",
+      "kind": "instruction",
+      "path": "instructions/C.UI.SEE.md"
     },
     {
       "apply_when": "the brief has gaps that would change a rule, and the person is available to answer",

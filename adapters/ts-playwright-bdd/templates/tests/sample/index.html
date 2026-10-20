@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sample (delete me)</title>
+  </head>
+  <body>
+    <h1 data-testid="greeting">Hello</h1>
+    <p>Clicks: <span data-testid="count">0</span></p>
+    <button type="button" id="add">Add one</button>
+    <script>
+      const count = document.querySelector('[data-testid="count"]');
+      const show = () => { count.textContent = window.localStorage.getItem('count') ?? '0'; };
+      document.getElementById('add').addEventListener('click', () => {
+        window.localStorage.setItem('count', String(Number(window.localStorage.getItem('count') ?? '0') + 1));
+        show();
+      });
+      show();
+    </script>
+  </body>
+</html>

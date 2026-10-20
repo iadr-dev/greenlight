@@ -116,6 +116,8 @@ class AgentCommandsTest(ProjectCase):
     def test_an_agent_may_not_write_into_the_environment_from_a_shell(self):
         reason = self.bash("cp evil.py .venv/Lib/site-packages/sitecustomize.py", "step-engineer")
         self.assertIn("may not install packages", reason)
+        self.assertIn("may not install packages", self.bash("cp evil.js tests/node_modules/playwright-bdd/dist/x.js", "implementer"))
+        self.assertIsNone(self.bash("ls tests/node_modules", "step-engineer"))
         self.assertIsNone(self.bash("ls .venv", "step-engineer"))                      # reading is fine
         self.assertIsNone(self.bash("cp evil.py .venv/Lib/x.py", None))
 
@@ -217,6 +219,13 @@ class EnvironmentTest(ProjectCase):
             with self.subTest(agent=agent):
                 self.assertIsNotNone(self.evaluate(agent, ".venv/Lib/site-packages/pytest/__init__.py"))
                 self.assertIsNotNone(self.evaluate(agent, "venv/bin/python"))
+
+    def test_no_agent_may_write_into_installed_node_packages_at_any_depth(self):
+        for agent in ("implementer", "step-engineer"):
+            for rel in ("node_modules/left-pad/index.js", "tests/node_modules/@playwright/test/cli.js"):
+                with self.subTest(agent=agent, path=rel):
+                    self.assertIn("environment", self.evaluate(agent, rel))
+        self.assertIsNone(self.evaluate("implementer", "src/node_modules_notes.md"))              # only the folder itself
 
     def test_the_kept_red_is_exactly_the_bytes_that_were_checked(self):
         runner.runs_dir(self.root, "FEAT-007").mkdir(parents=True)

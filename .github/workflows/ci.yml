@@ -53,3 +53,30 @@ jobs:
         run: sh tools/bdd/bdd lint specs/features
       - name: greenlight's own specs pass (dogfood)
         run: python specs/run_specs.py
+
+  adapter-ts-playwright-bdd:
+    name: adapter contract (ts-playwright-bdd, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_NODE_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: adapters/ts-playwright-bdd/templates/tests/package-lock.json
+      - name: Browser system libraries (Linux), from the pinned tooling
+        if: runner.os == 'Linux'
+        run: |
+          npm ci --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
+          sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
+      - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
