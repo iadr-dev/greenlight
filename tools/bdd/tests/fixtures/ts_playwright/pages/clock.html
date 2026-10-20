@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Clock</title></head>
+  <body>
+    <p data-testid="now"></p>
+    <script>
+      const show = () => { document.querySelector('[data-testid="now"]').textContent = new Date().toISOString().slice(0, 16); };
+      show();
+      setInterval(show, 1000);
+    </script>
+  </body>
+</html>

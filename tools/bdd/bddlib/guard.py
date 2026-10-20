@@ -57,6 +57,7 @@ MANAGED_NAMES = {"state.json", "lock.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
+INSTALLED_PACKAGES = "node_modules"             # installed packages of a node project, wherever the folder is
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
@@ -156,7 +157,7 @@ class Project:
         key = path_key(path)
         if key.startswith(path_key(self.root / cfg.BDD_DIR) + "/"):
             return "data"
-        if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS):
+        if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS) or INSTALLED_PACKAGES in key.split("/"):
             return "environment"
         if key in {path_key(f) for f in self.config.support_files}:
             return "steps"
@@ -210,12 +211,73 @@ def check_enforcement_files(path: Path) -> str | None:
     return None
 
 
-_INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda|npm|pnpm|yarn)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
+_INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
                       r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
-_ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv)[/\\]", re.IGNORECASE)
-INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv): "
+_ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv|node_modules)(?![\w.-])", re.IGNORECASE)   # a whole path segment
+# Node package tools fail closed. For an agent a command that runs npm, pnpm, yarn or bun is allowed only when the
+# subcommand comes first (after at most a few flags that take no value) and is a script or read-only one; anything else
+# is refused, and so are the programs that fetch a package and run it. No tool's flag parsing is modelled: a flag that
+# might take a value in front of the subcommand makes its place unclear, and an unclear place is a refusal.
+NODE_PROGRAMS = {"npm": "npm", "pnpm": "pnpm", "yarn": "yarn", "yarnpkg": "yarn", "bun": "bun",
+                 "npx": "fetch", "pnpx": "fetch", "bunx": "fetch", "corepack": "fetch"}
+SCRIPT_SUFFIXES = {"cmd", "exe", "ps1", "js", "cjs", "mjs"}
+SAFE_SUBCOMMANDS = {"run", "run-script", "test", "t", "ls", "list", "why", "view", "info", "outdated"}
+VERSION_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
+QUIET_FLAGS = {"--silent", "-s", "--no-color", "--no-progress"}
+AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=")      # all that `audit` may be given
+CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
+                  "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
+                  "exec", "dlx", "x", "init", "create", "publish", "global"}
+DATA_COMMANDS = {"ls", "cat", "echo", "printf", "head", "tail", "wc", "stat", "file", "grep", "rg", "du", "tree", "dir",
+                 "which", "where", "realpath", "readlink", "cd", "pushd"}      # a path they are given is data, not a program
+_CONTINUATION = re.compile(r"\\\r?\n")
+_SIMPLE_COMMANDS = re.compile(r"[;&|\n`()]+")
+INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv, node_modules): "
                    "that is the person's decision and it would change what the tests run on. Report the missing "
                    "requirement instead.")
+NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-manager commands other than scripts and "
+                "read-only ones (run, test, ls, list, why, view, info, outdated, audit, --version), and may not use npx, pnpx, "
+                "bunx or corepack. Put the subcommand first and the flags after it (`npm run typecheck --prefix tests`). "
+                "Installing is the person's decision; report the missing requirement instead.")
+
+
+def node_program(word: str) -> str | None:
+    """What kind of package tool a command word starts, if any, whatever folder it is in: ``npm``, ``./tools/yarn``,
+    ``npm.cmd``, or a script run through node (``npm-cli.js``, ``pnpm.cjs``, ``yarn-1.22.19.cjs``)."""
+    name = word.replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if name in NODE_PROGRAMS:
+        return NODE_PROGRAMS[name]
+    stem, _, suffix = name.rpartition(".")
+    return NODE_PROGRAMS.get(stem.split("-", 1)[0]) if suffix in SCRIPT_SUFFIXES else None
+
+
+def node_arguments_are_safe(args: list[str]) -> bool:
+    """Is the subcommand the first argument (after value-less flags), a script or read-only one, with nothing later that
+    changes packages? ``audit`` is read-only only with the flags that report."""
+    first = 0
+    while first < len(args) and args[first] in QUIET_FLAGS:
+        first += 1
+    words = [word.casefold() for word in args[first:]]
+    if not words or CHANGING_WORDS & set(words):
+        return False
+    if words[0] in VERSION_FLAGS:
+        return True
+    if words[0] == "audit":
+        return all(word.startswith(AUDIT_FLAGS) for word in words[1:])
+    return words[0] in SAFE_SUBCOMMANDS
+
+
+def refuses_node_packages(command: str) -> bool:
+    """Does any reading of the command run a package tool in a way an agent may not?"""
+    for reading in shell_readings(_CONTINUATION.sub("", command)):
+        for simple in _SIMPLE_COMMANDS.split(reading):
+            words = simple.split()
+            data_paths = bool(words) and words[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() in DATA_COMMANDS
+            for at, word in enumerate(words):
+                program = None if data_paths and at > 0 and ("/" in word or "\\" in word) else node_program(word)
+                if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
+                    return True
+    return False
 
 
 def agent_name(payload: dict) -> str | None:
@@ -385,6 +447,8 @@ def check_bash(project: Project, command: str, agent: str | None = None) -> str 
     scrubbed = _NOISE.sub(" ", command)
     if agent and _INSTALL.search(scrubbed):
         return INSTALL_MESSAGE
+    if agent and refuses_node_packages(scrubbed):
+        return NODE_MESSAGE
     if not _SHELL_WRITES.search(scrubbed):
         return None
     if agent and _ENVIRONMENT_PATH.search(scrubbed):

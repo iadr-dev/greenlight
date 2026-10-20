@@ -9,7 +9,7 @@ broken test.
 | Adapter | Status | For |
 |---|---|---|
 | `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib` |
-| `ts-playwright-bdd` | planned | web UIs (the `ui` profile) |
+| `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the

@@ -1,0 +1,51 @@
+name = "ts-playwright-bdd"
+version = 1
+profiles = ["base", "ui"]                    # every instruction of these profiles is bound in tests/steps/core_steps.ts
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["package.json"]
+contains = ["playwright", "react", "vue", "svelte", "angular", "next", "nuxt", "vite"]
+
+[requires]
+packages = ["@playwright/test", "playwright-bdd", "typescript", "@types/node"]   # pinned in tests/package.json and tests/package-lock.json
+optional = []
+
+[paths]
+features = "tests/features"
+steps = "tests/steps"
+drivers = "tests/drivers"
+support = ["tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "tests/tsconfig.json", "tests/package.json", "tests/package-lock.json"]
+
+[run]
+# One bound script, tests/run.mjs, generates the test files from the features (bddgen) and runs Playwright with the
+# test tooling in tests/node_modules (installed with `npm ci --prefix tests`), without a shell. Playwright reads its settings only from tests/bdd.config.ts (-c). The
+# script writes the JUnit report to --out and selects the scenarios by the tag (and the name, when isolated).
+# Variables that change what node loads (NODE_*) or how Playwright behaves (PW_*, PLAYWRIGHT_*) are not passed on.
+by_tag = 'node tests/run.mjs --tag {tag}'
+scrub_env = ["NODE_", "PW_", "PLAYWRIGHT_"]
+report = '--out {out}'
+isolated = '--scenario "{scenario}"'
+timeout = 900
+
+[classify]                                    # ordered; defects first; applied to the failure text
+test_defect = [
+  'NotMapped',
+  'Missing step definition',
+  'Cannot find module',
+  'SyntaxError|ReferenceError|TypeError: .* is not a (function|constructor)',
+  'error TS\d+',
+  'strict mode violation',
+  'Multiple step definitions match',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError',
+  'expect\(.*\)\.(not\.)?to[A-Z]\w+',
+  'status (404|405|501)',
+]
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*(?P<kind>Given|When|Then)\('
+assert_patterns = ['\bassert', '\bexpect\(']
+sleep_patterns = ['waitForTimeout\(', 'setTimeout\(', '\bsleep\(']
+stub_patterns = ['\.respond\(\s*[^\w.]([\w.]+)']

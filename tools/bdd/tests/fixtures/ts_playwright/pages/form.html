@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Form</title></head>
+  <body>
+    <label>Name <input id="name" /></label>
+    <label>Plan
+      <select id="plan"><option value="free">free</option><option value="pro">pro</option></select>
+    </label>
+    <label><input id="agree" type="checkbox" /> Agree</label>
+    <label>Attachment <input id="file" type="file" /></label>
+    <button type="button" id="save">Save</button>
+    <button type="button" id="remove" disabled>Remove</button>
+    <p data-testid="saved"></p>
+    <p data-testid="secret" hidden>secret</p>
+    <ul data-testid="steps"><li>one</li><li>two</li></ul>
+    <script>
+      document.getElementById('save').addEventListener('click', () => {
+        const file = document.getElementById('file').files[0];
+        document.querySelector('[data-testid="saved"]').textContent = [
+          document.getElementById('name').value,
+          document.getElementById('plan').value,
+          document.getElementById('agree').checked ? 'agreed' : 'not agreed',
+          file ? file.name : 'no file',
+        ].join(' | ');
+      });
+    </script>
+  </body>
+</html>

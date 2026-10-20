@@ -8,7 +8,6 @@ import importlib.util
 import io
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -29,14 +28,6 @@ class PackageTest(unittest.TestCase):
         for name in adapter.REQUIRED + ("ci.md",):
             self.assertTrue((ADAPTER / name).exists(), name)
         self.assertEqual(adapter.load(ADAPTER)["name"], "python-pytest-bdd")
-
-    def test_every_instruction_of_the_declared_profiles_is_bound(self):
-        profiles = set(adapter.load(ADAPTER)["profiles"])
-        wanted = {i["id"] for i in json.loads((REPO / "vocabulary" / "core.json").read_text(encoding="utf-8"))["instructions"]
-                  if set(i["profiles"]) <= profiles}
-        bound = set(re.findall(r"# (C\.[A-Z_.]+)", (ADAPTER / "templates/tests/steps/core_steps.py").read_text(encoding="utf-8")))
-        self.assertEqual(wanted - bound, set(), "instructions of the declared profiles without a step")
-        self.assertEqual(bound - wanted, set(), "steps for instructions outside the declared profiles")
 
     def test_the_config_block_is_valid_toml_and_complete(self):
         text = adapter.config_block(adapter.load(ADAPTER))

@@ -1,0 +1,4 @@
+node_modules/
+.features-gen/
+test-results/
+bdd-report.xml

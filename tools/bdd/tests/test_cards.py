@@ -135,7 +135,7 @@ class RepositoryCardsTest(unittest.TestCase):
 class InstructionCardsTest(unittest.TestCase):
     """The instruction cards describe the vocabulary: none missing for the profiles that have an adapter, none invented."""
 
-    ADAPTED_PROFILES = {"base", "api", "cli", "lib"}
+    ADAPTED_PROFILES = {"base", "api", "cli", "lib", "ui"}
 
     @classmethod
     def setUpClass(cls):

@@ -21,6 +21,7 @@ from .statecmd import guarded, project_root
 NAME_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
 ADAPTER_FILE = "adapter.toml"
 REQUIRED = (ADAPTER_FILE, "guide.md", "templates")
+SKIPPED_PARTS = {"__pycache__", "node_modules"}      # installed tooling and caches are never part of a template
 
 
 def adapters_dir() -> Path:
@@ -77,7 +78,7 @@ def config_block(data: dict) -> str:
 
 def template_files(path: Path) -> list[Path]:
     base = path / "templates"
-    return sorted(p for p in base.rglob("*") if p.is_file() and p.name != ".gitkeep" and "__pycache__" not in p.parts)
+    return sorted(p for p in base.rglob("*") if p.is_file() and p.name != ".gitkeep" and not SKIPPED_PARTS & set(p.parts))
 
 
 def apply(root: Path, name: str) -> tuple[list[str], list[str]]:
