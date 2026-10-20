@@ -128,6 +128,7 @@ class Config:
     runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
     mutation: MutationRules | None = None    # the first adapter that has an [adapters.mutation] table
     quality: QualityRules | None = None      # the first adapter that has an [adapters.quality] table
+    stability_runs: int = 0                  # [stability] runs: how often the verify gate wants the feature rerun (0: not asked)
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -265,6 +266,19 @@ def _python(data: dict, path: Path) -> str:
     return value
 
 
+MAX_STABILITY_RUNS = 50
+
+
+def _stability_runs(data: dict, path: Path) -> int:
+    table = data.get("stability")
+    if table is None:
+        return 0
+    runs = table.get("runs") if isinstance(table, dict) else None
+    if isinstance(runs, bool) or not isinstance(runs, int) or not 2 <= runs <= MAX_STABILITY_RUNS:
+        raise ConfigError(f"{path}: [stability] runs must be a whole number from 2 to {MAX_STABILITY_RUNS}")
+    return runs
+
+
 def _schema_version(data: dict, path: Path) -> int:
     version = data.get("version", 1)
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -338,4 +352,5 @@ def load(root: Path | str | None) -> Config:
         runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
         mutation=next((r for r in (_mutation_rules(a, path) for a in data.get("adapters", [])) if r), None),
         quality=next((r for r in (_quality_rules(a, path) for a in data.get("adapters", [])) if r), None),
+        stability_runs=_stability_runs(data, path),
     )

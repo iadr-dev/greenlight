@@ -56,14 +56,9 @@ install packages.
 
 ## Running in CI
 
-See [ci.md](ci.md) for a complete job and `adapters/python-pytest-bdd/ci.md` for the plain test run. The gates themselves (locks, valid red, green) can be re-checked, with the plugin's `tools/bdd/bdd` wrapper (Python 3.11+, nothing to install):
-with the plugin's `tools/bdd/bdd` wrapper (Python 3.11+, nothing to install):
-
-```yaml
-- run: tools/bdd/bdd lock FEAT-001 --check --require
-- run: tools/bdd/bdd run FEAT-001
-- run: tools/bdd/bdd classify FEAT-001 --expect green
-```
+Each adapter ships a complete, pinned GitHub Actions workflow in `adapters/<name>/ci/github-actions.yml`; see
+[ci.md](ci.md) for what it checks (approvals from the committed record, locks, a fresh green run, traceability, and the
+optional stability, quality and mutation checks) and what it cannot. `adapters/<name>/ci.md` has the plain test run.
 
 ## Quality checks (optional)
 

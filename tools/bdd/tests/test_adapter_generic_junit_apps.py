@@ -67,7 +67,7 @@ class HarnessTablesTest(unittest.TestCase):
         for request, (app, adapter_name) in self.harness.CASES.items():
             with self.subTest(request=request):
                 self.assertTrue((REPO / "evals" / "requests" / f"{request}.md").is_file())
-                self.assertTrue((REPO / "evals" / "requests" / "answers" / f"{request}.md").is_file())
+                self.assertTrue((REPO / "evals" / "requests" / f"{request}.answers.json").is_file())
                 self.assertTrue((REPO / "evals" / "apps" / app).is_dir())
                 self.assertIn(app, self.harness.TOOLCHAINS)
                 self.assertEqual(app in self.harness.GENERIC_RUNS, adapter_name == "generic-junit")

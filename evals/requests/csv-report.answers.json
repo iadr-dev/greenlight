@@ -1,0 +1,22 @@
+[
+  {
+    "id": "the order of the groups",
+    "about": ["sort"],
+    "expect": ["ascending"]
+  },
+  {
+    "id": "which stream carries the report and which the errors",
+    "about": ["stderr"],
+    "expect": ["stdout"]
+  },
+  {
+    "id": "blank lines in the file",
+    "about": ["blank"],
+    "expect": ["skip"]
+  },
+  {
+    "id": "the exit status of a refused file",
+    "about": ["exit"],
+    "expect": ["1"]
+  }
+]
