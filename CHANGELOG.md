@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The CI example in `docs/ci.md` no longer fails in a project that has no feature yet.
+
 ## [0.1.0] - 2026-10-20
 
 First release: the full flow from feature request to verified code with the `python-pytest-bdd` adapter. See the entries below.
