@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Run a whole feature through greenlight with real agents, and measure what happened.
 
-    python evals/run_e2e.py [--request discounts] [--model haiku] [--autonomy standard,autopilot]
+    python evals/run_e2e.py [--request discounts|adopt-billing] [--model haiku] [--autonomy standard,autopilot]
                             [--runs 3] [--arms plugin,baseline] [--hooks on|off] [--keep]
 
-For every combination of arm, autonomy level and run number it copies the reference app (evals/apps/shop-api)
-into a temporary project with its own virtual environment, sets greenlight up (`bdd init`, proves the sample green),
-then asks Claude Code, headless, to run `/greenlight:feature "<request>"`. Afterwards it reads the project's own
+For every combination of arm, autonomy level and run number it copies the request's reference app (evals/apps/shop-api
+for a feature, evals/apps/legacy-billing for an adoption) into a temporary project with its own virtual environment,
+sets greenlight up (`bdd init`, proves the sample green), then asks Claude Code, headless, to run
+`/greenlight:feature "<request>"` (`/greenlight:adopt "<area>"` for an adoption request). An adoption row also says
+whether the adoption invariants hold (see adoption_invariants); it has no baseline arm. Afterwards it reads the project's own
 records with the `bdd` CLI and git, never the conversation (evals/collect.py), and appends one metrics row per run to
 a JSON-lines file in evals/results/. The summary table compares the means with the release targets (evals/README.md).
 
@@ -42,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect  # noqa: E402  (a sibling module; the script directory is on the path when it is run directly)
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "evals" / "apps" / "shop-api"
+APPS = REPO / "evals" / "apps"
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
@@ -52,6 +54,13 @@ LEVELS = ("guided", "standard", "auto", "autopilot")
 ARMS = ("plugin", "baseline")
 WAITING = re.compile(r"/greenlight:approve (FEAT-\d+) (rules|examples)")
 MAX_FOLLOW_UPS = 6
+
+# What each request needs: its reference app, the skill that runs it and the packages the app and its tests import. A
+# feature request is judged by reaching `done`, an adoption request also by the invariants in adoption_invariants.
+REQUEST_KINDS = {
+    "discounts": {"app": "shop-api", "skill": "feature", "packages": ["fastapi", "httpx"]},
+    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "packages": ["flask", "flask-wtf"]},
+}
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
 MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us.anthropic.claude-haiku-5-5",
@@ -67,14 +76,14 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def build_project(tmp: Path) -> tuple[Path, dict, str]:
+def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
     project = tmp / "project"
-    shutil.copytree(APP, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(APPS / kind["app"], project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
     python = bin_dir / ("python.exe" if os.name == "nt" else "python")
-    run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
+    run(["uv", "pip", "install", "--python", str(python), *kind["packages"], "pytest", "pytest-bdd"], tmp, os.environ.copy())
     env = os.environ.copy()
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
     env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
@@ -167,9 +176,9 @@ def next_human_step(project: Path, env: dict) -> str | None:
     return None
 
 
-def drive(project: Path, env: dict, request: str, model: str, level: str, minutes: int, plugin: Path) -> dict:
+def drive(project: Path, env: dict, request: str, skill: str, model: str, level: str, minutes: int, plugin: Path) -> dict:
     """Run the orchestrator; at standard/guided, deliver the scripted approvals until none is awaited."""
-    total = claude(project, env, f'/greenlight:feature "{request.strip()}" --autonomy {level}', model, minutes, plugin)
+    total = claude(project, env, f'/greenlight:{skill} "{request.strip()}" --autonomy {level}', model, minutes, plugin)
     if level in ("autopilot", "auto"):
         return total
     for _ in range(MAX_FOLLOW_UPS):
@@ -211,28 +220,63 @@ def git_changes(project: Path, env: dict) -> dict:
     return {"files_changed": changed[-1] if changed else "", "new_files": len(untracked)}
 
 
+NOT_PRODUCTION = (".bdd/", "tests/", ".gitignore", ".claude/")
+# What Python writes next to a module when it imports it. Only an untracked file of exactly this shape is skipped: a
+# .py under __pycache__ or a .pyc elsewhere can be imported, so it is source (the same rule as the red record).
+GENERATED_BYTECODE = re.compile(r"(?:.*/)?__pycache__/[^/]+\.cpython-\d+(?:\.opt-[12])?\.pyc")
+
+
+def production_changes(porcelain: list[str]) -> list[str]:
+    """The paths in `git status --porcelain --untracked-files=all` output that are production code: everything except
+    greenlight's own data, the test folder, ignore files and generated bytecode. An adoption must leave this empty."""
+    paths = []
+    for line in porcelain:
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        generated = line.startswith("??") and GENERATED_BYTECODE.fullmatch(path) is not None
+        if path and not generated and not path.startswith(NOT_PRODUCTION):
+            paths.append(path)
+    return paths
+
+
+def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
+    """What an adoption must satisfy, read from the project and never from the conversation: `bdd adopt --check` is
+    clean (every scenario is @existing, the bind gate pinned the production source and it is unchanged), the recorded
+    run is a valid green, and git sees no production file touched since greenlight was set up."""
+    check = bdd(project, env, "adopt", feature, "--check", check=False)
+    porcelain = run([*GIT, "status", "--porcelain", "--untracked-files=all"], project, env, check=False).stdout.splitlines()
+    touched = production_changes(porcelain)
+    classified = collect.load_json(bdd(project, env, "classify", feature, "--json", check=False).stdout)
+    green = (classified.get("green") or {}).get("valid")
+    return {"adopt_check_clean": check.returncode == 0, "adopt_check_output": (check.stdout + check.stderr).strip()[:600],
+            "production_files_touched": touched, "green_valid": green,
+            "holds": check.returncode == 0 and not touched and green is True}
+
+
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
-    project, env, python = build_project(tmp)
+    kind = REQUEST_KINDS[args.request]
+    project, env, python = build_project(tmp, kind)
     set_up(project, env, level, python)
-    output = drive(project, env, request, MODELS[args.model], level, args.minutes, plugin_directory(tmp, args.hooks))
+    output = drive(project, env, request, kind["skill"], MODELS[args.model], level, args.minutes, plugin_directory(tmp, args.hooks))
     row = collect.collect_row(reader(project, env), project, answers, transcript_of(output, project))
     marker = project / ".bdd" / ".enforcement" / "_seen"
     row.update(git_changes(project, env))
+    if kind["skill"] == "adopt" and row.get("feature"):
+        row["adoption"] = adoption_invariants(project, env, row["feature"])
     row.update({"hooks_active": marker.is_file(), "claude": claude_summary(output)})
     if args.hooks == "on" and not row["hooks_active"]:
         row["warning"] = "hooks were requested but did not run; this row is not a hard-enforcement result"
     if row.get("phase") not in (None, "discover") and not row.get("cost_recorded"):
         row["cost_warning"] = "the orchestrator recorded no cost with `bdd cost`; the totals above are claude's own"
-    row["completed"] = row.get("phase") == "done"
+    row["completed"] = row.get("phase") == "done" and (row["adoption"]["holds"] if "adoption" in row else kind["skill"] != "adopt")
     return row
 
 
 def baseline_row(tmp: Path, args: argparse.Namespace, request: str) -> dict:
     """The same request without the plugin: what plain Claude Code leaves behind, judged by the app's own tests."""
-    project, env, python = build_project(tmp)
+    project, env, python = build_project(tmp, REQUEST_KINDS[args.request])
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
-    prompt = (f"{request.strip()}\n\nImplement this in the project in the current directory. Write tests for it and run "
+    prompt =(f"{request.strip()}\n\nImplement this in the project in the current directory. Write tests for it and run "
               "the project's tests. Do not ask questions; decide and state your assumptions.")
     output = claude(project, env, prompt, MODELS[args.model], args.minutes, None)
     tests = run([python, "-m", "pytest", "-q", "-p", "no:cacheprovider"], project, env, check=False)
@@ -258,7 +302,7 @@ def parse_list(value: str, allowed: tuple[str, ...], what: str) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
-    ap.add_argument("--request", default="discounts", choices=sorted(requests), help="a file in evals/requests/")
+    ap.add_argument("--request", default="discounts", choices=sorted(REQUEST_KINDS), help="a file in evals/requests/")
     ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
     ap.add_argument("--autonomy", default="autopilot", type=lambda v: parse_list(v, LEVELS, "autonomy"),
                     help="one level or a comma-separated list, e.g. standard,autopilot")
@@ -272,6 +316,9 @@ def main() -> int:
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
+    if REQUEST_KINDS[args.request]["skill"] == "adopt" and "baseline" in args.arms:
+        print("an adoption request has no baseline arm: plain Claude Code has nothing to adopt against")
+        return 2
     request = requests[args.request].read_text(encoding="utf-8")
     answers_file = REQUESTS / f"{args.request}.answers.json"
     answers = json.loads(answers_file.read_text(encoding="utf-8")) if answers_file.is_file() else []

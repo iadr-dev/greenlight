@@ -7,10 +7,16 @@ happened. It reads the project's own records (`bdd status`, `state show`, `trace
 ```sh
 python evals/run_e2e.py --request discounts --model sonnet-5.5 --autonomy standard,autopilot --runs 3 --arms plugin,baseline
 python evals/run_e2e.py --request discounts --model sonnet-5.5 --hooks off      # soft enforcement
+python evals/run_e2e.py --request adopt-billing --model sonnet-5.5 --autonomy autopilot   # /greenlight:adopt on legacy-billing
 python evals/collect.py [NAME.jsonl ...]                                        # summary table of stored rows (names in evals/results/)
 ```
 
 Rows go to `evals/results/<time>-<request>-<model>.jsonl` (ignored by git), one line per run.
+
+An adoption request (`adopt-billing`, on `evals/apps/legacy-billing`, which has no tests on purpose) has no baseline
+arm and is judged also by invariants read from the project: `adoption.holds` is true when `bdd adopt FEAT-n --check` is
+clean (every scenario `@existing`, the production source pinned at the bind gate and unchanged), the recorded run is a
+valid green, and git sees no production file touched (`adoption.production_files_touched` is empty).
 
 ## Targets
 
