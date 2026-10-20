@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The README opens with an ASCII-art banner of the project name.
+
 ### Fixed
 - The CI templates capture the list of finished features before looping, so a failing `bdd status --done` stops the job instead of passing with nothing checked.
 
