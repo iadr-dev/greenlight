@@ -75,6 +75,11 @@ class ManifestTest(unittest.TestCase):
         meta, _ = parse((ROOT / "skills" / "approve" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertEqual(meta.get("disable-model-invocation"), "true")
 
+    def test_a_session_start_shows_where_features_stand(self):
+        (entry,) = load("hooks/hooks.json")["hooks"]["SessionStart"]
+        (command,) = entry["hooks"]
+        self.assertEqual(command["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" status --brief')
+
     def test_every_hook_command_is_a_real_bdd_command(self):
         """An unknown command exits 2, which would block every prompt or tool call."""
         import re

@@ -21,6 +21,8 @@ COMMANDS = {
     "cost": ("statecmd", "run_cost"),
     "mode": ("statecmd", "run_mode"),
     "tripwire": ("tripwire", "main"),
+    "status": ("reportcmd", "run_status"),
+    "trace": ("reportcmd", "run_trace"),
 }
 
 

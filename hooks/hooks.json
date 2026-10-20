@@ -35,6 +35,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd\" status --brief"
+          }
+        ]
+      }
     ]
   }
 }
