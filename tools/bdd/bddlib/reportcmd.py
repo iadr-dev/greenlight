@@ -146,11 +146,13 @@ def run_trace(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd trace", description="Rule -> example -> scenario -> task matrix.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--workspace", action="store_true", help="include the scenarios of the other repositories of the workspace")
     args = ap.parse_intermixed_args(argv)
 
     def action() -> int:
         root = project_root()
-        report = trace.build(root, store.find_feature_dir(root, args.feature), args.feature)
+        members = cfg.load(root).workspace if args.workspace else ()
+        report = trace.build(root, store.find_feature_dir(root, args.feature), args.feature, members)
         print(json.dumps(report, indent=2, ensure_ascii=False) if args.json else trace.render(report))
         return 1 if report["gaps"] else 0
 

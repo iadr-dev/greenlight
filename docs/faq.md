@@ -62,6 +62,11 @@ Yes, as far as a test or a check can show it. The standards file has API and dat
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.
 
+**Can one feature span several repositories?**
+Yes: name the other repositories in a `[workspace]` table in the home repository's `.bdd/config.toml`. The home keeps the
+rules, approvals and report; each member keeps its own scenarios, locks and recorded runs under the same ids, and the home's
+gates read them. See [concepts](concepts.md).
+
 **Can I use it on an existing code base?**
 Yes. New features and changes work as on any project; scenarios that describe behaviour the system already has are
 tagged `@existing` so they may pass before implementation. To bring existing code under greenlight, run

@@ -19,6 +19,10 @@ Review status: reviewed | UNREVIEWED (autopilot)
 
 <the Mermaid blocks of design.md, or `no design view` and why>
 
+## Workspace
+
+<only when the project has a `[workspace]`: each member, whether it was observed here, and what `bdd workspace check FEAT-000 --gate verify` said; a member that was not observed is listed as such>
+
 ## Gates, locks and approvals
 
 - Gates: <gate results from state.json, with who or what recorded them>
