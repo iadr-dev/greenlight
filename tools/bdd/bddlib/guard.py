@@ -555,6 +555,17 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
+def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
+    """What only an agent is refused: writing the pull-request description outside its write matrix, installing packages."""
+    if _PR_WRITE.search(scrubbed):                                 # `bdd pr --write` writes a file in the project root
+        written = check_file_write(project, project.root / PR_FILE, agent)
+        if written:
+            return written
+    if _INSTALL.search(scrubbed):
+        return INSTALL_MESSAGE
+    return NODE_MESSAGE if refuses_node_packages(scrubbed) else None
+
+
 def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
     """Best effort: block a command that runs an approval or a nested Claude session, or that both
     names a protected file and looks like it writes."""
@@ -566,14 +577,9 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     scrubbed = _NOISE.sub(" ", command)
     if _PIN_COMMAND.search(scrubbed):
         return PIN_MESSAGE
-    if agent and _PR_WRITE.search(scrubbed):                       # `bdd pr --write` writes a file in the project root
-        written = check_file_write(project, project.root / PR_FILE, agent)
-        if written:
-            return written
-    if agent and _INSTALL.search(scrubbed):
-        return INSTALL_MESSAGE
-    if agent and refuses_node_packages(scrubbed):
-        return NODE_MESSAGE
+    refused = check_agent_command(project, scrubbed, agent) if agent else None
+    if refused:
+        return refused
     if not _SHELL_WRITES.search(scrubbed):
         return None
     if agent and _ENVIRONMENT_PATH.search(scrubbed):
