@@ -49,3 +49,7 @@ jobs:
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_pytest_bdd.py" -v
       - name: bdd init proves the sample feature green
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_initcmd.py" -v
+      - name: greenlight's own specs lint clean (dogfood)
+        run: sh tools/bdd/bdd lint specs/features
+      - name: greenlight's own specs pass (dogfood)
+        run: python specs/run_specs.py

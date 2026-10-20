@@ -1,0 +1,1 @@
+Give big orders a discount. An order whose total is 1000 or more should get 10% off the total; smaller orders pay the full price. The order response should show the total after the discount and the discount that was applied.
