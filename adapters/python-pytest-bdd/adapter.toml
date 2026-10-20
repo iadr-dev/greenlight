@@ -1,0 +1,45 @@
+name = "python-pytest-bdd"
+version = 1
+profiles = ["base", "api", "cli", "lib"]     # every instruction of these profiles is bound in tests/steps/core_steps.py
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["pyproject.toml", "requirements*.txt", "setup.cfg", "Pipfile"]
+contains = ["pytest", "fastapi", "flask", "django", "starlette"]
+
+[requires]
+packages = ["pytest>=8", "pytest-bdd>=8"]
+optional = ["time-machine", "respx", "httpx"]
+
+[paths]
+features = "tests/features"
+steps = "tests/steps"
+drivers = "tests/drivers"
+
+[run]
+# {python} is the interpreter that runs bdd; the tags of a scenario are pytest markers.
+by_tag = '{python} -m pytest -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
+report = '--junitxml={out}'
+shuffle = '--bdd-shuffle-seed {seed}'
+isolated = '--bdd-scenario "{scenario}"'
+timeout = 600
+
+[classify]                                    # ordered; defects first; applied to the failure text
+test_defect = [
+  'NotMapped',
+  'StepDefinitionNotFoundError',
+  "fixture '.*' not found",
+  'FixtureLookupError',
+  'ImportError|ModuleNotFoundError|SyntaxError|NameError|AttributeError: module',
+  'ScenarioNotFound|FeatureError',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError',
+  'status (404|405|501)',
+]
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*@(?P<kind>given|when|then)\b'
+assert_patterns = ['\bassert', 'pytest\.raises']
+sleep_patterns = ['time\.sleep\(', 'asyncio\.sleep\(']
+stub_patterns = ['\.respond\(\s*[^\w.]([\w.]+)', 'mock\.patch\([^\w.]([\w.]+)']
