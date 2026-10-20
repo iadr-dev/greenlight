@@ -80,3 +80,68 @@ jobs:
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
+
+  reference-app-csv-tool:
+    name: reference app (csv-tool, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.23"
+          cache: false
+      - name: Vet and test the app (standard library only)
+        working-directory: evals/apps/csv-tool
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+  reference-app-money-lib:
+    name: reference app (money-lib, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: evals/apps/money-lib/package-lock.json
+      - name: Install from the lockfile and test the app
+        working-directory: evals/apps/money-lib
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+
+  adapter-generic-junit:
+    name: adapter contract (generic-junit on the reference apps, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_APP_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.23"
+          cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+      - name: Runner reports of cucumber-js, behave, godog, Cucumber-JVM and Reqnroll classify as expected
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_junit_fixtures.py" -v
+      - name: A missing seam is a valid red and a working one a valid green, on csv-tool and money-lib
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_generic_junit_apps.py" -v
