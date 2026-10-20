@@ -28,6 +28,7 @@ COMMANDS = {
     "run": ("runcmd", "run_run"),
     "classify": ("runcmd", "run_classify"),
     "adapter": ("adapter", "run"),
+    "init": ("initcmd", "run"),
     "cards": ("cards", "run"),
 }
 
