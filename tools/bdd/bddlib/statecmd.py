@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from . import config as cfg
-from . import enforcement, gates, lockfile, redrecord, state, store
+from . import approvals, enforcement, gates, lockfile, redrecord, state, store
 from .errors import StoreError, UsageError
 
 
@@ -63,11 +63,17 @@ def summary(root: Path, feature_dir: Path, data: dict) -> dict:
             "enforcement": {"level": level, "reasons": reasons}}
 
 
-def describe_approvals(approvals: list[dict]) -> str:
+def approval_how(approval: dict) -> str:
+    if approval["grade"] == "codex":
+        return approvals.CODEX_LABEL
+    return f"typed, origin {approval['origin']}" if approval["grade"] == "hook" else approval["grade"]
+
+
+def describe_approvals(entries: list[dict]) -> str:
     parts = []
-    for a in approvals:
+    for a in entries:
         what = f"{a['gate']} {a['decision']}d" if a["decision"] == "approve" else f"{a['gate']} rejected"
-        how = a["grade"] if a["grade"] != "hook" else f"typed, origin {a['origin']}"
+        how = approval_how(a)
         parts.append(f"{what} ({how})")
     return ", ".join(parts) or "none"
 

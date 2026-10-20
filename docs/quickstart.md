@@ -84,6 +84,8 @@ bdd install-skills agents-md     # any tool that reads AGENTS.md
 ```
 
 Add `--dry-run` to look first and `--uninstall` to take it all away again; see [concepts](concepts.md).
+`bdd install-skills codex` (or `agents-md`) installs greenlight's instructions for Codex and other agent tools. They
+run without hooks, so enforcement is soft; see [concepts](concepts.md). `bdd install-hooks codex` (it only shows what it would write; `--apply` writes) adds best-effort blocking and detection through Codex's own hook file. Work done in Codex is still reported as soft. To take approvals typed in Codex (`$greenlight-approve FEAT-001 rules`), which are not provenance-verified, opt in with `accept_codex = true` under `[approvals]` in `.bdd/config.toml`, and have `bdd approve --check` and your branch protection review the committed record in CI.
 
 ## Hand the result to reviewers
 

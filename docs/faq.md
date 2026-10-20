@@ -26,7 +26,7 @@ Windows is not installed) greenlight works in soft mode: violations are detected
 Yes, in soft mode. `bdd install-skills codex` installs the skills for Codex and `bdd install-skills agents-md` adds a
 block to `AGENTS.md` for tools that read it; `bdd install-skills claude` does the same for Claude Code without the
 plugin. `--uninstall` removes exactly what was installed. Those tools run no greenlight hooks, so nothing is prevented, only
-detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
+detected afterwards: run `bdd lock FEAT-n --check --require` in CI. In Codex `bdd install-hooks codex` adds best-effort blocking and detection through Codex's own hook file, but work done in Codex is never graded hard (the agent and you are the same user there, so nothing proves who typed an approval): approvals typed in Codex are flagged for review by `bdd approve --check`, and CI plus branch protection are the guarantee (see [concepts](concepts.md)).
 
 **Which languages and test stacks are supported?**
 Today: Python with pytest and pytest-bdd, Go with godog, .NET with Reqnroll (services, libraries, command-line tools), web UIs

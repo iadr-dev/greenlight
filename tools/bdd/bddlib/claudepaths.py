@@ -17,3 +17,8 @@ def transcript_roots() -> list[Path]:
     if os.environ.get(TRANSCRIPT_ROOT_ENV):
         roots.append(Path(os.environ[TRANSCRIPT_ROOT_ENV]))
     return [root.resolve() for root in roots]
+
+
+def codex_home() -> Path:
+    """Codex's home folder: its hook and settings files live here, next to its sessions."""
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")

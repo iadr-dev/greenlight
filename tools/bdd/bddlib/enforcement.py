@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 
 from .config import BDD_DIR
@@ -21,6 +22,7 @@ SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
 KEEP_SECONDS = 14 * 24 * 3600
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}")     # no leading "_": that is for reserved names
 SEEN_MARKER = "_seen"                                           # hooks have run in this project, ever; never pruned
+CODEX_MARKER = "_codex"                                         # a Codex hook has run in this project (a hint, never evidence); never pruned
 
 
 def safe_session(value: str | None) -> str | None:
@@ -63,7 +65,26 @@ def hooks_seen(root: Path) -> bool:
     enough). The fact is also copied into each feature's state by ``state.observe_hooks``."""
     directory = marker_dir(root)
     return (directory / SEEN_MARKER).is_file() or (
-        directory.is_dir() and any(p.is_file() and p.name != SEEN_MARKER for p in directory.iterdir()))
+        directory.is_dir() and any(p.is_file() and p.name not in (SEEN_MARKER, CODEX_MARKER) for p in directory.iterdir()))
+
+
+def touch_codex(root: Path, session: str | None) -> bool:
+    """Note that a Codex hook ran in this project, and when it last did.
+
+    That is all this is: a hint for ``bdd doctor``. Codex gives a command no session id, and the hook is an ordinary command
+    that anything able to run commands could call with a made-up payload, so nothing here is evidence for a grade. Work done
+    in Codex is never classified hard (see ``classify``)."""
+    if not touch(root, session):
+        return False
+    try:
+        (marker_dir(root) / CODEX_MARKER).write_text(f"{int(time.time())}\n", encoding="utf-8", newline="\n")
+    except OSError:
+        return False
+    return True
+
+
+def codex_seen(root: Path) -> bool:
+    return (marker_dir(root) / CODEX_MARKER).is_file()
 
 
 def prune(directory: Path) -> None:
@@ -71,7 +92,7 @@ def prune(directory: Path) -> None:
     cutoff = time.time() - KEEP_SECONDS
     for old in directory.iterdir():
         try:
-            if old.name != SEEN_MARKER and old.is_file() and old.stat().st_mtime < cutoff:
+            if old.name not in (SEEN_MARKER, CODEX_MARKER) and old.is_file() and old.stat().st_mtime < cutoff:
                 old.unlink()
         except OSError:
             pass
@@ -80,6 +101,18 @@ def prune(directory: Path) -> None:
 def active(root: Path, session: str | None) -> bool:
     session = safe_session(session)
     return bool(session) and (marker_dir(root) / session).is_file()
+
+
+def approval_reasons(approval: dict) -> list[str]:
+    """Why this approval alone keeps a feature from being hard (empty: it does not)."""
+    gate = approval["gate"]
+    reasons = []
+    if approval["grade"] == "self-reported":
+        reasons.append(f"the {gate} approval was self-reported, not typed by the person")
+    if approval["grade"] == "codex":
+        reasons.append(f"the {gate} approval was typed in Codex and is not provenance-verified: nothing there proves who typed "
+                       "it. Review the committed approval record in CI (`bdd approve --check`) and protect the branch")
+    return reasons
 
 
 def classify(root: Path, data: dict) -> tuple[str, list[str]]:
@@ -91,8 +124,7 @@ def classify(root: Path, data: dict) -> tuple[str, list[str]]:
     reasons: list[str] = []
     sessions: set[str] = set()
     for approval in data.get("approvals", []):
-        if approval["grade"] == "self-reported":
-            reasons.append(f"the {approval['gate']} approval was self-reported, not typed by the person")
+        reasons += approval_reasons(approval)
         if approval["grade"] in ("hook", "self-reported") and approval.get("session"):
             sessions.add(approval["session"])
     for name, gate in data.get("gates", {}).items():
@@ -100,6 +132,10 @@ def classify(root: Path, data: dict) -> tuple[str, list[str]]:
             sessions.add(gate["session"])
         else:
             reasons.append(f"the {name} gate was recorded outside a Claude Code session")
+    if codex_seen(root):
+        reasons.append("Codex hooks were used here: they are best effort (the hook is an ordinary command that anything able to "
+                       "run commands could call, and the agent and the person are the same user), so work done in Codex is "
+                       "never graded hard; the guarantee is the committed record reviewed in CI and branch protection")
     if not sessions:
         reasons.append("no session left evidence that hooks were active")
     reasons += [f"hooks left no trace in session {s}" for s in sorted(sessions) if not active(root, s)]

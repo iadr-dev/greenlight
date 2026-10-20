@@ -217,7 +217,7 @@ def approvals_of(root: Path, data: dict) -> list[dict]:
         if last is None:
             continue
         problems = approvals.effective_problems(root, data, gate) if last["decision"] == "approve" else []
-        rows.append({"gate": gate, "decision": last["decision"], "origin": last.get("origin"), "at": last.get("at"),
+        rows.append({"gate": gate, "decision": last["decision"], "origin": approvals.provenance(last), "at": last.get("at"),
                      "valid": not problems and last["decision"] == "approve", "reason": last.get("reason", "")})
     return rows
 

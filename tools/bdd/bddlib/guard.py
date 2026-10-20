@@ -37,7 +37,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import claudepaths
+from . import claudepaths, codexsession
 from . import config as cfg
 from . import enforcement, lockfile, sharedvocab, store
 from .config import ConfigError
@@ -68,7 +68,15 @@ PERSON_FILES = (MANAGED_CONFIG, "standards.md")   # in .bdd/, edited by the pers
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 
-_APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b", re.IGNORECASE)
+_APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b|\$greenlight-(?:approve|reject)\b", re.IGNORECASE)
+# Codex: its hook entry points are not for an agent to run (a made-up payload could fake an approval), and its home,
+# its `.codex` folders and its session (rollout) files are not for an agent to write, whichever tool is calling.
+_CODEX_HOOK_ENTRY = codexsession.HOOK_ENTRY
+_CODEX_STATE = re.compile(r"(?<![\w.-])\.codex(?![\w-])|\bCODEX_HOME\b|(?<![\w-])rollout-[\w.-]*\.jsonl", re.IGNORECASE)
+CODEX_HOOK_MESSAGE = ("greenlight: the hook entry points (`codex-hook`, `install-hooks`, `--from-hook`) are run by the "
+                      "tools' hooks for the person; calling one with a made-up payload could fake an approval.")
+CODEX_STATE_MESSAGE = ("greenlight: Codex's home folder, its `.codex` folders, its hook and settings files and its session "
+                       "files are what Codex-side enforcement and approvals rest on; only Codex and the person write them.")
 # The only `claude ...` forms a greenlight project's agent may run: they neither start a session nor
 # change anything. Everything else is refused, including `claude plugin disable|uninstall|install`,
 # `mcp add|remove`, `config set` and `update`, because those can switch greenlight's own checks off.
@@ -349,6 +357,8 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
     protected = check_enforcement_files(path)
+    if not protected and _CODEX_STATE.search(path.as_posix().replace("\\", "/")):
+        protected = CODEX_STATE_MESSAGE
     if protected:
         return protected
     allowed = AGENT_WRITES.get(agent) if agent else None
@@ -572,6 +582,11 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     injection = check_injection({"command": command})
     if injection:
         return injection
+    readings = [command, *shell_readings(command)]
+    if any(_CODEX_HOOK_ENTRY.search(reading) for reading in readings):
+        return CODEX_HOOK_MESSAGE
+    if any(codexsession.starts_codex_session(reading) for reading in readings):
+        return codexsession.NESTED_MESSAGE
     if starts_claude_session(command):
         return NESTED_SESSION_MESSAGE
     scrubbed = _NOISE.sub(" ", command)
@@ -582,6 +597,8 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
         return refused
     if not _SHELL_WRITES.search(scrubbed):
         return None
+    if any(_CODEX_STATE.search(_NOISE.sub(" ", reading)) for reading in readings):
+        return CODEX_STATE_MESSAGE
     if agent and _ENVIRONMENT_PATH.search(scrubbed):
         return INSTALL_MESSAGE
     if command_touches_enforcement(scrubbed):
