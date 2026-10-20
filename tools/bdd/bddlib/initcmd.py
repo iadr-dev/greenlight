@@ -66,6 +66,13 @@ def add_standards(root: Path) -> str | None:
     return f"{cfg.BDD_DIR}/standards.md"
 
 
+def require_project(here: Path) -> Path:
+    root = cfg.find_root(here)
+    if root is None:
+        raise UsageError("not inside a greenlight project; run bdd init first")
+    return root
+
+
 def add_shared_vocabulary(root: Path, names: list[str]) -> list[str]:
     """Include shared vocabulary files (inside the project) in .bdd/vocabulary.toml and pin them. The person runs this after
     reading the files; an existing [vocabulary] table is left for the person to edit."""
@@ -166,23 +173,15 @@ def run(argv: list[str]) -> int:
             print("\n".join(f"{name}: {why}" for name, why in found) or "no adapter matched this repository")
             return 0
         if args.shared_vocabulary:
-            root = cfg.find_root(here)
-            if root is None:
-                raise UsageError("not inside a greenlight project; run bdd init first")
+            root = require_project(here)
             print("\n".join(f"  + {made}" for made in add_shared_vocabulary(root.resolve(), args.shared_vocabulary)))
             return 0
         if args.standards:
-            root = cfg.find_root(here)
-            if root is None:
-                raise UsageError("not inside a greenlight project; run bdd init first")
-            made = add_standards(root)
+            made = add_standards(require_project(here))
             print(f"  + {made}" if made else f"{cfg.BDD_DIR}/standards.md already exists; nothing changed")
             return 0
         if args.smoke:
-            root = cfg.find_root(here)
-            if root is None:
-                raise UsageError("not inside a greenlight project; run bdd init first")
-            return do_smoke(root)
+            return do_smoke(require_project(here))
         root = cfg.find_root(here) or here
         if args.python and not Path(args.python).is_file():
             raise UsageError(f"--python {args.python!r} is not a file")

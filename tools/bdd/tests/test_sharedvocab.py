@@ -20,13 +20,13 @@ def toml(*names: str, steps: str = "") -> str:
     return f'extends = "core"\n{steps}\n[vocabulary]\ninclude = [{listed}]\n'
 
 
-class SharedCase(ProjectCase):
+class SharedHelpers:
     def setUp(self):
         super().setUp()
         self.shared = self.write("vendor/team.toml", SHARED)
         self.main = self.write(".bdd/vocabulary.toml", 'extends = "core"\n\n' + INCLUDE)
 
-    def issues(self, strict_pin: bool = True) -> list:
+    def issues(self) -> list:
         config = cfg.load(self.root)
         vocab = vocabulary.load(self.main)
         return lint.check_project_vocabulary(vocab, self.main, config, config.profiles)
@@ -45,7 +45,7 @@ class SharedCase(ProjectCase):
         return code, out.getvalue(), err.getvalue()
 
 
-class LoadingTest(SharedCase):
+class LoadingTest(SharedHelpers, ProjectCase):
     def test_shared_steps_join_the_vocabulary_with_their_file(self):
         vocab = vocabulary.load(self.main)
         entry = vocab.by_id["D.TEAM.CATALOG"]
@@ -103,7 +103,7 @@ class LoadingTest(SharedCase):
             vocabulary.load(self.main)
 
 
-class ConflictTest(SharedCase):
+class ConflictTest(SharedHelpers, ProjectCase):
     STEP = '\n[[steps]]\nid = "%s"\nkind = "given"\npattern = "%s"\ncomposes = ["C.ENTITY.SEED"]\n'
 
     def test_a_project_step_cannot_reuse_a_shared_id(self):
@@ -140,7 +140,7 @@ class ConflictTest(SharedCase):
         self.assertEqual([i.path for i in found], [str(self.main)])
 
 
-class PinTest(SharedCase):
+class PinTest(SharedHelpers, ProjectCase):
     def test_an_unpinned_file_is_an_error_until_it_is_pinned(self):
         self.assertEqual(self.codes(), ["L013"])
         sharedvocab.pin(self.root, [self.shared])
@@ -171,7 +171,7 @@ class PinTest(SharedCase):
         self.assertTrue(sharedvocab.pin_problems(self.root, [self.shared])[0].endswith("is not a vocabulary lock"))
 
 
-class GuardTest(SharedCase):
+class GuardTest(SharedHelpers, ProjectCase):
     def write_as(self, agent: str | None, rel: str):
         payload = {"tool_name": "Write", "cwd": str(self.root), "tool_input": {"file_path": str(self.root / rel)}}
         if agent:
@@ -198,7 +198,7 @@ class GuardTest(SharedCase):
         self.assertIsNone(self.bash_as("implementer", "cat vendor/other.txt"))
 
 
-class TripwireTest(SharedCase):
+class TripwireTest(SharedHelpers, ProjectCase):
     def test_included_files_and_the_lock_are_watched(self):
         sharedvocab.pin(self.root, [self.shared])
         watched = {p.resolve() for p in tripwire.watched_files(self.root, None)}
@@ -213,7 +213,7 @@ class TripwireTest(SharedCase):
         self.assertTrue(any(f["kind"] == "changed" and f["path"].endswith("vendor/team.toml") for f in found))
 
 
-class CommandTest(SharedCase):
+class CommandTest(SharedHelpers, ProjectCase):
     def test_list_check_and_pin(self):
         code, out, _ = self.cli("vocabulary", "list")
         self.assertEqual(code, 0)

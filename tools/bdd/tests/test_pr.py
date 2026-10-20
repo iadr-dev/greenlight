@@ -34,7 +34,7 @@ Review status: UNREVIEWED (autopilot)
 """
 
 
-class PrCase(ProjectCase):
+class PrHelpers:
     def prepare(self) -> None:
         self.write(".bdd/features/%s/brief.md" % self.feature_dir.name, BRIEF)
         self.rules.write_text("# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n", encoding="utf-8", newline="\n")
@@ -53,7 +53,7 @@ class PrCase(ProjectCase):
         return code, out.getvalue(), err.getvalue()
 
 
-class DescriptionTest(PrCase):
+class DescriptionTest(PrHelpers, ProjectCase):
     def test_the_description_is_built_from_the_records(self):
         self.prepare()
         code, out, _ = self.cli()
@@ -93,7 +93,7 @@ class DescriptionTest(PrCase):
         self.assertEqual(self.cli(feature="FEAT-999")[0], 2)
 
 
-class AuditTest(PrCase):
+class AuditTest(PrHelpers, ProjectCase):
     def test_the_auditors_verdict_and_findings_are_listed(self):
         self.prepare()
         self.write(".bdd/features/%s/report.md" % self.feature_dir.name, REPORT)
@@ -112,7 +112,7 @@ class AuditTest(PrCase):
         self.assertIn("No audit report yet", self.cli()[1])
 
 
-class OutputTest(PrCase):
+class OutputTest(PrHelpers, ProjectCase):
     def test_a_file_inside_the_project_is_written_and_not_replaced_without_force(self):
         self.prepare()
         self.assertEqual(self.cli("--output", "PR.md")[0], 0)

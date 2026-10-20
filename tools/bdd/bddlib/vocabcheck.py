@@ -99,29 +99,31 @@ def check_exact_duplicates(entries: list[Entry], path: str, texts: dict[str, str
     return issues
 
 
+def near_duplicate(a: Entry, b: Entry, threshold: float, path: str, texts: dict[str, str]) -> Issue | None:
+    """L010 for one pair of entries, or None when the pair is fine (or is reported as an exact duplicate)."""
+    if a.kind != b.kind or (a.source == "core" and b.source == "core"):
+        return None
+    if a.source == b.source == "project" and exact_duplicates(a, b):
+        return None                                              # reported as L014
+    unjustified = [e for e in (a, b) if e.source == "project" and not e.justification]
+    if not unjustified:
+        return None
+    best = max(((similarity(pa.text, pb.text), pa.text, pb.text)
+                for pa in _own_patterns(a) for pb in _own_patterns(b)), default=None)
+    if not best or best[0] < threshold:
+        return None
+    target = to_report(unjustified, path)
+    file, line = where(target, path, texts)
+    return Issue(file, line, ERROR, "L010",
+                 f'{a.id} "{best[1]}" and {b.id} "{best[2]}" are nearly identical '
+                 f"(similarity {best[0]:.2f} >= {threshold:.2f}): reuse one, or give {target.id} a `justification`")
+
+
 def check_near_duplicates(entries: list[Entry], threshold: float, path: str, source: str,
                           texts: dict[str, str] | None = None) -> list[Issue]:
-    issues = []
     texts = {path: source, **(texts or {})}
-    for i, a in enumerate(entries):
-        for b in entries[i + 1:]:
-            if a.kind != b.kind or (a.source == "core" and b.source == "core"):
-                continue
-            if a.source == b.source == "project" and exact_duplicates(a, b):
-                continue                                         # reported as L014
-            unjustified = [e for e in (a, b) if e.source == "project" and not e.justification]
-            if not unjustified:
-                continue
-            best = max(((similarity(pa.text, pb.text), pa.text, pb.text)
-                        for pa in _own_patterns(a) for pb in _own_patterns(b)), default=None)
-            if best and best[0] >= threshold:
-                target = to_report(unjustified, path)
-                file, line = where(target, path, texts)
-                issues.append(Issue(file, line, ERROR, "L010",
-                                    f'{a.id} "{best[1]}" and {b.id} "{best[2]}" are nearly identical '
-                                    f"(similarity {best[0]:.2f} >= {threshold:.2f}): reuse one, "
-                                    f"or give {target.id} a `justification`"))
-    return issues
+    found = (near_duplicate(a, b, threshold, path, texts) for i, a in enumerate(entries) for b in entries[i + 1:])
+    return [issue for issue in found if issue]
 
 
 def check_vocabulary(vocab: Vocabulary, profiles: tuple[str, ...], threshold: float,

@@ -28,8 +28,8 @@ def load(root):
     return config, path, vocabulary.load(path)
 
 
-def listing(root, as_json: bool) -> int:
-    config, path, vocab = load(root)
+def listing(root, as_json: bool) -> None:
+    _, path, vocab = load(root)
     shared = sharedvocab.closure(root, path)
     rows = [{"id": e.id, "kind": e.kind, "file": sharedvocab.relative(root, Path(e.origin)),
              "patterns": [p.text for p in e.patterns.get("*", ())], "owner": e.owner}
@@ -38,11 +38,10 @@ def listing(root, as_json: bool) -> int:
     if as_json:
         print(json.dumps({"core": core, "included": [sharedvocab.relative(root, f) for f in shared], "steps": rows},
                          indent=2, ensure_ascii=False))
-        return 0
+        return
     print(f"{core} core instruction(s); {len(rows)} project or shared step(s); {len(shared)} included file(s)")
     for row in rows:
         print(f"  {row['id']:<28} {row['kind']:<5} {row['file']}" + (f"  (owner: {row['owner']})" if row["owner"] else ""))
-    return 0
 
 
 def check(root) -> int:
@@ -55,16 +54,15 @@ def check(root) -> int:
     return 1 if errors else 0
 
 
-def pin(root) -> int:
-    config, path, vocab = load(root)                     # refuses cycles, overrides and unreadable files
+def pin(root) -> None:
+    _, path, _ = load(root)                              # refuses cycles, overrides and unreadable files
     pinned = sharedvocab.pin(root, sharedvocab.closure(root, path))
     if not pinned:
         print("no shared vocabulary is included; nothing is pinned")
-        return 0
+        return
     print(f"pinned {len(pinned)} shared vocabulary file(s):")
     for name, digest in sorted(pinned.items()):
         print(f"  {digest[:12]}  {name}")
-    return 0
 
 
 def run(argv: list[str]) -> int:
@@ -79,7 +77,10 @@ def run(argv: list[str]) -> int:
     def action() -> int:
         root = project_root().resolve()
         try:
-            return {"list": lambda: listing(root, args.json), "check": lambda: check(root), "pin": lambda: pin(root)}[args.action]()
+            if args.action == "check":
+                return check(root)
+            {"list": lambda: listing(root, args.json), "pin": lambda: pin(root)}[args.action]()
+            return 0
         except (vocabulary.VocabularyError, sharedvocab.IncludeError, cfg.ConfigError) as exc:
             raise UsageError(str(exc)) from exc
 
