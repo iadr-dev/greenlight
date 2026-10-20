@@ -1,0 +1,19 @@
+{
+  "name": "money-lib",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny money library (parse, add, format; no currency conversion) used to evaluate greenlight end to end.",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "tsc -p . && node --test \"dist/unit/**/*.test.js\"",
+    "bdd": "tsc -p . && node --test --test-reporter=junit --test-reporter-destination=node-report.xml --test-name-pattern"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite failures="2" name="io.cucumber.core.plugin.JUnitFormatter" skipped="0" tests="2" time="0.02">
+  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.01"><failure message="BDD_EXPECTED_MISSING: add" type="java.lang.UnsupportedOperationException"><![CDATA[java.lang.UnsupportedOperationException: BDD_EXPECTED_MISSING: add
+	at sample.Steps.add(Steps.java:11)]]></failure></testcase>
+  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.01"><failure message="BDD_EXPECTED_MISSING: add" type="java.lang.UnsupportedOperationException"><![CDATA[java.lang.UnsupportedOperationException: BDD_EXPECTED_MISSING: add
+	at sample.Steps.add(Steps.java:11)]]></failure></testcase>
+</testsuite>

@@ -33,12 +33,15 @@ test_defect = [
   'ImportError|ModuleNotFoundError|SyntaxError|NameError',
   'build failed|cannot find symbol|error CS\d+|undefined: ',
   '(?i)undefined step|step definition.* not found|no matching step',
+  '\.\s*undefined\b',                             # cucumber-js and behave print "... undefined" for a step nobody defined
+  '(?im)^undefined$|\bis undefined\b|UndefinedStepException',   # godog (type "undefined") and Cucumber-JVM (strict mode)
   '(?i)no tests (were )?(found|executed)',
 ]
 expected_fail = [
   'BDD_EXPECTED_MISSING',
   'AssertionError|AssertionFailedError|AssertError',
-  '(?i)expected .* (but|to) ',
+  '(?i)expected .*\b(but|to|got|actual)\b',
+  'Assert\.\w+\(\) Failure|Xunit\.Sdk\.\w+Exception|AssertionException',   # xUnit and NUnit (Reqnroll, SpecFlow)
   'status (404|405|501)',
 ]
 

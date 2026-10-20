@@ -1,0 +1,22 @@
+[
+  {
+    "id": "the rounding mode",
+    "about": ["round"],
+    "expect": ["half up"]
+  },
+  {
+    "id": "where the rate comes from",
+    "about": ["rate"],
+    "expect": ["caller"]
+  },
+  {
+    "id": "converting to the same currency",
+    "about": ["same currency"],
+    "expect": ["unchanged"]
+  },
+  {
+    "id": "what is refused",
+    "about": ["refus"],
+    "expect": ["zero"]
+  }
+]

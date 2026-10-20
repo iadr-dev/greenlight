@@ -1,0 +1,31 @@
+<testsuite name="sample.Sample (delete me)" tests="2" errors="0" failures="2" skipped="0" time="0.000345" timestamp="2026-10-20T19:30:56.336792" hostname="localhost"><testcase classname="sample.Sample (delete me)" name="Two numbers are added" status="failed" time="0.00019"><failure type="AssertionError" message="BDD_EXPECTED_MISSING: add">
+<![CDATA[
+Failing step: When I add 2 and 3 ... failed in 0.000s
+Location: features/sample.feature:4
+ASSERT FAILED: BDD_EXPECTED_MISSING: add]]>
+</failure><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario: Two numbers are added
+    When I add 2 and 3 ... failed in 0.000s
+    Then the result is 5 ... skipped in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase><testcase classname="sample.Sample (delete me)" name="A negative number is refused" status="failed" time="0.000155"><failure type="AssertionError" message="BDD_EXPECTED_MISSING: add">
+<![CDATA[
+Failing step: When I add -1 and 3 ... failed in 0.000s
+Location: features/sample.feature:8
+ASSERT FAILED: BDD_EXPECTED_MISSING: add]]>
+</failure><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario: A negative number is refused
+    When I add -1 and 3 ... failed in 0.000s
+    Then the call fails with negative input ... skipped in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase></testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<testsuite name="Cucumber" time="0.018" tests="2" skipped="0" failures="2" errors="0" timestamp="2026-10-20T11:30:48.883Z">
+  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.005">
+    <failure type="AssertionError" message="Expected values to be strictly equal:&#xA;&#xA;0 !== 5&#xA;"><![CDATA[    at World.<anonymous> (/tmp/project/features/steps.js:4:51)]]></failure>
+    <system-out><![CDATA[When I add 2 and 3..........................................................passed
+Then the result is 5........................................................failed]]></system-out>
+  </testcase>
+  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.001">
+    <failure type="AssertionError" message="expected an error"><![CDATA[    at World.<anonymous> (/tmp/project/features/steps.js:5:65)]]></failure>
+    <system-out><![CDATA[When I add -1 and 3.........................................................passed
+Then the call fails with negative input.....................................failed]]></system-out>
+  </testcase>
+</testsuite>

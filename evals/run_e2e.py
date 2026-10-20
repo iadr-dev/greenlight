@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Run a whole feature through greenlight with real agents, and measure what happened.
 
-    python evals/run_e2e.py [--request discounts|adopt-billing] [--model haiku] [--autonomy standard,autopilot]
+    python evals/run_e2e.py [--request discounts|adopt-billing|csv-report|money-convert] [--model haiku] [--autonomy standard,autopilot]
                             [--runs 3] [--arms plugin,baseline] [--hooks on|off] [--keep]
 
 For every combination of arm, autonomy level and run number it copies the request's reference app (evals/apps/shop-api
-for a feature, evals/apps/shop-web for a web front end, evals/apps/legacy-billing for an adoption) into a temporary project with its own virtual environment,
-sets greenlight up (`bdd init`, proves the sample green), then asks Claude Code, headless, to run
+for a feature, evals/apps/legacy-billing for an adoption, evals/apps/csv-tool and money-lib for the generic-junit adapter)
+into a temporary project (with its own virtual environment for a Python app), sets greenlight up (`bdd init`, proves the sample green), then asks Claude Code, headless, to run
 `/greenlight:feature "<request>"` (`/greenlight:adopt "<area>"` for an adoption request). An adoption row also says
 whether the adoption invariants hold (see adoption_invariants); it has no baseline arm. Afterwards it reads the project's own
 records with the `bdd` CLI and git, never the conversation (evals/collect.py), and appends one metrics row per run to
@@ -24,7 +24,7 @@ commands as follow-up prompts in the same session (`--resume`) when the project 
 approvals arrive as headless prompts, which greenlight grades below a keyboard-typed one; the row records the grade, so
 a standard row measures the pipeline given scripted human decisions, not provenance of a real person.
 
-Needs `claude`, `uv`, `git` and `sh` on PATH, working credentials, and some money: a run makes many model calls. Not
+Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib, shop-web), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
@@ -55,16 +55,37 @@ ARMS = ("plugin", "baseline")
 WAITING = re.compile(r"/greenlight:approve (FEAT-\d+) (rules|examples)")
 MAX_FOLLOW_UPS = 6
 
-# What each request needs: its reference app, the skill that runs it, the adapter that tests it (python-pytest-bdd unless
-# the entry says otherwise) and the packages the app and its tests import. A
-# feature request is judged by reaching `done`, an adoption request also by the invariants in adoption_invariants.
-REQUEST_KINDS = {
-    "discounts": {"app": "shop-api", "skill": "feature", "packages": ["fastapi", "httpx"]},
-    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "packages": ["flask", "flask-wtf"]},
-    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "packages": []},
-    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "packages": []},
-}
+# What each request needs: its reference app, the skill that runs it, the adapter, the tools it builds with on PATH and how
+# the no-plugin arm runs the app's own tests. A Python app also lists the packages it and its tests import; a generic-junit
+# app has the run line the person would write into .bdd/config.toml after `bdd init` and the files that decide how
+# scenarios run (they are bound with the steps). Go test names carry the marker ending in "_"; the node script `bdd`
+# (package.json) compiles the TypeScript and runs node's own test runner with a JUnit reporter. A feature request is judged
+# by reaching `done`, an adoption request also by the invariants in adoption_invariants. A ts-playwright-bdd app is
+# installed from its lockfile, gets the adapter's test tooling and a browser, and has its server started by the bound
+# configuration (see set_up_web).
 WEB_PORT = "3107"
+NPM_CI = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
+PYTEST = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+REQUEST_KINDS = {
+    "discounts": {"app": "shop-api", "skill": "feature", "adapter": "python-pytest-bdd", "tools": ("uv",),
+                  "packages": ["fastapi", "httpx"], "baseline": PYTEST},
+    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "adapter": "python-pytest-bdd", "tools": ("uv",),
+                      "packages": ["flask", "flask-wtf"], "baseline": PYTEST},
+    "csv-report": {"app": "csv-tool", "skill": "feature", "adapter": "generic-junit", "tools": ("go",),
+                   "baseline": ["go", "test", "./..."],
+                   "run": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
+                           "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
+                           ["tests/run_junit.py", "go.mod"])},
+    "money-convert": {"app": "money-lib", "skill": "feature", "adapter": "generic-junit", "tools": ("node", "npm"),
+                      "baseline": ["npm", "test", "--silent"],
+                      "run": ("{python} -I tests/run_junit.py --reports node-report.xml --command "
+                              "\"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
+                              ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"])},
+    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+                      "baseline": ["npm", "test"]},
+    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+                     "baseline": ["npm", "test"]},
+}
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
 MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us.anthropic.claude-haiku-5-5",
@@ -80,36 +101,30 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def is_web(kind: dict) -> bool:
-    return kind.get("adapter") == "ts-playwright-bdd"
-
-
-def npm() -> str:
-    return shutil.which("npm") or "npm"
+def base_environment(tmp: Path) -> dict:
+    env = os.environ.copy()
+    env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
+    env.pop("CLAUDE_PLUGIN_DATA", None)
+    env["PYTHONUTF8"] = "1"
+    return env
 
 
 def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
-    """The reference app copied into a temporary project, and the environment its tests run in: for a Python app a virtual
-    environment (its interpreter is returned), for a web front end the app's installed packages (no interpreter)."""
     project = tmp / "project"
-    shutil.copytree(APPS / kind["app"], project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", ".next"))
-    if is_web(kind):
-        env = os.environ.copy()
-        env["PYTHONUTF8"] = "1"
-        env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
-        env.pop("CLAUDE_PLUGIN_DATA", None)
-        run([npm(), "ci", "--ignore-scripts", "--no-audit", "--no-fund"], project, env, timeout=900)
-        return project, env, ""
+    shutil.copytree(APPS / kind["app"], project,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", "dist"))
+    if kind["adapter"] != "python-pytest-bdd":                      # the app brings its own runner; bdd runs under this Python
+        env = base_environment(tmp)
+        if kind["app"] in ("money-lib", "shop-web"):
+            run([shutil.which("npm") or "npm", *NPM_CI[1:]], project, env, timeout=900)
+        return project, env, sys.executable
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
     python = bin_dir / ("python.exe" if os.name == "nt" else "python")
     run(["uv", "pip", "install", "--python", str(python), *kind["packages"], "pytest", "pytest-bdd"], tmp, os.environ.copy())
-    env = os.environ.copy()
+    env = base_environment(tmp)
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
-    env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
-    env.pop("CLAUDE_PLUGIN_DATA", None)
-    env["PYTHONUTF8"] = "1"
     return project, env, str(python)
 
 
@@ -130,6 +145,21 @@ def commit_all(project: Path, env: dict, message: str) -> None:
     run([*GIT, "commit", "-q", "-m", message], project, env)
 
 
+def swap_run_line(project: Path, kind: dict) -> None:
+    """Act as the person: point the generic-junit adapter at the app's own runner, as its guide says to do.
+
+    The sample runner and its feature are removed, and the runner's own files are bound with the steps."""
+    by_tag, support = kind["run"]
+    config = project / ".bdd" / "config.toml"
+    text = config.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^by_tag = .*$", lambda _: "by_tag = " + json.dumps(by_tag), text, count=1)
+    text = re.sub(r"(?m)^support = .*$", lambda _: "support = " + json.dumps(support), text, count=1)
+    config.write_text(text, encoding="utf-8", newline="\n")
+    for sample in ("tests/features/sample.feature", "tests/steps/sample_domain.py", "tests/steps/sample_tests.py",
+                   "tests/run_tests.py"):
+        (project / sample).unlink(missing_ok=True)
+
+
 WEB_SERVER = ("  webServer: { command: 'npm run build && node node_modules/next/dist/bin/next start -p " + WEB_PORT + "', cwd: '..', "
               "url: 'http://127.0.0.1:" + WEB_PORT + "/login', reuseExistingServer: false, timeout: 240_000, "
               "env: { SHOP_TEST_ENDPOINTS: '1' } },")
@@ -137,9 +167,9 @@ WEB_SERVER_COMMENT = "  // webServer: { command: 'npm start', url: 'http://local
 
 
 def set_up_web(project: Path, env: dict) -> None:
-    """The test tooling from the adapter's lockfile, the browser, and the start of the application: what the person
-    does once, before the first feature (the agents may not install packages, and the configuration is bound)."""
-    run([npm(), "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", "tests"], project, env, timeout=900)
+    """Act as the person: the test tooling from the adapter's lockfile, the browser, and the start of the application
+    (the agents may not install packages, and the configuration is bound with the steps)."""
+    run([shutil.which("npm") or "npm", *NPM_CI[1:], "--prefix", "tests"], project, env, timeout=900)
     run(["node", "tests/node_modules/@playwright/test/cli.js", "install", "chromium"], project, env, timeout=900)
     config = project / "tests" / "bdd.config.ts"
     found = config.read_text(encoding="utf-8")
@@ -148,16 +178,16 @@ def set_up_web(project: Path, env: dict) -> None:
     config.write_text(found.replace(WEB_SERVER_COMMENT, WEB_SERVER), encoding="utf-8", newline="\n")
 
 
-def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict | None = None) -> None:
-    kind = kind or {}
+def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> None:
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
-    if is_web(kind):
-        bdd(project, env, "init", "--adapter", kind["adapter"], "--autonomy", autonomy)
+    python_adapter = kind["adapter"] == "python-pytest-bdd"
+    bdd(project, env, "init", "--adapter", kind["adapter"], "--autonomy", autonomy, *(["--python", python] if python_adapter else []))
+    if kind["adapter"] == "ts-playwright-bdd":
         set_up_web(project, env)
-    else:
-        bdd(project, env, "init", "--adapter", kind.get("adapter", "python-pytest-bdd"), "--autonomy", autonomy, "--python", python)
     print(bdd(project, env, "init", "--smoke").stdout.strip())
+    if kind["adapter"] == "generic-junit":
+        swap_run_line(project, kind)
     commit_all(project, env, "greenlight set up")
 
 
@@ -321,11 +351,10 @@ def baseline_row(tmp: Path, args: argparse.Namespace, request: str) -> dict:
     project, env, python = build_project(tmp, kind)
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
-    prompt =(f"{request.strip()}\n\nImplement this in the project in the current directory. Write tests for it and run "
+    prompt = (f"{request.strip()}\n\nImplement this in the project in the current directory. Write tests for it and run "
               "the project's tests. Do not ask questions; decide and state your assumptions.")
     output = claude(project, env, prompt, MODELS[args.model], args.minutes, None)
-    own_tests = [npm(), "test"] if is_web(kind) else [python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
-    tests = run(own_tests, project, env, check=False)
+    tests = run([python if word == "{python}" else word for word in kind["baseline"]], project, env, check=False)
     row = {"features": 0, "tests_pass": tests.returncode == 0, "claude": claude_summary(output), **git_changes(project, env)}
     row["completed"] = row["tests_pass"]
     return row
@@ -358,7 +387,7 @@ def main() -> int:
     ap.add_argument("--minutes", type=int, default=45, help="give up on one run after this long")
     ap.add_argument("--keep", action="store_true", help="keep the temporary projects and print their paths")
     args = ap.parse_args()
-    for tool in ("claude", "uv", "git", "sh"):
+    for tool in ("claude", "git", "sh", *REQUEST_KINDS[args.request]["tools"]):
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2

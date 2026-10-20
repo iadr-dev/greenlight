@@ -1,0 +1,110 @@
+using System.Net;
+using System.Text;
+using System.Text.Json.Nodes;
+
+namespace Greenlight.Tests.Drivers;
+
+// A complete in-memory system for the contract test: every seam is implemented, so every core step can run.
+public sealed class FullSystem : SystemUnderTest
+{
+    private readonly Dictionary<string, List<JsonObject>> _rows = [];
+    private readonly Dictionary<string, List<JsonNode?>> _received = [];
+    private readonly Dictionary<string, List<JsonNode?>> _published = [];
+    private readonly Dictionary<string, bool> _flags = [];
+    private readonly QueryCounter _queries = new();
+
+    public FullSystem(Clock clock, Stubs stubs) : base(clock, stubs)
+    {
+    }
+
+    public override void Seed(string entity, IReadOnlyList<JsonObject> rows) =>
+        Rows(entity).AddRange(rows.Select(row => (JsonObject)row.DeepClone()));
+
+    public override IReadOnlyDictionary<string, string> Authenticate(string actor, string role) =>
+        new Dictionary<string, string> { ["Authorization"] = $"Bearer {actor}:{role}" };
+
+    public override void SetFlag(string flag, bool enabled) => _flags[flag] = enabled;
+
+    public override HttpClient Http() => new(new Router(this)) { BaseAddress = new Uri("http://localhost") };
+
+    public override void DeliverEvent(string name, JsonNode? payload)
+    {
+        if (!_received.TryGetValue(name, out var list))
+        {
+            _received[name] = list = [];
+        }
+        list.Add(payload?.DeepClone());
+    }
+
+    public override void RunJob(string job)
+    {
+        if (job != "receipts")
+        {
+            throw new ExpectedMissingException($"the {job} job");
+        }
+        if (!_published.TryGetValue("receipt", out var list))
+        {
+            _published["receipt"] = list = [];
+        }
+        list.AddRange(_received.GetValueOrDefault("payment") ?? []);
+    }
+
+    public override IReadOnlyList<JsonObject> Records(string entity) => Rows(entity);
+
+    public override int QueriesExecuted() => _queries.Count;
+
+    public override IReadOnlyList<JsonNode?> Published(string name) => _published.GetValueOrDefault(name) ?? [];
+
+    private List<JsonObject> Rows(string entity)
+    {
+        if (!_rows.TryGetValue(entity, out var list))
+        {
+            _rows[entity] = list = [];
+        }
+        return list;
+    }
+
+    private sealed class Router(FullSystem system) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation)
+        {
+            var route = $"{request.Method} {request.RequestUri!.AbsolutePath}";
+            switch (route)
+            {
+                case "POST /orders":
+                    return Task.FromResult(PlaceOrder(request));
+                case "GET /orders":
+                    system._queries.Record("SELECT * FROM orders");
+                    if (system._flags.GetValueOrDefault("n-plus-one"))
+                    {
+                        foreach (var _ in system.Rows("order"))
+                        {
+                            system._queries.Record("SELECT * FROM lines WHERE order_id = ?");
+                        }
+                    }
+                    return Task.FromResult(Json(HttpStatusCode.OK, new JsonArray(system.Rows("order").Select(row => (JsonNode?)row.DeepClone()).ToArray())));
+                case "GET /time":
+                    return Task.FromResult(Json(HttpStatusCode.OK, new JsonObject { ["now"] = system.Clock.Now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") }));
+                default:
+                    return Task.FromResult(Json(HttpStatusCode.NotFound, new JsonObject { ["error"] = "not found" }));
+            }
+        }
+
+        private HttpResponseMessage PlaceOrder(HttpRequestMessage request)
+        {
+            if (!request.Headers.Contains("Authorization"))
+            {
+                return Json(HttpStatusCode.Unauthorized, new JsonObject { ["error"] = "sign in first" });
+            }
+            var order = JsonNode.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()) as JsonObject ?? [];
+            system.Stubs.Call("payments", "charge", new JsonObject { ["amount"] = 900 });
+            system._queries.Record("INSERT INTO orders");
+            order["status"] = "placed";
+            system.Rows("order").Add(order);
+            return Json(HttpStatusCode.Created, new JsonObject { ["id"] = system.Rows("order").Count, ["status"] = "placed", ["total"] = 900 });
+        }
+
+        private static HttpResponseMessage Json(HttpStatusCode status, JsonNode body) =>
+            new(status) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+    }
+}

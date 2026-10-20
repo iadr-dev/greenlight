@@ -411,6 +411,24 @@
       "phase": "bind"
     },
     {
+      "apply_when": "a Python project whose scenarios run with behave (the generic-junit adapter)",
+      "id": "behave",
+      "kind": "runner",
+      "path": "runners/behave.md"
+    },
+    {
+      "apply_when": "a JavaScript or TypeScript project whose scenarios run with cucumber-js (the generic-junit adapter)",
+      "id": "cucumber-js",
+      "kind": "runner",
+      "path": "runners/cucumber-js.md"
+    },
+    {
+      "apply_when": "a Java or Kotlin project whose scenarios run with Cucumber-JVM under JUnit Platform, Maven or Gradle (the generic-junit adapter)",
+      "id": "cucumber-jvm",
+      "kind": "runner",
+      "path": "runners/cucumber-jvm.md"
+    },
+    {
       "apply_when": "a .NET project tested with xUnit, NUnit or MSTest through dotnet test (the generic-junit adapter), including Reqnroll or SpecFlow",
       "id": "dotnet-test",
       "kind": "runner",
@@ -421,6 +439,12 @@
       "id": "go-test",
       "kind": "runner",
       "path": "runners/go-test.md"
+    },
+    {
+      "apply_when": "a Go project whose scenarios run with godog, the Cucumber implementation for Go (the generic-junit adapter)",
+      "id": "godog",
+      "kind": "runner",
+      "path": "runners/godog.md"
     },
     {
       "apply_when": "a JavaScript or TypeScript project tested with jest (the generic-junit adapter); for browsers see the UI adapters",
@@ -445,6 +469,12 @@
       "id": "pytest",
       "kind": "runner",
       "path": "runners/pytest.md"
+    },
+    {
+      "apply_when": "a .NET project whose scenarios run with Reqnroll (the SpecFlow successor) on xUnit, NUnit or MSTest (the generic-junit adapter)",
+      "id": "reqnroll",
+      "kind": "runner",
+      "path": "runners/reqnroll.md"
     },
     {
       "apply_when": "a rule has a threshold, limit, range, cut-off time or size, or a count that changes behaviour",

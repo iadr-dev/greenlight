@@ -148,6 +148,61 @@ jobs:
           GREENLIGHT_NODE_MUTATION_TESTS: "1"
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_mutation_wrapper_ts.py" -v
 
+  adapter-go-godog:
+    name: adapter contract (go-godog, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_GO_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.26"
+          cache-dependency-path: adapters/go-godog/templates/tests/go.sum
+      - name: Fresh scaffold runs green, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_godog.py" -v
+      - name: The shipped templates are gofmt-clean and vet-clean
+        shell: bash
+        run: |
+          go -C adapters/go-godog/templates/tests mod download
+          test -z "$(gofmt -l adapters/go-godog/templates/tests)"
+          go -C adapters/go-godog/templates/tests vet ./...
+
+  adapter-dotnet-reqnroll:
+    name: adapter contract (dotnet-reqnroll, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_DOTNET_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: adapters/dotnet-reqnroll/templates/tests/packages.lock.json
+      - name: Packages come from the lock file (locked restore, hashed)
+        run: dotnet restore adapters/dotnet-reqnroll/templates/tests --locked-mode
+      - name: Fresh scaffold runs green, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_reqnroll.py" -v
+      - name: The shipped templates are format-clean and build without warnings
+        run: |
+          dotnet format adapters/dotnet-reqnroll/templates/tests --verify-no-changes --no-restore
+          dotnet build adapters/dotnet-reqnroll/templates/tests --no-restore -warnaserror
+
   adapter-java-cucumber-spring:
     name: adapter contract (java-cucumber-spring, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -214,6 +269,71 @@ jobs:
           gradle-version: "9.8.2"
       - name: Fresh scaffold runs green as an Android library's local unit test (the SDK is preinstalled on the runner)
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k AndroidContractTest -v
+
+  reference-app-csv-tool:
+    name: reference app (csv-tool, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.23"
+          cache: false
+      - name: Vet and test the app (standard library only)
+        working-directory: evals/apps/csv-tool
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+  reference-app-money-lib:
+    name: reference app (money-lib, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: evals/apps/money-lib/package-lock.json
+      - name: Install from the lockfile and test the app
+        working-directory: evals/apps/money-lib
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+
+  adapter-generic-junit:
+    name: adapter contract (generic-junit on the reference apps, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_APP_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.23"
+          cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+      - name: Runner reports of cucumber-js, behave, godog, Cucumber-JVM and Reqnroll classify as expected
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_junit_fixtures.py" -v
+      - name: A missing seam is a valid red and a working one a valid green, on csv-tool and money-lib
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_generic_junit_apps.py" -v
 
   reference-app-shop-web:
     name: reference app (shop-web, ${{ matrix.os }})

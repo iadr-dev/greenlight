@@ -5,6 +5,7 @@ __pycache__/
 .coverage
 htmlcov/
 node_modules/
+evals/apps/*/dist/
 # local Claude Code state
 .claude/settings.local.json
 .claude/scheduled_tasks.*

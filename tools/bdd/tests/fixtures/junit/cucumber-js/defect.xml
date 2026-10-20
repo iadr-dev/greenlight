@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<testsuite name="Cucumber" time="0.003" tests="2" skipped="0" failures="2" errors="0" timestamp="2026-10-20T11:30:49.846Z">
+  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.001">
+    <failure/>
+    <system-out><![CDATA[When I add 2 and 3..........................................................undefined
+Then the result is 5........................................................undefined]]></system-out>
+  </testcase>
+  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0">
+    <failure/>
+    <system-out><![CDATA[When I add -1 and 3.........................................................undefined
+Then the call fails with negative input.....................................undefined]]></system-out>
+  </testcase>
+</testsuite>

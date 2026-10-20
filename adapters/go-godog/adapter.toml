@@ -1,0 +1,53 @@
+name = "go-godog"
+version = 1
+profiles = ["base", "api", "cli", "lib", "data"]   # every instruction of these profiles is bound in tests/steps/core_steps.go
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["go.mod"]
+contains = ["module"]
+
+[requires]
+packages = ["github.com/cucumber/godog v0.16.0"]   # pinned in tests/go.mod and tests/go.sum
+optional = []
+
+[paths]
+features = "tests/features"
+steps = "tests/steps"
+drivers = "tests/drivers"
+support = ["tests/bdd_test.go", "tests/go.mod", "tests/go.sum"]
+
+[run]
+# `go test` runs one test, TestFeatures (tests/bdd_test.go), in the nested module tests/ with the module files read-only,
+# so nothing the run does can change what it depends on. The test reads its settings after -args: the tag of the feature,
+# where to write the JUnit report (godog's own junit formatter), a seed to shuffle the scenarios, and the name of one
+# scenario when isolated. The words that change what Go builds or runs (GOFLAGS, GOENV, GOWORK, GOEXPERIMENT, GODEBUG,
+# GOOS, GOARCH, CGO_*) are not passed on; GOPATH, GOMODCACHE and GOPROXY are.
+by_tag = 'go -C tests test -mod=readonly -count=1 -run ^TestFeatures$ . -args -bdd.tag={tag}'
+scrub_env = ["GOFLAGS", "GOENV", "GOWORK", "GOEXPERIMENT", "GODEBUG", "GOOS", "GOARCH", "CGO_"]
+report = '-bdd.out {out}'
+shuffle = '-bdd.seed {seed}'
+isolated = '-bdd.scenario "{scenario}"'
+timeout = 900
+
+[classify]                                    # ordered; defects first; applied to the failure text (type, message, body)
+test_defect = [
+  'NotMapped',
+  '(?m)^(undefined|pending|ambiguous)$',
+  'ErrUnmatchedStepArgumentNumber|ErrCannotConvert|ErrUnsupportedParameterType',
+  'panic(:| in)|nil pointer dereference',
+  'UnstubbedCall|OutboundNetworkBlocked',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError',
+  'status (404|405|501)',
+]
+
+# Quality checks are opt-in and are not copied into .bdd/config.toml: see "Quality checks" in guide.md for the
+# [adapters.quality.NAME] tables (gofmt, go vet, staticcheck, deprecation) to add to your own configuration.
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*sc\.(?P<kind>Given|When|Then)\('
+assert_patterns = ['\bAssert\w*\(', '\bassert\.', '\brequire\.']
+sleep_patterns = ['time\.Sleep\(']
+stub_patterns = ['\.Respond\(\s*[^\w.]([\w.]+)']
