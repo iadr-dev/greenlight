@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `bdd install-skills codex|agents-md` (decision D28): installs greenlight's instructions for Codex (skills under `.agents/skills` or `~/.agents/skills`, with this installation's paths) or as a marked block in `AGENTS.md`; `--dry-run`, never overwrites a differing file without `--force`, refuses links that leave the project. `bdd doctor` has an `enforcement` check that warns when enforcement is soft or no hook has run, and a self-reported approval says on stderr that no hook verified it.
+
 ### Fixed
 - The CI example in `docs/ci.md` no longer fails in a project that has no feature yet.
 

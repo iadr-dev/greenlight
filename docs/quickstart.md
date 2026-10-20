@@ -72,6 +72,11 @@ checks it against the session transcript. Once the examples are approved, the fe
 When the report says `Verdict: PASS`, every rule has examples, every example has a passing test, nothing approved or
 bound changed afterwards, and the evidence is in `.bdd/features/FEAT-001-*/report.md`.
 
+## Using another tool than Claude Code
+
+`bdd install-skills codex` (or `agents-md`) installs greenlight's instructions for Codex and other agent tools. They
+run without hooks, so enforcement is soft; see [concepts](concepts.md).
+
 ## Starting from existing code
 
 To put code that already exists under greenlight before you change it, describe one area first:
