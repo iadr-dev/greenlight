@@ -24,7 +24,8 @@ Windows is not installed) greenlight works in soft mode: violations are detected
 
 **Can I use it from Codex or another agent tool?**
 Yes, in soft mode. `bdd install-skills codex` installs the skills for Codex and `bdd install-skills agents-md` adds a
-block to `AGENTS.md` for tools that read it. Those tools run no greenlight hooks, so nothing is prevented, only
+block to `AGENTS.md` for tools that read it; `bdd install-skills claude` does the same for Claude Code without the
+plugin. `--uninstall` removes exactly what was installed. Those tools run no greenlight hooks, so nothing is prevented, only
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
