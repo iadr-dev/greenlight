@@ -101,13 +101,54 @@ def closure(root: Path, main: Path) -> list[Path]:
 
 
 def safe_closure(vocabulary_file: Path | None) -> list[Path]:
-    """The included files, or none when the vocabulary cannot be read (for the guard and the tripwire, which must not fail)."""
+    """The included files, or none when the vocabulary cannot be read (for callers that must not fail)."""
     if vocabulary_file is None or not vocabulary_file.is_file():
         return []
     try:
         return closure(project_root(vocabulary_file), vocabulary_file)
     except (IncludeError, OSError):
         return []
+
+
+def named_files(root: Path, names: list[str]) -> list[Path]:
+    """The existing files inside the project that ``names`` (project-relative) point at, links resolved."""
+    found = []
+    for name in names:
+        target = (root / name).resolve()
+        if target.is_relative_to(root.resolve()) and target.is_file() and target not in found:
+            found.append(target)
+    return found
+
+
+def listed_files(root: Path, main: Path) -> list[Path]:
+    """Every file the include lists name that exists, followed through nested lists, skipping what cannot be read."""
+    start, found, queue = main.resolve(), [], [main.resolve()]
+    while queue:
+        try:
+            names = read_table(queue.pop(), root)
+        except IncludeError:
+            continue
+        for target in named_files(root, names):
+            if target != start and target not in found:
+                found.append(target)
+                queue.append(target)
+    return found
+
+
+def protected_files(vocabulary_file: Path | None) -> list[Path]:
+    """The shared files the guard keeps agents away from and the tripwire watches. This fails closed: besides the files the
+    include list resolves to, it holds the ones the include list names however it reads (a broken list, a cycle) and every
+    file the lock names, so breaking the include list does not uncover a file that was pinned."""
+    if vocabulary_file is None or not vocabulary_file.is_file():
+        return []
+    root = project_root(vocabulary_file)
+    found = safe_closure(vocabulary_file)
+    try:
+        pinned = list(read_pins(root) or {})
+    except (StoreError, OSError):
+        pinned = []
+    others = listed_files(root, vocabulary_file) + named_files(root, pinned)
+    return found + [f for f in dict.fromkeys(others) if f not in found]
 
 
 # -- pins ----------------------------------------------------------------------------------

@@ -197,6 +197,44 @@ class GuardTest(SharedHelpers, ProjectCase):
                 self.assertIn("managed by", self.bash_as("implementer", command))
         self.assertIsNone(self.bash_as("implementer", "cat vendor/other.txt"))
 
+    def test_the_bare_name_after_a_cd_and_a_glob_are_refused_too(self):
+        for command in ("cd vendor && echo x > team.toml", "echo x > vendor/t*.toml", "echo x > vendor/te?m.toml",
+                        "cd vendor; cp /tmp/evil.toml ./team.toml"):
+            with self.subTest(command=command):
+                self.assertIn("managed by", self.bash_as("implementer", command))
+
+    def test_pinning_is_the_persons_act_for_every_tool_call(self):
+        for command in ("bdd vocabulary pin", "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd vocabulary pin && echo ok",
+                        "bdd init --shared-vocabulary vendor/team.toml"):
+            for agent in ("implementer", "qa-designer", None):
+                with self.subTest(command=command, agent=agent):
+                    payload = {"tool_name": "Bash", "cwd": str(self.root), "tool_input": {"command": command}}
+                    if agent:
+                        payload["agent_type"] = f"greenlight:{agent}"
+                    self.assertIn("the person's act", guard.evaluate(payload))
+        self.assertIsNone(self.bash_as("implementer", "bdd vocabulary list"))
+
+    def test_bdd_pr_write_counts_as_a_write_to_the_description_file(self):
+        command = "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd pr FEAT-007 --write"
+        self.assertIn("may not write production files", self.bash_as("qa-designer", command))
+        self.assertIsNone(self.bash_as("implementer", command))
+        self.assertIsNone(self.bash_as("qa-designer", "bdd pr FEAT-007"))
+
+    def test_a_broken_include_list_does_not_uncover_pinned_files(self):
+        sharedvocab.pin(self.root, [self.shared])
+        self.main.write_text('extends = "core"\n\n[vocabulary]\ninclude = [\n', encoding="utf-8", newline="\n")   # not TOML
+        self.assertEqual(sharedvocab.safe_closure(self.main), [])
+        self.assertEqual(sharedvocab.protected_files(self.main), [self.shared.resolve()])
+        self.assertIn("managed by the bdd command line", self.write_as("implementer", "vendor/team.toml"))
+        self.assertIn("managed by", self.bash_as("implementer", "echo x > vendor/team.toml"))
+
+    def test_a_cycle_does_not_uncover_the_files_it_names(self):
+        self.write("vendor/a.toml", toml("vendor/b.toml"))
+        self.write("vendor/b.toml", toml("vendor/a.toml"))
+        self.main.write_text(toml("vendor/a.toml"), encoding="utf-8", newline="\n")
+        self.assertEqual({p.name for p in sharedvocab.protected_files(self.main)}, {"a.toml", "b.toml"})
+        self.assertIn("managed by the bdd command line", self.write_as("implementer", "vendor/a.toml"))
+
 
 class TripwireTest(SharedHelpers, ProjectCase):
     def test_included_files_and_the_lock_are_watched(self):
@@ -204,6 +242,12 @@ class TripwireTest(SharedHelpers, ProjectCase):
         watched = {p.resolve() for p in tripwire.watched_files(self.root, None)}
         self.assertIn(self.shared.resolve(), watched)
         self.assertIn((self.root / ".bdd" / "vocabulary.lock.json").resolve(), watched)
+
+    def test_a_broken_include_list_keeps_pinned_files_watched(self):
+        sharedvocab.pin(self.root, [self.shared])
+        self.main.write_text('extends = "core"\n\n[vocabulary]\ninclude = [\n', encoding="utf-8", newline="\n")   # not TOML
+        watched = {p.resolve() for p in tripwire.watched_files(self.root, None)}
+        self.assertIn(self.shared.resolve(), watched)
 
     def test_a_change_is_a_violation_once_the_baseline_exists(self):
         sharedvocab.pin(self.root, [self.shared])

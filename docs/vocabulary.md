@@ -105,8 +105,10 @@ relative to the project root and may not resolve outside the project, also throu
 
 **Pinning.** The shared files decide what scenarios mean, so a change has to be seen. `bdd vocabulary pin` records the hash
 of every included file in `.bdd/vocabulary.lock.json` after a person has read them; until then, and whenever a file
-changes, is added or is no longer included, `bdd lint` reports `L013`. Agents cannot write the included files or the lock,
-and the tripwire reports a change by any route. `bdd vocabulary list` shows where each step is defined and `bdd vocabulary
+changes, is added or is no longer included, `bdd lint` reports `L013`. Pinning is the person's act: the guard refuses `bdd vocabulary pin` (and `bdd init --shared-vocabulary`) in
+every tool call, so run it yourself (in Claude Code, type `! bdd vocabulary pin`). Agents cannot write the included files
+or the lock, also when the include list is broken or a file is only named in the lock, and the tripwire reports a change
+by any route. `bdd vocabulary list` shows where each step is defined and `bdd vocabulary
 check` runs the vocabulary checks without the feature files. In an existing project, `bdd init --shared-vocabulary FILE`
 adds the include and pins it in one step.
 

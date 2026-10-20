@@ -119,18 +119,35 @@ class OutputTest(PrHelpers, ProjectCase):
         self.assertEqual((code, out.strip()), (0, "FEAT-007: wrote PULL_REQUEST.md"))
         self.assertIn("# FEAT-007", (self.root / "PULL_REQUEST.md").read_text(encoding="utf-8"))
 
-    def test_an_existing_file_is_replaced_only_with_force(self):
+    def test_an_existing_file_is_never_replaced(self):
         self.prepare()
         self.assertEqual(self.cli("--write")[0], 0)
+        (self.root / "PULL_REQUEST.md").write_text("mine\n", encoding="utf-8", newline="\n")
         code, _, err = self.cli("--write")
         self.assertEqual(code, 2)
-        self.assertIn("use --force", err)
-        self.assertEqual(self.cli("--write", "--force")[0], 0)
+        self.assertIn("never replaced", err)
+        self.assertEqual((self.root / "PULL_REQUEST.md").read_text(encoding="utf-8"), "mine\n")
 
-    def test_a_folder_in_the_way_is_never_replaced(self):
+    def test_a_folder_in_the_way_is_not_written_over(self):
         self.prepare()
         (self.root / "PULL_REQUEST.md").mkdir()
-        self.assertEqual(self.cli("--write", "--force")[0], 2)
+        self.assertEqual(self.cli("--write")[0], 2)
+
+    def test_a_link_in_the_way_is_not_followed(self):
+        self.prepare()
+        state_file = self.feature_dir / "state.json"
+        before = state_file.read_bytes()
+        try:
+            (self.root / "PULL_REQUEST.md").symlink_to(state_file)
+        except OSError:
+            self.skipTest("symbolic links are not available here")
+        self.assertEqual(self.cli("--write")[0], 2)
+        self.assertEqual(state_file.read_bytes(), before)
+
+    def test_there_is_no_force_option(self):
+        self.prepare()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cli("--write", "--force")
 
     def test_the_file_is_written_in_the_root_whatever_the_current_folder(self):
         self.prepare()

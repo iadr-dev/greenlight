@@ -131,7 +131,7 @@ class Project:
         self.root = root.resolve()
         self.config = cfg.load(self.root)
         self.locked: dict[str, Locked] = {}
-        self.shared = {path_key(f): f for f in sharedvocab.safe_closure(self.config.vocabulary_file)}   # included vocabularies
+        self.shared = {path_key(f): f for f in sharedvocab.protected_files(self.config.vocabulary_file)}   # included vocabularies
         self.load_locks()
         # The other repositories of a workspace are protected with their own locks and data, wherever the tool call
         # reaches them from. Which directories a session includes is not in the hook input, so a member that no tool
@@ -263,6 +263,14 @@ NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-ma
                 "read-only ones (run, test, ls, list, why, view, info, outdated, audit, --version), and may not use npx, pnpx, "
                 "bunx or corepack. Put the subcommand first and the flags after it (`npm run typecheck --prefix tests`). "
                 "Installing is the person's decision; report the missing requirement instead.")
+
+
+_PIN_COMMAND = re.compile(r"\bvocabulary\s+pin\b|--shared-vocabulary\b", re.IGNORECASE)
+PIN_MESSAGE = ("greenlight: pinning a shared vocabulary says that a person has read the included files, so it is the person's "
+               "act and no tool call may do it. Ask the person to read the files and run `bdd vocabulary pin` themselves "
+               "(in Claude Code, type `! ` followed by the command).")
+_PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
+PR_FILE = "PULL_REQUEST.md"
 
 
 def _last_segment(word: str) -> str:
@@ -433,8 +441,8 @@ def mentioned_protected(project: Project, command: str, cwd: Path | None = None)
         for managed in MANAGED_DIRS:
             if names_segment(text, managed) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
-        for shared in project.shared.values():                      # an included vocabulary, named by its path in the project
-            if project.relative(shared).casefold() in text:
+        for shared in project.shared.values():                      # an included vocabulary, by its bare name or a glob
+            if names_segment(text, shared.name.casefold()):
                 return shared, None
     return None
 
@@ -556,6 +564,12 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     if starts_claude_session(command):
         return NESTED_SESSION_MESSAGE
     scrubbed = _NOISE.sub(" ", command)
+    if _PIN_COMMAND.search(scrubbed):
+        return PIN_MESSAGE
+    if agent and _PR_WRITE.search(scrubbed):                       # `bdd pr --write` writes a file in the project root
+        written = check_file_write(project, project.root / PR_FILE, agent)
+        if written:
+            return written
     if agent and _INSTALL.search(scrubbed):
         return INSTALL_MESSAGE
     if agent and refuses_node_packages(scrubbed):

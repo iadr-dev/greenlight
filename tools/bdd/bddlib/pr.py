@@ -391,20 +391,11 @@ def render(facts: dict) -> str:
 
 
 # -- command ------------------------------------------------------------------------------------
-def write_target(root: Path, force: bool) -> Path:
-    """``PULL_REQUEST.md`` in the project root: a fixed name, so no argument can steer where the file goes."""
-    target = root / OUTPUT_FILE
-    if target.is_dir() or (target.exists() and not force):
-        raise UsageError(f"{OUTPUT_FILE} exists; use --force to replace it")
-    return target
-
-
 def run(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd pr", description="A pull-request description from a feature's records.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("--json", action="store_true", help="the facts as JSON instead of Markdown")
     ap.add_argument("--write", action="store_true", help=f"write {OUTPUT_FILE} in the project root instead of stdout")
-    ap.add_argument("--force", action="store_true", help=f"with --write: replace an existing {OUTPUT_FILE}")
     args = ap.parse_args(argv)
 
     def action() -> int:
@@ -414,9 +405,13 @@ def run(argv: list[str]) -> int:
         if not args.write:
             sys.stdout.write(text)
             return 0
-        target = write_target(root, args.force)
         try:
-            Path(target).write_text(text, encoding="utf-8", newline="\n")
+            with (root / OUTPUT_FILE).open("x", encoding="utf-8", newline="\n") as handle:       # a new file only
+                handle.write(text)
+        except FileExistsError:
+            print(f"bdd pr: {OUTPUT_FILE} already exists and is never replaced; remove it first or redirect the output "
+                  "to another name", file=sys.stderr)
+            return 2
         except OSError as exc:
             print(f"bdd pr: cannot write {OUTPUT_FILE}: {exc.strerror or exc}", file=sys.stderr)
             return 2
