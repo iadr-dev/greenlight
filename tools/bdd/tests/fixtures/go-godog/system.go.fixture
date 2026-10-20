@@ -1,0 +1,115 @@
+package drivers
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// A complete in-memory system for the contract test: every seam is implemented, so every core step can run.
+type System struct {
+	Clock *Clock
+	Stubs *Stubs
+
+	rows      map[string][]map[string]any
+	received  map[string][]any
+	published map[string][]any
+	flags     map[string]bool
+	queries   QueryCounter
+}
+
+func (s *System) init() {
+	if s.rows == nil {
+		s.rows, s.received, s.published, s.flags = map[string][]map[string]any{}, map[string][]any{}, map[string][]any{}, map[string]bool{}
+	}
+}
+
+func (s *System) Seed(entity string, rows []map[string]any) error {
+	s.init()
+	s.rows[entity] = append(s.rows[entity], rows...)
+	return nil
+}
+
+func (s *System) Authenticate(actor, role string) (http.Header, error) {
+	return http.Header{"Authorization": []string{"Bearer " + actor + ":" + role}}, nil
+}
+
+func (s *System) SetFlag(flag string, enabled bool) error {
+	s.init()
+	s.flags[flag] = enabled
+	return nil
+}
+
+func (s *System) Handler() (http.Handler, error) {
+	s.init()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /orders", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, `{"error":"sign in first"}`, http.StatusUnauthorized)
+			return
+		}
+		var order map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&order)
+		if _, err := s.Stubs.Call("payments", "charge", map[string]any{"amount": 900}); err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
+			return
+		}
+		s.queries.Record("INSERT INTO orders")
+		order["status"] = "placed"
+		s.rows["order"] = append(s.rows["order"], order)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": len(s.rows["order"]), "status": "placed", "total": 900})
+	})
+	mux.HandleFunc("GET /orders", func(w http.ResponseWriter, r *http.Request) {
+		s.queries.Record("SELECT * FROM orders")
+		if s.flags["n-plus-one"] {
+			for range s.rows["order"] {
+				s.queries.Record("SELECT * FROM lines WHERE order_id = ?")
+			}
+		}
+		_ = json.NewEncoder(w).Encode(s.rows["order"])
+	})
+	mux.HandleFunc("GET /time", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"now": s.Clock.Now().UTC().Format(time.RFC3339)})
+	})
+	return mux, nil
+}
+
+func (s *System) DeliverEvent(event string, payload any) error {
+	s.init()
+	s.received[event] = append(s.received[event], payload)
+	return nil
+}
+
+func (s *System) RunJob(job string) error {
+	s.init()
+	if job == "receipts" {
+		s.published["receipt"] = append(s.published["receipt"], s.received["payment"]...)
+		return nil
+	}
+	return ExpectedMissing("the " + job + " job")
+}
+
+func (s *System) Complete(operation string, fields map[string]any) map[string]any {
+	if operation == "place order" && fields["qty"] == nil {
+		fields = map[string]any{"item": fields["item"], "qty": 1}
+	}
+	return fields
+}
+
+func (s *System) Records(entity string) ([]map[string]any, error) {
+	s.init()
+	return s.rows[entity], nil
+}
+
+func (s *System) QueriesExecuted() (int, error) { return s.queries.Count(), nil }
+
+func (s *System) Published(event string) ([]any, error) {
+	s.init()
+	return s.published[event], nil
+}
+
+func (s *System) Reset() {}
+
+var _ = strings.TrimSpace

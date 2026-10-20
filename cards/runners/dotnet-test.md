@@ -5,6 +5,9 @@ apply_when: "a .NET project tested with xUnit, NUnit or MSTest through dotnet te
 ---
 ## Run
 
+For Reqnroll features use the `dotnet-reqnroll` adapter instead of this recipe: it ships the steps, the drivers, the pinned
+packages, a wrapper that builds the test filter and the run command. The rest of this card is for other .NET test projects.
+
 Give the tests of a feature a category (xUnit: `[Trait("Category", "FEAT_007")]`; NUnit: `[Category("FEAT_007")]`;
 MSTest: `[TestCategory("FEAT_007")]`) and add the JUnit logger to the test project (`JunitXml.TestLogger`, pinned):
 

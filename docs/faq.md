@@ -29,9 +29,10 @@ plugin. `--uninstall` removes exactly what was installed. Those tools run no gre
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
-Today: Python with pytest and pytest-bdd (services, libraries, command-line tools), web UIs with Playwright (TypeScript),
-Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests, and any runner that writes a JUnit report
-(`generic-junit`). See [adapters](adapters.md) for what each covers and what it does not. The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
+Today: Python with pytest and pytest-bdd, Go with godog, .NET with Reqnroll (services, libraries, command-line tools), web UIs
+with Playwright (TypeScript), Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests, and any runner
+that writes a JUnit report (`generic-junit`). See [adapters](adapters.md) for what each covers and what it does not. The `bdd` tool
+itself is language independent and needs only Python 3.11+ on the machine.
 
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.

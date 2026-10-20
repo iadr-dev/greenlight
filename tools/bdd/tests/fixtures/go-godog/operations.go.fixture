@@ -1,0 +1,39 @@
+package drivers
+
+import "fmt"
+
+type Route struct{ Method, Path string }
+
+type ErrorRule struct {
+	Statuses  []int
+	ErrorType string
+	ExitCode  *int
+	Text      string
+}
+
+var API = map[string]Route{
+	"place order": {"POST", "/orders"},
+	"list orders": {"GET", "/orders"},
+	"look up time": {"GET", "/time"},
+}
+
+var Commands = map[string][]string{
+	"show version":  {"go", "version"},
+	"misuse the tool": {"go", "nosuchsubcommand"},
+}
+
+var Lib = map[string]func(input any) (any, error){
+	"describe": func(input any) (any, error) {
+		fields, _ := input.(map[string]any)
+		return map[string]any{"name": fields["name"], "lines": []any{map[string]any{"sku": "a1"}}}, nil
+	},
+	"refuse": func(input any) (any, error) { return nil, fmt.Errorf("refused: %v", input) },
+}
+
+var Files = map[string]string{"report": "out/report.txt"}
+
+var Errors = map[string]ErrorRule{
+	"unauthorised":    {Statuses: []int{401, 403}},
+	"unknown command": {Text: "unknown command"},
+	"refusal":         {Text: "refused"},
+}
