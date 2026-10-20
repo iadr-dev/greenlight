@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import approvals, enforcement, featurefiles, lockfile, state, store, tripwire
+from . import approvals, classify, enforcement, featurefiles, lockfile, runner, state, store, tripwire
+from . import config as cfg
 from .errors import UsageError
 
 # Human gates that must be validly approved before a machine gate may pass.
@@ -30,11 +31,32 @@ def lock_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
     return problems + [str(v) for v in lockfile.check(root, feature_dir, feature_id, lockfile.SCOPES, current)]
 
 
+RUN_EXPECTED = {"bind": "red", "verify": "green"}
+
+
+def run_problems(root: Path, feature_id: str, gate: str) -> list[str]:
+    """When the adapter has a run command, ``bind`` needs a valid red and ``verify`` a green, from a
+    run that ``bdd run`` recorded against the files as they are now."""
+    config = cfg.load(root)
+    if gate not in RUN_EXPECTED or not config.runs:
+        return []
+    expect = RUN_EXPECTED[gate]
+    try:
+        record = runner.load_latest(root, feature_id)
+        if record.get("inputs") != runner.inputs_digest(root, feature_id):
+            return [f"the recorded run is out of date: the feature files or steps changed since `bdd run {feature_id}`"]
+        verdict = classify.classify_run(record, classify.feature_scenarios(root, feature_id), list(config.runs))[expect]
+    except UsageError as exc:
+        return [str(exc)]
+    return [] if verdict["valid"] else [f"the recorded run is not a valid {expect}: " + "; ".join(verdict["problems"])]
+
+
 def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str) -> list[str]:
     """Reasons a *passing* result may not be recorded yet (empty list = fine)."""
     problems: list[str] = []
     for human_gate in APPROVALS_NEEDED.get(gate, ()):
         problems += approvals.effective_problems(root, data, human_gate)
+    problems += run_problems(root, data["feature"], gate)
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
         problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]

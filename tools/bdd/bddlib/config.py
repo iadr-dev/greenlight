@@ -28,6 +28,22 @@ class ScanRules:
 
 
 @dataclass(frozen=True)
+class RunRules:
+    """How to run an adapter's tests and read their failures (``[adapters.run]`` / ``[adapters.classify]``).
+
+    Commands are split into words before ``{root}``, ``{python}``, ``{tag}``, ``{out}``, ``{seed}`` and
+    ``{scenario}`` are filled in, so a value can never add words to the command."""
+    adapter: str
+    by_tag: str                              # runs the tests carrying {tag}
+    report: str                              # extra words that make the runner write JUnit XML to {out}
+    shuffle: str = ""                        # extra words for a random order with {seed}
+    isolated: str = ""                       # extra words that select one {scenario}
+    timeout: int = 600
+    test_defect: tuple[str, ...] = ()        # failure text of a broken test (first match wins, checked first)
+    expected_fail: tuple[str, ...] = ()      # failure text of a test that fails because the feature is missing
+
+
+@dataclass(frozen=True)
 class Config:
     root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
@@ -41,6 +57,7 @@ class Config:
     enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
     scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
     version: int = SCHEMA_VERSION            # the schema this project's .bdd/ is at
+    runs: tuple[RunRules, ...] = ()          # one per adapter that has an [adapters.run] table
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -59,12 +76,12 @@ def find_root(start: Path | str | None = None) -> Path | None:
 def _patterns(table: dict, key: str, path: Path) -> tuple[str, ...]:
     values = table.get(key, [])
     if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
-        raise ConfigError(f"{path}: [adapters.scan] {key} must be a list of regular expressions")
+        raise ConfigError(f"{path}: {key} must be a list of regular expressions")
     for value in values:
         try:
             re.compile(value)
         except re.error as exc:
-            raise ConfigError(f"{path}: [adapters.scan] {key}: {value!r} is not a valid regular expression ({exc})") from exc
+            raise ConfigError(f"{path}: {key}: {value!r} is not a valid regular expression ({exc})") from exc
     return tuple(values)
 
 
@@ -80,6 +97,25 @@ def _scan_rules(root: Path, adapter: dict, path: Path) -> ScanRules | None:
     dirs = tuple(root / adapter[key] for key in ("steps", "drivers") if key in adapter)
     return ScanRules(dirs, start, _patterns(table, "assert_patterns", path), _patterns(table, "sleep_patterns", path),
                      _patterns(table, "stub_patterns", path))
+
+
+def _run_rules(adapter: dict, path: Path) -> RunRules | None:
+    table = adapter.get("run")
+    if table is None:
+        return None
+    for key in ("by_tag", "report"):
+        if not isinstance(table.get(key), str) or not table[key].strip():
+            raise ConfigError(f"{path}: [adapters.run] needs {key}, the command words as one string")
+    for key in ("shuffle", "isolated"):
+        if not isinstance(table.get(key, ""), str):
+            raise ConfigError(f"{path}: [adapters.run] {key} must be a string")
+    timeout = table.get("timeout", 600)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+        raise ConfigError(f"{path}: [adapters.run] timeout must be a whole number of seconds")
+    classify = adapter.get("classify", {})
+    return RunRules(str(adapter.get("name", "")), table["by_tag"], table["report"], table.get("shuffle", ""),
+                    table.get("isolated", ""), timeout, _patterns(classify, "test_defect", path),
+                    _patterns(classify, "expected_fail", path))
 
 
 def _schema_version(data: dict, path: Path) -> int:
@@ -149,4 +185,5 @@ def load(root: Path | str | None) -> Config:
         enforcement=enforcement,
         scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
         version=version,
+        runs=tuple(r for r in (_run_rules(a, path) for a in data.get("adapters", [])) if r),
     )

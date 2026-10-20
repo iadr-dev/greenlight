@@ -75,7 +75,8 @@ def scenario_rows(root: Path, files: list[Path]) -> tuple[list[dict], list[Gap]]
             tags = feature.effective_tags(scenario, rule)
             rule_tag = next((m.group(0)[1:] for m in map(tagcheck.RULE.fullmatch, tags) if m), None)
             example = next((m.group(0)[1:] for m in map(tagcheck.EXAMPLE.fullmatch, tags) if m), None)
-            rows.append({"path": rel, "line": scenario.line, "name": scenario.name, "rule": rule_tag, "example": example})
+            rows.append({"path": rel, "line": scenario.line, "name": scenario.name, "rule": rule_tag, "example": example,
+                         "existing": "@existing" in tags})
     return rows, problems
 
 
