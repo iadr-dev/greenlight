@@ -118,3 +118,7 @@ jobs:
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
+      - name: The Stryker wrapper with the real Stryker (weak tests leave survivors, strong tests do not)
+        env:
+          GREENLIGHT_NODE_MUTATION_TESTS: "1"
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_mutation_wrapper_ts.py" -v

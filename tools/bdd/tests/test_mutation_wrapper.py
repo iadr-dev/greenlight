@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import adapter, cli, mutation, state
+from bddlib import adapter, cli, mutation, redrecord, state
 from bddlib import config as cfg
 
 from tests.test_redrecord import GIT, run_git
@@ -191,7 +191,7 @@ class RealMutmutTest(unittest.TestCase):
         run_git(self.root, "init", "-q")
         run_git(self.root, "add", "-A")
         run_git(self.root, "commit", "-q", "-m", "initial")
-        commit = run_git(self.root, "rev-parse", "HEAD").strip()
+        commit = redrecord.git(self.root, "rev-parse", "HEAD").strip()
         self.feature_dir = state.create(self.root, "FEAT-007", "Discounts", "standard")
         state.update(self.feature_dir, lambda d: d.update(red={"commit": commit, "dirty": False, "source_hash": "", "at": "now"}))
         self.write("shop/discount.py", DISCOUNT)
