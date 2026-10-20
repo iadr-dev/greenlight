@@ -217,7 +217,6 @@ def check_enforcement_files(path: Path) -> str | None:
     return None
 
 
-_BDD_SEGMENT = re.compile(r"(?<![\w.-])\.bdd(?![\w.-])")
 _INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
                       r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
 _ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv|node_modules)(?![\w.-])", re.IGNORECASE)   # a whole path segment
@@ -337,7 +336,34 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     return None
 
 
-def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | None] | None:
+def segment_glob_reaches(text: str, name: str) -> bool:
+    """Could a glob in the command expand to the folder or file ``name`` (a name that starts with a dot)?
+
+    Decided by matching the glob against the real name: `.b*`, `.?dd` and `.*` reach `.bdd`; `.gitignore*` and `src/*`
+    do not. Shells do not let `*` match a leading dot, so a segment has to start with a dot to count."""
+    for token in re.split(r"[\s;&|()`]+", text):
+        for segment in token.split("/"):
+            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(name, segment):
+                return True
+    return False
+
+
+def names_segment(text: str, name: str) -> bool:
+    """Does ``name`` appear in the command as a whole path segment, spelled out or reached by a glob?"""
+    return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None or segment_glob_reaches(text, name)
+
+
+def cwd_inside(project: Project, cwd: Path | None, folder: str = "") -> bool:
+    """Is the working directory of the call at or below ``.bdd`` (or ``.bdd/<folder>``)? A command that starts there
+    can name a file in it by its bare name."""
+    if cwd is None:
+        return False
+    base = path_key(project.root / cfg.BDD_DIR / folder) if folder else path_key(project.root / cfg.BDD_DIR)
+    key = path_key(cwd)
+    return key == base or key.startswith(base + "/")
+
+
+def mentioned_protected(project: Project, command: str, cwd: Path | None = None) -> tuple[Path, Locked | None] | None:
     """A locked or managed file that the command names, if there is one.
 
     Matches on the file name anywhere in the command text, whatever the quoting or slash style
@@ -345,7 +371,7 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
     command that ``cd``s first or builds the path in a script is still recognised. A false alarm
     only produces a clear refusal; a miss would defeat the point."""
     by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
-    names = sorted(set(by_name) | MANAGED_NAMES | {"standards.md"}, key=len, reverse=True)
+    names = sorted(set(by_name) | MANAGED_NAMES, key=len, reverse=True)
     pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
     for reading in shell_readings(command):
         text = reading.casefold()
@@ -354,12 +380,14 @@ def mentioned_protected(project: Project, command: str) -> tuple[Path, Locked | 
             name = match.group(0)
             lock = by_name.get(name)
             return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
-        in_bdd = _BDD_SEGMENT.search(text) is not None                  # `cd .bdd && echo x > config.toml` names the file bare
+        # `cd .bdd && echo x > config.toml`, a call that already runs inside .bdd, and `.b*/config.toml` all name a person
+        # file by its bare name or through a glob
+        in_bdd = names_segment(text, cfg.BDD_DIR) or cwd_inside(project, cwd)
         for person_file in PERSON_FILES:
             if f".bdd/{person_file}" in text or (in_bdd and re.search(rf"(?<![\w.-]){re.escape(person_file)}(?![\w-])", text)):
                 return project.root / cfg.BDD_DIR / person_file, None
         for managed in MANAGED_DIRS:
-            if f"/{managed}/" in text:
+            if names_segment(text, managed) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
     return None
 
@@ -472,7 +500,7 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
-def check_bash(project: Project, command: str, agent: str | None = None) -> str | None:
+def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
     """Best effort: block a command that runs an approval or a nested Claude session, or that both
     names a protected file and looks like it writes."""
     injection = check_injection({"command": command})
@@ -492,7 +520,7 @@ def check_bash(project: Project, command: str, agent: str | None = None) -> str 
     if command_touches_enforcement(scrubbed):
         return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
                                    "(Claude Code hook settings or the plugin itself)")
-    hit = mentioned_protected(project, scrubbed)
+    hit = mentioned_protected(project, scrubbed, cwd)
     if hit is None:
         return None
     target, lock = hit
@@ -519,7 +547,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         return check_file_write(project, raw if raw.is_absolute() else cwd / raw, agent_name(payload))
     if tool == "Bash" and tool_input.get("command"):
-        return check_bash(project, tool_input["command"], agent_name(payload))
+        return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None
 
 

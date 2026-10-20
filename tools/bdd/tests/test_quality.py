@@ -262,6 +262,46 @@ class StandardsFileTest(ProjectCase):
                                          "tool_input": {"command": f"cd .bdd && echo x > {name}"}})
                 self.assertIn("managed by", reason)
 
+    def bash(self, command: str, cwd: Path | None = None) -> str | None:
+        return guard.evaluate({"tool_name": "Bash", "cwd": str(cwd or self.root), "tool_input": {"command": command}})
+
+    def test_a_call_that_already_runs_inside_bdd_names_the_files_by_their_bare_name(self):
+        inside = self.root / ".bdd"
+        for name in ("standards.md", "config.toml"):
+            with self.subTest(name=name):
+                self.assertIn("managed by", self.bash(f"echo x > {name}", inside))
+        self.assertIsNone(self.bash("ls", inside))                                       # reading is fine
+        self.assertIsNone(self.bash("echo x > standards.md", self.root / "src"))        # another folder's file
+
+    def test_a_glob_that_can_expand_to_bdd_is_treated_as_naming_it(self):
+        for command in ("echo x > .b*/standards.md", "echo x > .?dd/config.toml", "echo x > .*/standards.md",
+                        "cp evil .bd[d]/standards.md"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.bash(command))               # `.*` also reaches .claude: either message blocks
+        self.assertIn("managed by", self.bash("echo x > .b*/standards.md"))
+        self.assertIsNone(self.bash("echo x > .git*/standards.md"))
+        self.assertIsNone(self.bash("echo x > src/*/standards.md"))
+
+    def test_the_managed_folders_are_matched_as_whole_segments_wherever_the_command_starts(self):
+        data = self.root / ".bdd"
+        for command, cwd in (("cd .bdd/.runs && echo {} > latest.json", None), ("echo {} > latest.json", data / ".runs"),
+                             ("echo {} > .bdd/.ru*/latest.json", None), ("echo {} > .bdd/.integrity", None),
+                             ("cd .integrity && echo {} > violations.json", data), ("echo x > .enforcement", data)):
+            with self.subTest(command=command):
+                self.assertIn("managed by", self.bash(command, cwd))
+        self.assertIsNone(self.bash("cd src && echo {} > latest.json"))
+        self.assertIsNone(self.bash("echo {} > not.runs/latest.json"))
+
+    def test_the_tripwire_reports_a_change_by_any_route_and_the_gates_see_it(self):
+        self.write(".bdd/standards.md", "Status: DRAFT\n")
+        with tempfile.TemporaryDirectory() as claude_dir, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": claude_dir}):
+            tripwire.accept(self.root, None)
+            self.assertEqual(tripwire.check(self.root, None), [])
+            (self.root / ".bdd" / "standards.md").write_text("Status: APPROVED\n", encoding="utf-8", newline="\n")
+            found = tripwire.check(self.root, None, "Bash")
+        self.assertEqual([(f["kind"], Path(f["path"]).name) for f in found], [("changed", "standards.md")])
+        self.assertEqual([Path(v["path"]).name for v in tripwire.open_violations(self.root)], ["standards.md"])
+
     def test_a_config_file_of_another_folder_is_not_mistaken_for_it(self):
         reason = guard.evaluate({"tool_name": "Bash", "cwd": str(self.root),
                                  "tool_input": {"command": "cd src && echo x > config.toml"}})
