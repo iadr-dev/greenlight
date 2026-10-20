@@ -7,11 +7,17 @@ Run it after every Claude Code upgrade and before a release:
 
     python evals/platform-probe/probe.py
 
-Exit code 0 only if every check passes. Needs `claude` on PATH and working credentials;
-it makes a handful of small model calls. Not part of CI.
+Exit code 0 only if every check passes. The Claude Code probes need `claude` on PATH and working credentials and
+make a handful of small model calls. When `codex` is on PATH the Codex probes run too; they make no model calls
+(they read `codex features list` and the prompt input that `codex debug prompt-input` renders). Not part of CI.
+
+    python evals/platform-probe/probe.py                # every tool found on PATH
+    python evals/platform-probe/probe.py --claude-only
+    python evals/platform-probe/probe.py --codex-only
 """
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -34,6 +40,7 @@ MULTI_STEP_PROMPT = (
     "subagent to write a file probe-out.txt containing hi."
 )
 TRANSCRIPT_ROOT = Path.home() / ".claude" / "projects"
+REPO = Path(__file__).resolve().parents[2]
 HOOK_EVENT = "hook_event_name"
 
 
@@ -184,6 +191,52 @@ class Probe:
         self.check("P16 /loop schedules through CronCreate", "CronCreate" in tools, repr(sorted(tools)))
 
 
+# -- Codex ---------------------------------------------------------------------------------
+def codex_run(words: list[str], cwd: Path) -> str:
+    program = shutil.which("codex") or "codex"                 # on Windows an npm shim such as codex.cmd
+    done = subprocess.run([program, *words], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          stdin=subprocess.DEVNULL, timeout=120)
+    return (done.stdout or "") + (done.stderr or "")
+
+
+def feature_state(listing: str, name: str) -> str | None:
+    """The stage column of `codex features list` for ``name`` (stable, removed, ...), or None if it is not listed."""
+    for line in listing.splitlines():
+        words = line.split()
+        if words and words[0] == name and len(words) >= 2:
+            return " ".join(words[1:-1])
+    return None
+
+
+def codex_probes() -> list[tuple[str, bool, str]]:
+    """What greenlight relies on in Codex: skills installed by `bdd install-skills codex` are visible to the model, and
+    hooks are a user-configured feature, not something a plugin ships (docs/dev/platform-notes.md P15)."""
+    results: list[tuple[str, bool, str]] = []
+    project = Path(tempfile.mkdtemp(prefix="greenlight-codex-probe-"))
+    try:
+        (project / ".bdd").mkdir()
+        (project / ".bdd" / "config.toml").write_text('autonomy = "guided"\n', encoding="utf-8")
+        installed = subprocess.run([sys.executable, "-I", str(REPO / "tools" / "bdd" / "main.py"), "install-skills", "codex"],
+                                   cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        results.append(("P15 bdd install-skills codex succeeds", installed.returncode == 0, installed.stderr[-200:]))
+        names = sorted("greenlight-" + p.parent.name for p in (REPO / "skills").glob("*/SKILL.md"))
+        if "prompt-input" in codex_run(["debug", "--help"], project):
+            visible = codex_run(["debug", "prompt-input", "hello"], project)
+            missing = [n for n in names if n not in visible]
+            results.append(("P15 Codex lists every installed greenlight skill in its prompt input", not missing,
+                            f"missing: {missing}"))
+        else:
+            print("SKIP  `codex debug prompt-input` is not available in this Codex; skills were not checked")
+        features = codex_run(["features", "list"], project)
+        hooks, plugin_hooks = feature_state(features, "hooks"), feature_state(features, "plugin_hooks")
+        results.append(("P15 Codex hooks feature is stable (users configure hooks themselves)", hooks == "stable", repr(hooks)))
+        results.append(("P15 Codex plugin_hooks is removed or absent (a plugin cannot ship hooks)",
+                        plugin_hooks in (None, "removed"), repr(plugin_hooks)))
+    finally:
+        shutil.rmtree(project, ignore_errors=True)
+    return results
+
+
 def report(results: list[tuple[str, bool, str]]) -> int:
     width = max(len(n) for n, _, _ in results)
     for name, ok, detail in results:
@@ -193,10 +246,7 @@ def report(results: list[tuple[str, bool, str]]) -> int:
     return 0 if all(ok for _, ok, _ in results) else 1
 
 
-def main() -> int:
-    if not shutil.which("claude"):
-        print("claude CLI not found on PATH")
-        return 2
+def claude_probes() -> list[tuple[str, bool, str]]:
     root = Path(tempfile.mkdtemp(prefix="greenlight-probe-"))
     try:
         log = root / "log.jsonl"
@@ -206,9 +256,27 @@ def main() -> int:
         probe.typed_command()
         probe.model_paths()
         probe.loop_scheduling()
-        return report(probe.results)
+        return probe.results
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Re-verify the platform behaviours greenlight depends on.")
+    only = ap.add_mutually_exclusive_group()
+    only.add_argument("--claude-only", action="store_true", help="skip the Codex probes")
+    only.add_argument("--codex-only", action="store_true", help="skip the Claude Code probes")
+    args = ap.parse_args()
+    run_claude = not args.codex_only and shutil.which("claude") is not None
+    run_codex = not args.claude_only and shutil.which("codex") is not None
+    for tool, wanted, found in (("claude", not args.codex_only, run_claude), ("codex", not args.claude_only, run_codex)):
+        if wanted and not found:
+            print(f"SKIP  {tool} is not on PATH; its probes were not run")
+    if not (run_claude or run_codex):
+        print("neither claude nor codex found on PATH")
+        return 2
+    results = (claude_probes() if run_claude else []) + (codex_probes() if run_codex else [])
+    return report(results)
 
 
 if __name__ == "__main__":

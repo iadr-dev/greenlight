@@ -76,7 +76,10 @@ class CiTemplateTest(unittest.TestCase):
     def test_the_loop_only_covers_finished_features(self):
         for name in ADAPTERS:
             with self.subTest(adapter=name):
-                self.assertIn('$("$bdd" status --done)', workflow(name))
+                text = workflow(name)
+                self.assertIn('ids=$("$bdd" status --done)', text)           # captured first: a failure must stop the job
+                self.assertIn("for id in $ids; do", text)
+                self.assertNotIn('in $("$bdd"', text)
 
 
 if __name__ == "__main__":
