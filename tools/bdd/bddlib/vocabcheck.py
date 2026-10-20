@@ -70,6 +70,12 @@ def where(entry: Entry, path: str, texts: dict[str, str]) -> tuple[str, int]:
     return file, locate(texts.get(file, ""), entry.id)
 
 
+def to_report(candidates: list[Entry], path: str) -> Entry:
+    """The duplicate to report: the one in the project's own file, which its owner can change, else the later one."""
+    own = [e for e in candidates if (e.origin or path) == path]
+    return (own or candidates)[-1]
+
+
 def exact_duplicates(a: Entry, b: Entry) -> list[str]:
     """Pattern texts that ``a`` and ``b`` both define, compared as the lint compares steps."""
     mine = {normalize(p.text).casefold() for p in _own_patterns(a)}
@@ -84,10 +90,12 @@ def check_exact_duplicates(entries: list[Entry], path: str, texts: dict[str, str
             if a.kind != b.kind:
                 continue
             for text in exact_duplicates(a, b):
-                file, line = where(b, path, texts)
+                target = to_report([a, b], path)
+                other = a if target is b else b
+                file, line = where(target, path, texts)
                 issues.append(Issue(file, line, ERROR, "L014",
-                                    f'{a.id} ({where(a, path, texts)[0]}) and {b.id} define the same pattern "{text}": a step '
-                                    "that matches it is ambiguous; keep one definition"))
+                                    f'{target.id} and {other.id} ({where(other, path, texts)[0]}) define the same pattern '
+                                    f'"{text}": a step that matches it is ambiguous; keep one definition'))
     return issues
 
 
@@ -107,7 +115,7 @@ def check_near_duplicates(entries: list[Entry], threshold: float, path: str, sou
             best = max(((similarity(pa.text, pb.text), pa.text, pb.text)
                         for pa in _own_patterns(a) for pb in _own_patterns(b)), default=None)
             if best and best[0] >= threshold:
-                target = unjustified[-1]      # the later definition is the duplicate
+                target = to_report(unjustified, path)
                 file, line = where(target, path, texts)
                 issues.append(Issue(file, line, ERROR, "L010",
                                     f'{a.id} "{best[1]}" and {b.id} "{best[2]}" are nearly identical '

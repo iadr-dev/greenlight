@@ -25,6 +25,7 @@ from .statecmd import guarded, project_root
 SUMMARY_SECTIONS = ("Problem statement", "The ask")
 SUMMARY_LIMIT = 700
 STABILITY_RESULT = "stability.json"
+DECISION_WORD = {"approve": "approved", "reject": "rejected"}
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEADING = re.compile(r"^#{1,6}\s*(.*?)\s*$")
 _VERDICT = re.compile(r"^Verdict:\s*(PASS|FINDINGS)\b", re.MULTILINE)
@@ -274,17 +275,18 @@ def render(facts: dict) -> str:
     out += [f"## Rules and examples ({totals['rules']} rules, {totals['examples']} examples, {totals['scenarios']} scenarios, "
             f"{totals['tasks']} tasks)", ""] + render_matrix(facts["trace"]["rules"]) + [""]
     gaps = facts["trace"]["gaps"]
-    out += ["Traceability gaps: " + ("none." if not gaps else "")]
+    out += ["Traceability gaps: none." if not gaps else "Traceability gaps:"]
     out += [f"- {g['code']}: {cell(g['message'])}" for g in gaps] + [""]
     out += ["## Evidence", "", "| Gate | Result |", "|---|---|"]
     out += [f"| {name} | {g['result']} |" for name, g in facts["gates"].items()] + [""]
     out += ["Approvals:"]
-    out += [f"- {a['gate']}: {a['decision']}d via {a['origin']}" + ("" if a["valid"] or a["decision"] != "approve" else " (NOT valid now)")
+    out += [f"- {a['gate']}: {DECISION_WORD.get(a['decision'], a['decision'])} via {a['origin']}"
+            + ("" if a["valid"] or a["decision"] != "approve" else " (NOT valid now)")
             + (f" - {cell(a['reason'])}" if a["reason"] else "") for a in facts["approvals"]] or ["- none recorded"]
     locks = facts["locks"]
     out += ["", "Locks: " + (("intact (" + ", ".join(locks["scopes"]) + ")") if locks["intact"]
                              else ("none" if not locks["scopes"] else "NOT intact")), ""]
-    out += [f"- {cell(p)}" for p in locks["problems"]]
+    out += [f"- {cell(p)}" for p in locks["problems"]] + ([""] if locks["problems"] else [])
     runs = facts["runs"]
     out += ["## Tests", "", render_run("Red (before the code)", runs["red"], runs["red_digest"]),
             render_run("Latest run", runs["latest"]), ""]

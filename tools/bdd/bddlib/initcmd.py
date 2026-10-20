@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 import shutil
 import sys
 from pathlib import Path
 
-from . import adapter, classify, runner, state
+from . import adapter, classify, runner, sharedvocab, state
 from . import config as cfg
 from .errors import UsageError
 from .statecmd import guarded
@@ -63,6 +64,29 @@ def add_standards(root: Path) -> str | None:
         return None
     shutil.copyfile(adapter.adapters_dir().parent / "templates" / "standards.md", target)
     return f"{cfg.BDD_DIR}/standards.md"
+
+
+def add_shared_vocabulary(root: Path, names: list[str]) -> list[str]:
+    """Include shared vocabulary files (inside the project) in .bdd/vocabulary.toml and pin them. The person runs this after
+    reading the files; an existing [vocabulary] table is left for the person to edit."""
+    target = root / cfg.BDD_DIR / "vocabulary.toml"
+    try:
+        for name in names:
+            sharedvocab.resolve_name(root, target, name)                  # refuses a file that is missing or leaves the project
+    except sharedvocab.IncludeError as exc:
+        raise UsageError(str(exc)) from exc
+    text = target.read_text(encoding="utf-8") if target.is_file() else 'extends = "core"\n'
+    if f"[{sharedvocab.TABLE}]" in text:
+        raise UsageError(f"{cfg.BDD_DIR}/vocabulary.toml already has a [{sharedvocab.TABLE}] table; edit it yourself, then run "
+                         "`bdd vocabulary pin`")
+    listed = ", ".join(json.dumps(name) for name in names)
+    table = f"\n\n[{sharedvocab.TABLE}]\n{sharedvocab.KEY} = [{listed}]\n"
+    target.write_text(text.rstrip("\n") + table, encoding="utf-8", newline="\n")
+    try:
+        pinned = sharedvocab.pin(root, sharedvocab.closure(root, target))
+    except sharedvocab.IncludeError as exc:
+        raise UsageError(f"{exc} ({cfg.BDD_DIR}/vocabulary.toml was written; fix the include and run `bdd vocabulary pin`)") from exc
+    return [f"{cfg.BDD_DIR}/vocabulary.toml (includes {len(names)} file(s))", f"{cfg.BDD_DIR}/{sharedvocab.LOCK_NAME} ({len(pinned)} pinned)"]
 
 
 def write_project(root: Path, autonomy: str, profiles: list[str] | None, python: str | None = None) -> list[str]:
@@ -129,6 +153,8 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--autonomy", default="guided", choices=state.AUTONOMY, help="default autonomy level (default: guided)")
     ap.add_argument("--python", help="the interpreter the project's tests run with (default: .venv or venv in the project)")
     ap.add_argument("--smoke", action="store_true", help="run the adapter's sample feature and clean up")
+    ap.add_argument("--shared-vocabulary", action="append", metavar="FILE",
+                    help="include a shared vocabulary file (inside the project) in .bdd/vocabulary.toml and pin it; repeatable")
     ap.add_argument("--standards", action="store_true",
                     help="add .bdd/standards.md (the engineering standards template) to a project that has none")
     args = ap.parse_args(argv)
@@ -138,6 +164,12 @@ def run(argv: list[str]) -> int:
         if args.detect:
             found = detect(here)
             print("\n".join(f"{name}: {why}" for name, why in found) or "no adapter matched this repository")
+            return 0
+        if args.shared_vocabulary:
+            root = cfg.find_root(here)
+            if root is None:
+                raise UsageError("not inside a greenlight project; run bdd init first")
+            print("\n".join(f"  + {made}" for made in add_shared_vocabulary(root.resolve(), args.shared_vocabulary)))
             return 0
         if args.standards:
             root = cfg.find_root(here)

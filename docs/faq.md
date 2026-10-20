@@ -72,3 +72,12 @@ revert. To change approved work while keeping the history, use `/greenlight:chan
 **Why Python in a tool for any language?**
 It is installed nearly everywhere, the standard library is enough (TOML, JSON, XML), and one deterministic
 implementation of the checks is easier to trust than prompts that re-derive them.
+
+**Can I get a pull-request description out of a feature?**
+Yes: `bdd pr FEAT-n` (add `--output PR.md` or `--json`). It is built from the records, never contacts a git host and is safe to
+paste. See [concepts](concepts.md).
+
+**Can several projects share the same domain steps?**
+Yes. Put the shared vocabulary file in each project (vendored or as a submodule), include it in `.bdd/vocabulary.toml` and
+pin it with `bdd vocabulary pin` after reading it. A change to the file is reported until a person pins it again. See
+[the vocabulary](vocabulary.md).

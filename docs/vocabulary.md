@@ -79,3 +79,35 @@ Rule: An order whose total is 1000 or more gets 10% off the total
 
 `alice`, `member`, `place order` and the table columns come from the glossary and the system map; everything else is
 a core instruction.
+
+## Sharing steps between projects
+
+A platform team can keep the domain steps that several projects use in one file and let each project include it. Put the
+file inside the project (a vendored copy or a git submodule) and name it in `.bdd/vocabulary.toml`:
+
+```toml
+extends = "core"
+
+[vocabulary]
+include = ["vendor/team-vocabulary.toml"]
+```
+
+An included file has the same format as the project's own: steps with ids that start `D.`, each composing core
+instructions. It may include other files; a cycle is an error that names the chain. A name must be a `.toml` file
+relative to the project root and may not resolve outside the project, also through a symbolic link.
+
+| Rule | Why |
+|---|---|
+| A project step cannot reuse the id of a shared step | the shared meaning must not change silently in one project |
+| Two shared files cannot define the same id | one definition per step |
+| The same pattern in two files is `L014` | a step that matches both would be ambiguous |
+| Near-duplicate patterns across files are `L010`, reported in the file the project owns | as for the project's own steps |
+
+**Pinning.** The shared files decide what scenarios mean, so a change has to be seen. `bdd vocabulary pin` records the hash
+of every included file in `.bdd/vocabulary.lock.json` after a person has read them; until then, and whenever a file
+changes, is added or is no longer included, `bdd lint` reports `L013`. Agents cannot write the included files or the lock,
+and the tripwire reports a change by any route. `bdd vocabulary list` shows where each step is defined and `bdd vocabulary
+check` runs the vocabulary checks without the feature files. In an existing project, `bdd init --shared-vocabulary FILE`
+adds the include and pins it in one step.
+
+A pin proves that the file is the one a person read. It does not prove that the file is right.

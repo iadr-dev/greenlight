@@ -45,6 +45,7 @@ Git Bash. Without Git for Windows greenlight still works, but only with soft enf
 /greenlight:adopt "orders module"                 # describe code that already exists, change nothing
 /greenlight:status                                # where everything stands
 /greenlight:change FEAT-001 "what changes, why"   # change approved work, keeping the history
+bdd pr FEAT-001                                   # a pull-request description from the recorded facts
 ```
 
 ## Documentation

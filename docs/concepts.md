@@ -138,3 +138,18 @@ history. Editing a locked file by any other route is a violation.
 | `.bdd/.runs/`, `.integrity/`, `.enforcement/` | machine-local evidence, not committed |
 
 See also [the vocabulary](vocabulary.md) and [adapters](adapters.md).
+
+## The pull-request description
+
+`bdd pr FEAT-n` prints a description for the pull request from the recorded facts: the problem statement from the brief,
+the rules and examples with their scenarios and tasks, the gates and approvals with how each was given, the locks, the
+enforcement level (and why it is soft, if it is), the red and latest runs as counts, the quality, mutation and stability
+results when they exist, the assumptions, the auditor's verdict and findings, and the cost. A feature that ran on
+autopilot starts with an UNREVIEWED notice. Nothing is sent anywhere, no command lines, absolute paths or session
+identifiers are printed, and `--output PR.md` writes a file inside the project. Paste it into the pull request; the
+description is only as current as the records, so run it after the verify phase.
+
+## Shared vocabularies
+
+A team can share domain steps between projects by including a vendored file or submodule in `.bdd/vocabulary.toml`. The
+files are pinned by hash and read-only for agents; see [the vocabulary](vocabulary.md).

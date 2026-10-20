@@ -77,6 +77,11 @@ bound changed afterwards, and the evidence is in `.bdd/features/FEAT-001-*/repor
 `bdd install-skills codex` (or `agents-md`) installs greenlight's instructions for Codex and other agent tools. They
 run without hooks, so enforcement is soft; see [concepts](concepts.md).
 
+## Hand the result to reviewers
+
+`bdd pr FEAT-001 --output PR.md` writes a pull-request description from the recorded facts (rules, examples, evidence,
+assumptions, the auditor's verdict). Paste it into the pull request; see [concepts](concepts.md).
+
 ## Starting from existing code
 
 To put code that already exists under greenlight before you change it, describe one area first:
