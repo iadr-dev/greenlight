@@ -8,7 +8,7 @@ from unittest import mock
 
 from bddlib import cli, doctor, frontmatter, installskills
 
-SKILLS = ("approve", "change", "feature", "init", "status")
+SKILLS = ("adopt", "approve", "change", "feature", "init", "status")
 
 
 class InstallCase(unittest.TestCase):
@@ -136,6 +136,143 @@ class AgentsMdTest(InstallCase):
         before = self.path.read_text(encoding="utf-8")
         self.assertEqual(self.bdd("agents-md", "--force")[0], 1)
         self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
+
+class ClaudeHomeCase(InstallCase):
+    def setUp(self):
+        super().setUp()
+        self.home = tempfile.TemporaryDirectory()
+        self.addCleanup(self.home.cleanup)
+        self.config_dir = Path(self.home.name).resolve() / ".claude"
+        patcher = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.config_dir)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def claude_skill(self, name: str, project: bool = False) -> Path:
+        base = self.root / ".claude" / "skills" if project else self.config_dir / "skills"
+        return base / f"greenlight-{name}" / "SKILL.md"
+
+
+
+class ClaudeTest(ClaudeHomeCase):
+    def test_the_default_is_the_users_folder_and_the_front_matter_keeps_claude_keys(self):
+        code, out, _ = self.bdd("claude")
+        self.assertEqual(code, 0, out)
+        for name in SKILLS:
+            with self.subTest(skill=name):
+                meta, body = frontmatter.parse(self.claude_skill(name).read_text(encoding="utf-8"))
+                self.assertEqual(meta["name"], f"greenlight-{name}")
+                self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", body)
+                self.assertNotIn("/greenlight:", body)
+                self.assertIn("enforcement is\n> soft", body)
+        approve, _ = frontmatter.parse(self.claude_skill("approve").read_text(encoding="utf-8"))
+        self.assertTrue(approve["disable-model-invocation"])               # the model still cannot run it
+        self.assertIn("argument-hint", frontmatter.parse(self.claude_skill("feature").read_text(encoding="utf-8"))[0])
+        self.assertFalse((self.root / ".claude").exists())
+        self.assertIn(installskills.plugin_root_text() + "/tools/bdd/bdd", self.claude_skill("status").read_text(encoding="utf-8"))
+
+    def test_project_scope_goes_into_the_project(self):
+        self.assertEqual(self.bdd("claude", "--project")[0], 0)
+        self.assertTrue(self.claude_skill("feature", project=True).is_file())
+        self.assertFalse(self.config_dir.exists())
+
+    def test_scopes_exclude_each_other_and_user_does_not_go_with_agents_md(self):
+        self.assertEqual(self.bdd("claude", "--user", "--project")[0], 2)
+        self.assertEqual(self.bdd("agents-md", "--user")[0], 2)
+        self.assertEqual(self.bdd("claude", "--uninstall", "--force")[0], 2)
+
+    def test_a_file_of_the_users_is_kept_without_force(self):
+        mine = self.claude_skill("status")
+        mine.parent.mkdir(parents=True)
+        mine.write_text("mine\n", encoding="utf-8")
+        self.assertEqual(self.bdd("claude")[0], 1)
+        self.assertEqual(mine.read_text(encoding="utf-8"), "mine\n")
+        self.assertFalse(self.claude_skill("feature").exists())
+
+
+class UninstallTest(ClaudeHomeCase):
+    def test_claude_skills_are_removed_and_no_empty_folder_is_left(self):
+        self.bdd("claude", "--project")
+        code, out, _ = self.bdd("claude", "--project", "--uninstall")
+        self.assertEqual(code, 0, out)
+        self.assertFalse((self.root / ".claude").exists())
+        self.assertTrue((self.root / ".bdd").is_dir())
+
+    def test_the_home_folder_itself_is_never_removed(self):
+        self.bdd("claude")
+        self.assertEqual(self.bdd("claude", "--uninstall")[0], 0)
+        self.assertTrue(self.config_dir.is_dir())
+        self.assertEqual(os.listdir(self.config_dir), [])
+
+    def test_codex_skills_are_removed_and_an_edited_or_foreign_file_is_kept(self):
+        self.bdd("codex")
+        mine = self.skill("status")
+        mine.write_text("my own version\n", encoding="utf-8")
+        extra = self.skill("feature").parent / "notes.txt"
+        extra.write_text("keep me\n", encoding="utf-8")
+        code, out, _ = self.bdd("codex", "--uninstall")
+        self.assertEqual(code, 0, out)
+        self.assertIn("keep", out)
+        self.assertEqual(mine.read_text(encoding="utf-8"), "my own version\n")
+        self.assertFalse(self.skill("feature").exists())
+        self.assertTrue(extra.is_file())                                    # its folder still holds something of theirs
+        self.assertFalse(self.skill("init").parent.exists())
+
+    def test_a_dry_run_removes_nothing(self):
+        self.bdd("codex")
+        code, out, _ = self.bdd("codex", "--uninstall", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("would remove", out)
+        self.assertTrue(self.skill("feature").is_file())
+
+    def test_nothing_installed_is_not_an_error(self):
+        code, out, _ = self.bdd("codex", "--uninstall")
+        self.assertEqual((code, out), (0, ""))
+
+    def test_a_link_that_leaves_the_folder_is_refused_and_followed_nowhere(self):
+        with tempfile.TemporaryDirectory() as elsewhere:
+            victim = Path(elsewhere) / "SKILL.md"
+            victim.write_text(installskills.CODEX_MARK + "\n", encoding="utf-8")
+            (self.root / ".agents" / "skills").mkdir(parents=True)
+            try:
+                os.symlink(elsewhere, self.root / ".agents" / "skills" / "greenlight-status", target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("links cannot be created here")
+            code, out, err = self.bdd("codex", "--uninstall")
+            self.assertEqual(code, 1)
+            self.assertIn("link", out)
+            self.assertIn("nothing was removed", err)
+            self.assertTrue(victim.is_file())
+
+    def test_agents_md_loses_only_its_block(self):
+        path = self.root / "AGENTS.md"
+        path.write_text("# House rules\n\nBe kind.\n", encoding="utf-8")
+        self.bdd("agents-md")
+        self.assertEqual(self.bdd("agents-md", "--uninstall")[0], 0)
+        self.assertEqual(path.read_text(encoding="utf-8"), "# House rules\n\nBe kind.\n")
+
+    def test_agents_md_in_the_middle_keeps_both_sides(self):
+        path = self.root / "AGENTS.md"
+        path.write_text("before\n", encoding="utf-8")
+        self.bdd("agents-md")
+        path.write_text(path.read_text(encoding="utf-8") + "\nafter\n", encoding="utf-8")
+        self.bdd("agents-md", "--uninstall")
+        self.assertEqual(path.read_text(encoding="utf-8"), "before\n\nafter\n")
+
+    def test_an_agents_md_that_only_held_the_block_is_deleted(self):
+        self.bdd("agents-md")
+        self.assertEqual(self.bdd("agents-md", "--uninstall")[0], 0)
+        self.assertFalse((self.root / "AGENTS.md").exists())
+
+    def test_agents_md_without_a_block_or_with_broken_markers(self):
+        path = self.root / "AGENTS.md"
+        path.write_text("mine\n", encoding="utf-8")
+        self.assertEqual(self.bdd("agents-md", "--uninstall")[0], 0)
+        self.assertEqual(path.read_text(encoding="utf-8"), "mine\n")
+        path.write_text(installskills.END + "\nthen\n" + installskills.BEGIN + "\n", encoding="utf-8")
+        before = path.read_text(encoding="utf-8")
+        self.assertEqual(self.bdd("agents-md", "--uninstall")[0], 1)
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
 
 
 class SoftModeTruthTest(unittest.TestCase):

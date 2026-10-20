@@ -14,9 +14,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, state, store, tripwire
+from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire, workspace
 from . import config as cfg
-from .errors import UsageError
+from .errors import StoreError, UsageError
 
 # Human gates that must be validly approved before a machine gate may pass.
 APPROVALS_NEEDED = {
@@ -58,12 +58,78 @@ def run_problems(root: Path, feature_id: str, gate: str, raw: bytes | None) -> l
     return [] if verdict["valid"] else [f"the recorded run is not a valid {expect}: " + "; ".join(verdict["problems"])]
 
 
-def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: bytes | None = None) -> list[str]:
+def member_runs(root: Path, feature_id: str) -> dict[str, bytes | None]:
+    """The last recorded run of every readable member that has a run command, read once (name -> the bytes as stored)."""
+    runs: dict[str, bytes | None] = {}
+    for member in cfg.load(root).workspace:
+        try:
+            if workspace.unobserved(member) is None and cfg.load(member.path).runs:
+                runs[member.name] = runner.latest_bytes(member.path, feature_id)
+        except (cfg.ConfigError, OSError):
+            runs[member.name] = None
+    return runs
+
+
+def keep_member_reds(root: Path, feature_id: str, raws: dict[str, bytes | None]) -> dict[str, dict]:
+    """Keep, in each member's own runs folder, the run that proved its red (the very bytes that were checked)."""
+    kept: dict[str, dict] = {}
+    for member in cfg.load(root).workspace:
+        raw = raws.get(member.name)
+        if raw is not None:
+            kept[member.name] = runner.keep_red(member.path, feature_id, raw)
+    return kept
+
+
+def workspace_problems(root: Path, feature_id: str, gate: str, raws: dict[str, bytes | None] | None = None,
+                       kept: dict | None = None) -> list[str]:
+    """What the members' own evidence says about ``gate``: locks intact, no open integrity violation, a current valid
+    red (bind) or green (verify) run, and the red kept at the bind gate unchanged (``kept`` is None for a feature that
+    has none to keep). A member whose evidence cannot be read here is a problem too: nothing unobserved backs a gate."""
+    if gate not in workspace.CHECKED_GATES:
+        return []
+    out: list[str] = []
+    for member in cfg.load(root).workspace:
+        why = workspace.unobserved(member)
+        if why:
+            out.append(f"[{member.name}] not observed here: {why}")
+            continue
+        try:
+            out += [f"[{member.name}] {p}" for p in _member_problems(member, feature_id, gate, raws, kept)]
+        except (UsageError, StoreError, cfg.ConfigError, OSError, ValueError) as exc:
+            out.append(f"[{member.name}] {exc}")
+    return out
+
+
+def _member_problems(member: cfg.Member, feature_id: str, gate: str, raws: dict[str, bytes | None] | None,
+                     kept: dict | None) -> list[str]:
+    feature_dir = store.find_feature_dir(member.path, feature_id)
+    state.load(feature_dir)                         # a member whose feature has no readable state backs nothing
+    problems: list[str] = []
+    has_runs = bool(cfg.load(member.path).runs)
+    if gate in ("implement", "verify"):
+        problems += lock_problems(member.path, feature_dir, feature_id)
+        problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}"
+                     for v in tripwire.open_violations(member.path)]
+        if has_runs and kept is not None:
+            try:
+                runner.load_red(member.path, feature_id, kept.get(member.name))
+            except UsageError as exc:
+                problems.append(str(exc))
+    if gate in RUN_EXPECTED and has_runs:
+        raw = raws[member.name] if raws is not None and member.name in raws else runner.latest_bytes(member.path, feature_id)
+        problems += run_problems(member.path, feature_id, gate, raw)
+    return problems
+
+
+def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: bytes | None = None,
+                  member_raws: dict[str, bytes | None] | None = None) -> list[str]:
     """Reasons a *passing* result may not be recorded yet (empty list = fine)."""
     problems: list[str] = []
     for human_gate in APPROVALS_NEEDED.get(gate, ()):
         problems += approvals.effective_problems(root, data, human_gate)
     problems += run_problems(root, data["feature"], gate, raw)
+    kept = None if data.get("kind") == "adopt" else data.get("members_red", {})
+    problems += workspace_problems(root, data["feature"], gate, member_raws, kept)
     if gate == "system-map" and (feature_dir / design.DESIGN_FILE).is_file():
         problems += [str(issue) for issue in design.lint(feature_dir)]
     if gate in ("implement", "verify"):
@@ -79,6 +145,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     if gate == "verify":
         if data.get("kind") != "adopt":             # an adopted feature has no red to measure a change from
             problems += mutation.problems(root, data["feature"])
+        problems += stability.problems(root, data["feature"])
         if data["gates"].get("implement", {}).get("result") != "pass":
             problems.append("the implement gate has not passed")
     return problems
@@ -103,8 +170,9 @@ def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: d
         raw = None
         if result == "pass" and name in RUN_EXPECTED and cfg.load(root).runs:
             raw = runner.latest_bytes(root, current["feature"])          # read once: checked and kept are the same bytes
+        member_raws = member_runs(root, current["feature"]) if result == "pass" and name in RUN_EXPECTED else None
         if result == "pass":
-            problems = gate_problems(root, feature_dir, current, name, raw)
+            problems = gate_problems(root, feature_dir, current, name, raw, member_raws)
             if problems:
                 raise UsageError(f"cannot record {name}=pass: " + "; ".join(problems))
         current["gates"][name] = {"result": result, "at": store.utc_now(), "detail": detail,
@@ -113,6 +181,8 @@ def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: d
             current["red"] = red
         if name == "bind" and result == "pass" and raw is not None:
             current["red_run"] = runner.keep_red(root, current["feature"], raw)
+        if name == "bind" and result == "pass" and member_raws:
+            current["members_red"] = keep_member_reds(root, current["feature"], member_raws)
         if result == "pass":
             state.advance_phase(current, name)
 

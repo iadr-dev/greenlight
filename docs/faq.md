@@ -24,7 +24,8 @@ Windows is not installed) greenlight works in soft mode: violations are detected
 
 **Can I use it from Codex or another agent tool?**
 Yes, in soft mode. `bdd install-skills codex` installs the skills for Codex and `bdd install-skills agents-md` adds a
-block to `AGENTS.md` for tools that read it. Those tools run no greenlight hooks, so nothing is prevented, only
+block to `AGENTS.md` for tools that read it; `bdd install-skills claude` does the same for Claude Code without the
+plugin. `--uninstall` removes exactly what was installed. Those tools run no greenlight hooks, so nothing is prevented, only
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
@@ -35,10 +36,19 @@ with Playwright (TypeScript), and any other runner that writes a JUnit report th
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.
 
+**Can CI check that the approvals are real?**
+Partly. `bdd approve FEAT-n --check` judges the committed record alone, with no session: the approved files must still
+match the hashes recorded at approval, the recorded origin must be one the project accepts (a person's typed prompt that was
+verified against the transcript, or an automatic or self-reported approval where the autonomy level and enforcement allow
+it), and every approval a later phase rests on must exist. It cannot re-read the session transcript, which stays on the
+machine where the person typed, and it cannot tell a hand-edited `state.json` from a genuine one, because the record is not
+signed; protect the branch (required reviews, no direct pushes) for that. See [CI](ci.md).
+
 **Can production code cheat the tests?**
 It runs inside the test process, so it could in principle detect that tests are running. The auditor reads the diff for
 that, and the optional mutation check (`bdd mutate`) adds a second line: code that only satisfies the tests tends to
-leave surviving mutants. See [adapters](adapters.md).
+leave surviving mutants. The Python adapter ships a wrapper for mutmut and the Playwright adapter one for Stryker, so
+turning the check on is an install and a few lines of configuration. See [adapters](adapters.md).
 
 **Does greenlight enforce a language standard, a style, or "the latest version, nothing deprecated"?**
 It enforces what the project declares. `.bdd/standards.md` (written and approved by you) states the language and
@@ -53,6 +63,11 @@ Yes, as far as a test or a check can show it. The standards file has API and dat
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.
+
+**Can one feature span several repositories?**
+Yes: name the other repositories in a `[workspace]` table in the home repository's `.bdd/config.toml`. The home keeps the
+rules, approvals and report; each member keeps its own scenarios, locks and recorded runs under the same ids, and the home's
+gates read them. See [concepts](concepts.md).
 
 **Can I use it on an existing code base?**
 Yes. New features and changes work as on any project; scenarios that describe behaviour the system already has are

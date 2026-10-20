@@ -8,7 +8,8 @@ An approval is a record in the feature's ``state.json``:
                 self-reported   recorded by a skill from the person's answer (sessions without hooks)
                 auto            recorded by the orchestrator under the auto / autopilot levels
     origin      pending | human | headless | invalid | unverifiable | self-reported | auto
-    artifacts   SHA-256 of what was approved (rules.md, or the feature files)
+    artifacts   SHA-256 of what was approved (rules.md, or the feature files; for the examples of a feature that spans
+                several repositories, each member's feature files and config.toml in a separate ``members`` map)
 
 A hook-grade approval starts as ``pending``: when the hook runs, the person's prompt is not yet in
 the session transcript, so who wrote it cannot be checked yet. ``verify_origins`` checks it
@@ -22,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config as cfg
-from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store
+from . import approvalcommand, claudepaths, enforcement, featurefiles, lockfile, state, store, workspace
 from .errors import UsageError
 
 GATES = state.HUMAN_GATES
@@ -36,7 +37,7 @@ TRANSCRIPT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
 
 # -- what is being approved ----------------------------------------------------------------
 def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict[str, str]:
-    """Digests of the files this approval covers; refuses if there is nothing to approve."""
+    """Digests of the files of this repository that the approval covers; refuses if there is nothing to approve."""
     if gate == "rules":
         rules = feature_dir / "rules.md"
         if not rules.is_file():
@@ -44,9 +45,47 @@ def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -
         files = [rules]
     else:
         files = featurefiles.spec_files(root, feature_id)
-        if not files:
-            raise UsageError(f"there is nothing to approve: no .feature file is tagged @{feature_id}")
     return {lockfile.relative(root, f): lockfile.file_digest(f) for f in files}
+
+
+def member_artifacts(root: Path, feature_id: str) -> dict[str, dict[str, str]]:
+    """What each other repository of a workspace contributes to the examples: member name -> {path inside the member ->
+    digest} of its feature files for the feature and its ``config.toml``. They are kept apart from this repository's own
+    artifacts (a map of their own in the approval), so no name of one can stand for a file of the other. Approving the
+    examples covers them, so a member's specs cannot be unlocked, edited and locked again, added to, or its configuration
+    changed, without the person approving again. A member that cannot be read here cannot be approved."""
+    found: dict[str, dict[str, str]] = {}
+    for member in cfg.load(root).workspace:
+        why = workspace.unobserved(member)
+        if why:
+            raise UsageError(f"cannot approve the examples: {member.name} is not observed here ({why})")
+        files = [member.path / cfg.BDD_DIR / "config.toml", *featurefiles.spec_files(member.path, feature_id)]
+        found[member.name] = {lockfile.relative(member.path, f): lockfile.file_digest(f) for f in files}
+    return found
+
+
+def member_problems(root: Path, feature_id: str, recorded: dict[str, dict[str, str]]) -> list[str]:
+    """How the members' contribution to the examples differs from what was approved: changed, added or removed files, a
+    member that joined or left the workspace, or one that cannot be read here."""
+    try:
+        current = member_artifacts(root, feature_id)
+    except UsageError as exc:
+        return [str(exc)]
+    again = "after the examples approval; it has to be approved again"
+    problems: list[str] = []
+    for name, files in current.items():
+        old = recorded.get(name)
+        if old is None:
+            problems.append(f"{name} joined the workspace {again}")
+            continue
+        for rel, digest in files.items():
+            if rel not in old:
+                problems.append(f"{name}:{rel} was added {again}")
+            elif old[rel] != digest:
+                problems.append(f"{name}:{rel} changed {again}")
+        problems += [f"{name}:{rel} was removed {again}" for rel in old if rel not in files]
+    problems += [f"{name} left the workspace {again}" for name in recorded if name not in current]
+    return problems
 
 
 def prerequisite_problems(data: dict, gate: str) -> list[str]:
@@ -89,17 +128,22 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
     feature_id = data["feature"]
     check_grade(root, data, grade)
     artifacts: dict[str, str] = {}
+    members: dict[str, dict[str, str]] = {}
     if decision == "approve":
         problems = prerequisite_problems(data, gate)
         if problems:
             raise UsageError(f"cannot approve {gate}: " + "; ".join(problems))
         artifacts = artifact_hashes(root, feature_dir, feature_id, gate)
         if gate == "examples":
+            members = member_artifacts(root, feature_id)
+            if not artifacts and not any(rel.endswith(".feature") for files in members.values() for rel in files):
+                raise UsageError(f"there is nothing to approve: no .feature file is tagged @{feature_id}")
             ensure_spec_locked(root, feature_dir, feature_id, artifacts)
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
-             "origin": {"hook": "pending"}.get(grade, grade), "artifacts": artifacts, "session": session,
+             "origin": {"hook": "pending"}.get(grade, grade), "artifacts": artifacts, "members": members,
+             "session": session,
              "prompt_id": prompt_id, "transcript_path": transcript_path,
              "mode": cfg.load(root).enforcement, "hooks_seen": bool(data.get("hooks_seen"))}
 
@@ -290,6 +334,8 @@ def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
         target = root / rel
         if not target.is_file() or lockfile.file_digest(target) != digest:
             problems.append(f"{rel} changed after the {gate} approval; it has to be approved again")
+    if gate == "examples":
+        problems += member_problems(root, data["feature"], last.get("members", {}))
     return problems
 
 
@@ -303,10 +349,30 @@ def grade_problems(root: Path, data: dict, gate: str, last: dict) -> list[str]:
     if origin in allowed:
         return []
     explanations = {
-        "pending": "is still waiting for its origin to be verified; run `bdd approve FEAT --verify` in a moment",
+        "pending": "is still waiting for its origin to be verified; run `bdd approve FEAT --verify` in a moment "
+                   "(on the machine where it was typed: the check needs the session transcript)",
         "headless": "was typed into a headless `claude -p` session, which is not accepted unless "
                     "`[approvals] allow_headless = true` is set in .bdd/config.toml",
         "invalid": "was not typed by a person (" + str(last.get("evidence", "unknown origin")) + ")",
         "unverifiable": "could not be verified (" + str(last.get("evidence", "no evidence")) + "); approve it again",
     }
     return [f"the {gate} approval " + explanations.get(origin, f"has origin {origin}")]
+
+
+# -- the check that needs no session ---------------------------------------------------------
+NEEDED_FROM = {"rules": "test-design", "examples": "system-map"}      # the first phase that rests on the approval
+
+
+def required_gates(data: dict) -> list[str]:
+    """The human gates a feature at this phase must already have passed: the phases after them rest on them."""
+    phase = state.PHASES.index(data["phase"])
+    return [g for g in GATES if phase >= state.PHASES.index(NEEDED_FROM[g])]
+
+
+def recorded_problems(root: Path, data: dict) -> dict[str, list[str]]:
+    """For every human gate that is required at this phase or has an approval record: why it is not validly approved,
+    judged from the committed record alone (no transcript, no hooks): the recorded origin, the recorded kind of
+    approval against the project's rules, and the hashes of the approved files against the files now. A gate that is
+    fine maps to an empty list."""
+    wanted = required_gates(data)
+    return {g: effective_problems(root, data, g) for g in GATES if g in wanted or _last(data, g) is not None}

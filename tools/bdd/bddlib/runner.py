@@ -202,12 +202,17 @@ def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str,
     return entry, junit.parse_file(report) if report.is_file() else []
 
 
+def fresh_seed() -> int:
+    """A new shuffle seed, recorded with the run so the order can be repeated."""
+    return random.SystemRandom().randrange(1, 10**6)
+
+
 def run_feature(root: Path, feature_id: str, scenarios: list[str], rules: cfg.RunRules, *, shuffle: bool = False,
                 isolated: bool = False, seed: int | None = None) -> dict:
     """Run the feature's tests (one process per scenario when ``isolated``) and record the outcome."""
     folder = runs_dir(root, feature_id)
     folder.mkdir(parents=True, exist_ok=True)
-    seed = (seed if seed is not None else random.SystemRandom().randrange(1, 10**6)) if shuffle else None
+    seed = (seed if seed is not None else fresh_seed()) if shuffle else None
     runs, cases = [], []
     plan = [{"scenario": name} for name in scenarios] if isolated else [{}]
     for index, options in enumerate(plan, start=1):

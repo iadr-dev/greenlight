@@ -43,6 +43,16 @@ mutation tool (`[adapters.mutation]`, see [adapters](adapters.md)); `bdd mutate 
 files the feature changed and the verify gate requires a current result at or above the threshold. It is the check that
 answers code written to satisfy the tests instead of the rules. Off by default.
 
+## Stability check (optional)
+
+A scenario that passes in one run and fails in the next is flaky, and a green run of it proves little. A project can ask
+for the check with `[stability] runs = 3` in `.bdd/config.toml` (2 to 50). `bdd stability FEAT-n` then reruns the feature
+that many times (the first in the usual order, the others shuffled with fresh seeds when the adapter can), records every
+run, and flags any scenario whose result changed. The verify gate requires a current result without a flaky scenario;
+without the table nothing changes. The runs leave the last `bdd run` alone, so the gates still read the run they always
+did. It shows that scenarios behave the same in the orders and repetitions tried; a rare race can still hide, and more runs
+only make that less likely.
+
 ## Engineering standards and quality checks
 
 Languages, frameworks and conventions differ too much for greenlight to carry rules of its own, so it leaves them to the
@@ -102,17 +112,27 @@ skills) enforcement is **soft**: violations are detected after the fact, not pre
 greenlight never presents soft enforcement as hard: `bdd doctor` warns about it, `bdd state show` and the report name it
 with the reasons, and a self-reported approval says it was not verified by a hook.
 
-To use greenlight from a tool without hooks, install its instructions:
+There are three ways to install greenlight, and they differ in what is prevented:
+
+| Install | Hooks | Enforcement |
+|---|---|---|
+| The plugin (`/plugin install greenlight@greenlight`) | yes | hard: the guard, the tripwire and the approval hook are active |
+| `bdd install-skills claude` | no | soft: Claude Code runs the skills as `/greenlight-<skill>` but not the plugin's hooks |
+| `bdd install-skills codex` or `agents-md` | no | soft: Codex and other tools run the skills or read the `AGENTS.md` block, with no hooks |
 
 ```sh
+bdd install-skills claude       # skills under ~/.claude/skills (add --project for .claude/skills)
 bdd install-skills codex        # skills under .agents/skills (add --user for ~/.agents/skills)
 bdd install-skills agents-md    # a marked block in AGENTS.md for any tool that reads it
+bdd install-skills codex --uninstall   # removes exactly what the command wrote, and the folders it leaves empty
 ```
 
-Both support `--dry-run`, never overwrite a differing file without `--force`, and tell the agent to leave approvals to
-you. With no hook to record what you typed, you set `enforcement = "soft"` in `.bdd/config.toml` and confirm in plain
-words; the agent records it with `bdd approve --self-reported`. Run the locks check in CI
-(see [CI](ci.md)) to catch afterwards what nothing prevents.
+All support `--dry-run`, never overwrite a differing file without `--force`, never write outside the target folder
+or through a link, and tell the agent to leave approvals to you. `--uninstall` removes only files that carry the
+installation note and the marked block (the file itself only when nothing else is in it). With no hook to record what
+you typed, you set `enforcement = "soft"` in `.bdd/config.toml` and confirm in plain words; the agent records it with
+`bdd approve --self-reported`; `enforcement = "hard"` refuses that. Run the locks check in CI (see [CI](ci.md)) to
+catch afterwards what nothing prevents.
 
 ## Agents
 
@@ -120,6 +140,28 @@ Six agents do the phase work: product-analyst, qa-designer, system-analyst, step
 spec-auditor. Each has an explicit tool list and write permissions (the implementer cannot touch tests, the auditor
 cannot write at all). They read files, never chat history, and report instead of recording; the orchestrator
 (`/greenlight:feature`) records everything.
+
+## Features across several repositories
+
+When one feature needs work in more than one repository (an API and a web app, a library and its consumers), one
+repository is the home: it holds the brief, the rules, the approvals and the report. The others are listed in the home's
+`.bdd/config.toml`:
+
+```toml
+[workspace]
+web = "../shop-web"
+```
+
+Each member is a greenlight project of its own, with the scenarios, steps, locks and recorded runs for its share of the
+rules, tagged with the same `@FEAT-n`, `@R-` and `@EX-` ids. Ids come from the home (`bdd state next-id`); a member
+learns one with `bdd --in web state init FEAT-n --title "..."`. `bdd --in NAME COMMAND` runs any command inside a member,
+and `--workspace` repeats `lock --check`, `run`, `classify` and `status` in every repository (`bdd trace --workspace`
+shows one matrix). The home's bind, implement and verify gates read each member's own evidence: a valid red and a green
+run, intact locks, no open integrity violation. A member that is not on this machine, or not readable, is **not observed
+here**; it cannot back a gate and the report says so. Approving the examples also covers each member's feature files and
+configuration, so a member's spec cannot be unlocked, edited and locked again without you approving again. The guard and the tripwire protect a member through the paths of
+the tool calls a session makes into it; Claude Code does not tell hooks which extra directories a session includes, so
+a member the session never touches is protected only by its locks and by CI.
 
 ## Changing approved work
 

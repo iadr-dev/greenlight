@@ -20,6 +20,6 @@ you use to a commit.
 `tests/go.sum` holds the hashes of every module, so a modified or substituted module fails the build. Use one `go test`
 per feature, or one run with the tag expression of several features.
 
-For the gates themselves (locks, approvals, valid red, green) run `bdd lock FEAT-n --check --require` and
-`bdd run FEAT-n` followed by `bdd classify FEAT-n --expect green` with the greenlight plugin's `tools/bdd/bdd` wrapper;
-it needs Python 3.11 or newer and nothing to install. See `docs/ci.md` for a complete job.
+For the gates themselves (the approvals in the committed record, locks, a fresh green run, traceability, and the optional
+stability, quality and mutation checks) use the complete workflow in `ci/github-actions.yml` next to this file;
+`docs/ci.md` explains what each step checks.
