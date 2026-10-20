@@ -216,6 +216,42 @@
       "phase": "bind"
     },
     {
+      "apply_when": "a .NET project tested with xUnit, NUnit or MSTest through dotnet test (the generic-junit adapter), including Reqnroll or SpecFlow",
+      "id": "dotnet-test",
+      "kind": "runner",
+      "path": "runners/dotnet-test.md"
+    },
+    {
+      "apply_when": "a Go project tested with go test (the generic-junit adapter), including godog features",
+      "id": "go-test",
+      "kind": "runner",
+      "path": "runners/go-test.md"
+    },
+    {
+      "apply_when": "a JavaScript or TypeScript project tested with jest (the generic-junit adapter); for browsers see the UI adapters",
+      "id": "jest",
+      "kind": "runner",
+      "path": "runners/jest.md"
+    },
+    {
+      "apply_when": "a Java or Kotlin project built with Gradle and tested with JUnit 5 (the generic-junit adapter)",
+      "id": "junit-gradle",
+      "kind": "runner",
+      "path": "runners/junit-gradle.md"
+    },
+    {
+      "apply_when": "a Java or Kotlin project built with Maven and tested with JUnit 5 through Surefire (the generic-junit adapter)",
+      "id": "junit-maven",
+      "kind": "runner",
+      "path": "runners/junit-maven.md"
+    },
+    {
+      "apply_when": "a Python project tested with plain pytest functions rather than pytest-bdd (the generic-junit adapter); with pytest-bdd prefer the python-pytest-bdd adapter",
+      "id": "pytest",
+      "kind": "runner",
+      "path": "runners/pytest.md"
+    },
+    {
       "apply_when": "a rule has a threshold, limit, range, cut-off time or size, or a count that changes behaviour",
       "cost": "low",
       "id": "boundary-value",

@@ -10,10 +10,19 @@ broken test.
 |---|---|---|
 | `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib` |
 | `ts-playwright-bdd` | planned | web UIs (the `ui` profile) |
-| `generic-junit` | planned | any runner that writes a JUnit report |
+| `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
 repository and why. If nothing fits, greenlight says so; it does not pretend.
+
+## The generic-junit adapter
+
+It is never suggested by detection: choose it when no other adapter fits your stack. `bdd init --adapter generic-junit` copies a
+small working sample (standard library only) so the setup can be proven, and you then replace the run command in
+`.bdd/config.toml` with your runner's. The runner cards in `cards/runners/` (JUnit with Gradle, JUnit with Maven, pytest, jest,
+go test, dotnet test) give the command, how to select a feature, where the report goes and what a red looks like. The contract is
+short: one command runs one feature, it writes one JUnit file, each test name contains its scenario name, an unbuilt seam fails with
+`BDD_EXPECTED_MISSING`, and build errors are loud. See `adapters/generic-junit/guide.md`.
 
 ## Using one
 

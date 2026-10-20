@@ -28,7 +28,8 @@ Do not change anything on the machine without asking first.
    ```
 
    Recommend one adapter from what was detected and say why. If nothing fits, say so plainly: only the adapters
-   listed exist today. Ask the person to confirm the adapter and the starting autonomy level
+   listed exist today. If the project's test runner can write a JUnit XML report, offer `generic-junit` (it is never
+   suggested by detection) and tell the person they will replace its sample run command with their runner's. Ask the person to confirm the adapter and the starting autonomy level
    (`guided` reviews every gate, `standard` asks only for rules and examples; `auto` and `autopilot` are for
    trusted or hands-off work). Wait for the answer.
 

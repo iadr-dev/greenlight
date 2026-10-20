@@ -7,6 +7,7 @@ versions follow [SemVer](https://semver.org/).
 
 ### Added
 - `bdd install-skills codex|agents-md` (decision D28): installs greenlight's instructions for Codex (skills under `.agents/skills` or `~/.agents/skills`, with this installation's paths) or as a marked block in `AGENTS.md`; `--dry-run`, never overwrites a differing file without `--force`, refuses links that leave the project. `bdd doctor` has an `enforcement` check that warns when enforcement is soft or no hook has run, and a self-reported approval says on stderr that no hook verified it.
+- The `generic-junit` adapter: any test runner that writes a JUnit report (decision D26). The project supplies the run command and step code; the adapter defines the contract (one command per feature, one JUnit file, test names that contain the scenario name, `BDD_EXPECTED_MISSING` for unbuilt seams), ships a standard-library sample runner so `bdd init --smoke` works, `tests/run_junit.py` to merge several report files into one, classification and scan defaults, and six runner cards (JUnit with Gradle, JUnit with Maven, pytest, jest, go test, dotnet test).
 
 ### Fixed
 - The CI example in `docs/ci.md` no longer fails in a project that has no feature yet.
