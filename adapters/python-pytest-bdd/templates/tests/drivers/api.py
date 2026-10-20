@@ -24,7 +24,7 @@ def call(world: World, actor: str, operation: str, data: Any) -> Outcome:
         body = response.json()
     except ValueError:
         body = response.text
-    world.outcome = Outcome("api", status=response.status_code, body=body)
+    world.outcome = Outcome("api", status=response.status_code, body=body, operation=operation)
     return world.outcome
 
 

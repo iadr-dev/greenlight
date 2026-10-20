@@ -48,7 +48,7 @@ class InitTest(InitCase):
         code, out, err = self.bdd("init", "--adapter", "python-pytest-bdd", "--autonomy", "standard")
         self.assertEqual(code, 0, err)
         config = cfg.load(self.root)
-        self.assertEqual((config.autonomy, config.profiles), ("standard", ("base", "api", "cli", "lib")))
+        self.assertEqual((config.autonomy, config.profiles), ("standard", ("base", "api", "cli", "lib", "data")))
         self.assertEqual(config.runs[0].adapter, "python-pytest-bdd")
         for rel in (".bdd/config.toml", ".bdd/glossary.md", ".bdd/.gitignore", "tests/steps/core_steps.py", "tests/features/sample.feature"):
             self.assertTrue((self.root / rel).exists(), rel)

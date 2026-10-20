@@ -15,6 +15,9 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 1. Fill in the adapter's seams from `system.md`: the logical-name maps (API operations, commands, library
    functions, files, errors) and the system seams. A seam the system does not have yet stays as it is, so it
    fails as an expected failure.
+   When the adapter has the `data` profile and the system has a database, install a `QueryCounter`
+   (`tests/drivers/queries.py`) on the application's data access when `System` is built and return its count from
+   `queries_executed`, so the `ran at most N queries` steps can run; without it they fail as an expected failure.
 2. Write project step modules for the domain steps, calling the same drivers. Steps only call drivers.
 3. Read `test-data`: each scenario creates its own data.
 4. Never edit the adapter's core drivers (`api.py`, `cli.py`, `lib.py`, `compare.py`, `world.py` and the like).

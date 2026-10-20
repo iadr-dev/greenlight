@@ -17,6 +17,10 @@ Run the **test-design** or **examples** playbook named in your task (`phases/tes
 - Write the examples as `.feature` files with the trace tags `@FEAT-n`, `@R-n.m`, `@EX-n.m.k`, using only steps
   from the vocabulary (`vocabulary/core.json` and the project's `.bdd/vocabulary.toml`). Read the instruction
   card of any step you are unsure about.
+- When the project has a database (the `data` profile is enabled) and a scenario is about a collection (a list, a
+  search, a report, anything that loads several records), seed at least three records so that a query per record
+  can show, and end it with a `{operation} ran at most {count:int} queries` step whose number comes from the
+  design, not from what the code does today. Read the `C.QUERY.COUNT` and `database-performance` cards.
 - Check your work with `bdd lint` and `bdd trace FEAT-n` and fix what they report.
 
 ## What you must not do

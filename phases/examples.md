@@ -22,6 +22,10 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    exists.
 4. Use steps from the vocabulary: domain steps first, core steps allowed. For a step that needs something new,
    write it with a `# proposed-step` comment; it is resolved in the refine phase.
+   When the project has a database (the `data` profile) and an example is about a collection, seed at least three
+   records and end it with `<operation> ran at most N queries` (card `C.QUERY.COUNT`): with fewer rows a query per
+   record does not show. Take N from the design (one query for the list plus one per related collection loaded
+   together), not from what the code does today.
 5. Run `bdd lint` and fix everything it reports. `bdd trace FEAT-n` must show no gaps between rules, examples
    and scenarios.
 6. Show the person the scenarios.

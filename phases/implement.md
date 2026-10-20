@@ -23,6 +23,10 @@ Per task, in order:
    scenario. The change flow unlocks, edits, gets approval and re-locks.
 4. Use the current API of every library you call, from its current documentation, and fix a deprecation warning instead of
    silencing it. Do not upgrade a toolchain or dependency and do not add one; return the question.
+   When the code touches an API or a database, read the matching cards first: `api-design`, `database-schema`,
+   `database-migrations`, `database-performance`, `database-engines`. Load related records together instead of
+   one query per record, bound every result, and write a migration that can be undone. Do not edit a migration that
+   has been applied.
 5. Report the tokens and time you spent; the orchestrator records them with `bdd cost FEAT-n --phase implement
    --tokens N --seconds S`.
 

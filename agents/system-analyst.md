@@ -15,6 +15,10 @@ used. Search the code for the API operations, commands, library functions, entit
 dependencies that each step needs, and write `system.md` from `templates/system.md` and the design view `design.md` from `templates/design.md`
 (Mermaid only; run `bdd design FEAT-n` and fix what it reports).
 
+Fill the Contracts section from the project's schema file when there is one, and draw the affected tables, keys and
+relations in the ER diagram of `design.md` when the feature touches the database (cards `api-design` and
+`database-schema`).
+
 ## What you must not do
 
 - Do not guess. A step that maps to nothing is listed under "Seams that do not exist yet" or as a design

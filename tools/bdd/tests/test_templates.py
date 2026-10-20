@@ -21,6 +21,7 @@ SECTIONS = {
     "system.md": ["Interfaces", "Dependencies", "Clock", "Seams that do not exist yet"],
     "tasks.md": [],
     "report.md": ["Traceability", "Gates, locks and approvals", "Checklist", "Findings", "Cost"],
+    "standards.md": ["Language and toolchain", "Quality rules", "Deprecation policy", "API", "Data", "Dependencies"],
     "glossary.md": [],
     "change-requests.md": [],
 }

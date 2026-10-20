@@ -77,7 +77,7 @@ class ChecklistTest(unittest.TestCase):
         text = (REPO / "review" / "checklist.md").read_text(encoding="utf-8")
         ids = [m.group(1) for m in self.ROW.finditer(text)]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertTrue({"T1", "T3", "S2", "S4", "L1", "L2", "L3", "E1", "E2", "A1"} <= set(ids))
+        self.assertTrue({"T1", "T3", "S2", "S4", "L1", "L2", "L3", "E1", "E2", "A1", "D1", "D2", "D3", "D4", "D5"} <= set(ids))
         self.assertIn("T1", (REPO / "templates" / "report.md").read_text(encoding="utf-8"))
 
     def test_every_blocking_choice_is_explicit_and_the_scan_codes_it_cites_exist(self):

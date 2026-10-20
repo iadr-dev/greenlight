@@ -9,7 +9,7 @@ from typing import Any
 from .clock import Clock
 from .files import Workspace
 from .operations import ERRORS
-from .errors import NotMapped
+from .errors import ExpectedMissing, NotMapped
 from .stubs import Stubs
 from .system import System
 
@@ -24,6 +24,7 @@ class Outcome:
     stdout: str = ""                    # cli
     stderr: str = ""                    # cli
     exception: BaseException | None = None   # lib
+    operation: str | None = None        # api, lib: the logical name that was called
 
     def matches_error(self, name: str) -> bool:
         rule = ERRORS.get(name)
@@ -47,14 +48,29 @@ class World:
     outcome: Outcome | None = None
     tracked: set[str] = field(default_factory=set)                         # entities seeded or verified
     before: dict[str, list[dict[str, Any]]] | None = None
+    queries_before: int | None = None                                      # statements run before the last action
 
     def track(self, entity: str) -> None:
         self.tracked.add(entity)
 
     def act(self) -> None:
-        """Called before the first action: remember what every tracked entity looks like."""
+        """Called before every action: remember what every tracked entity looked like before the first one, and how
+        many database statements had run before this one."""
         if self.before is None:
             self.before = {e: copy.deepcopy(self.system.records(e)) for e in sorted(self.tracked)}
+        try:
+            self.queries_before = self.system.queries_executed()
+        except ExpectedMissing:
+            self.queries_before = None                                     # only a scenario that counts needs the seam
+
+    def assert_queries_at_most(self, operation: str, limit: int) -> None:
+        """The last action ran at most ``limit`` statements (an N+1 problem shows as a count that grows with the rows)."""
+        if self.outcome is not None and self.outcome.operation not in (None, operation):
+            raise AssertionError(f"the last action was {self.outcome.operation!r}, not {operation!r}")
+        total = self.system.queries_executed()                             # raises ExpectedMissing without a counter
+        assert self.queries_before is not None, "no action ran before this check: a When step has to run first"
+        ran = total - self.queries_before
+        assert ran <= limit, f"{operation} ran {ran} queries, more than the {limit} allowed (a count that grows with the number of records is an N+1 problem)"
 
     def last(self, kind: str) -> Outcome:
         assert self.outcome is not None, f"there is no result yet: a When step ({kind}) has to run first"

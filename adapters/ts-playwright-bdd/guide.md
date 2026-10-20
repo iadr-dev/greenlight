@@ -20,7 +20,8 @@ Nothing is overwritten.
 | `tests/bdd.config.ts`, `tests/run.mjs`, `tests/junit-reporter.mjs`, `tests/tsconfig.json` | how scenarios are generated, selected, run and reported | nobody |
 | `tests/package.json`, `tests/package-lock.json` | the pinned test tooling, kept apart from the application's own `package.json` | the person |
 
-The `api`, `cli` and `lib` profiles are not part of this adapter. A service without a browser uses
+The `api`, `cli`, `lib` and `data` profiles are not part of this adapter (the query-count instruction belongs to
+the code that talks to the database, which this adapter only reaches through pages). A service without a browser uses
 `python-pytest-bdd`.
 
 ## Setting up

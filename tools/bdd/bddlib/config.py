@@ -8,7 +8,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ALL_PROFILES = ("base", "api", "ui", "cli", "lib")
+ALL_PROFILES = ("base", "api", "ui", "cli", "lib", "data")
 DEFAULT_SIMILARITY = 0.85
 BDD_DIR = ".bdd"
 ENFORCEMENT_MODES = ("auto", "hard", "soft")

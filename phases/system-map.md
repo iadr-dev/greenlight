@@ -27,6 +27,12 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    small enough to review in a minute. Show what exists and mark what will be built. Name the interfaces a diagram
    shows with `%% interface: <logical name>` comments. Run `bdd design FEAT-n` and fix what it reports.
 
+6. Fill the Contracts section of `system.md` from the project's schema file when there is one (OpenAPI, GraphQL,
+   protobuf): copy what the feature uses exactly, and mark what it adds or changes. When there is none, say so.
+   For a feature that touches the database, draw the affected tables in the `erDiagram` of `design.md` with their
+   keys and the cardinality of each relation, and name the migration folder. Read the cards `api-design` and
+   `database-schema`, and the data section of `.bdd/standards.md`.
+
 ## Output files
 
 `system.md` and `design.md`.

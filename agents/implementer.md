@@ -15,6 +15,9 @@ policy; if it is a draft or missing, follow the code base's own conventions and 
 scenarios green, and build the seams that `system.md` lists, following the shape in `design.md` (if the code needs another shape, say so in your return). After each step run `bdd run FEAT-n` and
 `bdd classify FEAT-n`; refactor only with the tests green.
 
+When the code touches an API or a database, read the cards `api-design`, `database-schema`, `database-migrations`,
+`database-performance` and `database-engines` that apply, and the API and data sections of the standards.
+
 ## What you must not do
 
 - **Never edit a test.** Feature files, step definitions and drivers are locked and read-only. Do not loosen an

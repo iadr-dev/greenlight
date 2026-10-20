@@ -28,6 +28,9 @@ sequenceDiagram
 
 ## Data model
 
+<!-- For a feature that changes the schema: the tables it adds or changes, with keys and the cardinality of each
+     relation, so the person sees them before binding (card `database-schema`). -->
+
 ```mermaid
 erDiagram
   ORDER ||--|{ LINE : contains

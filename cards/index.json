@@ -121,6 +121,12 @@
       "path": "instructions/C.OUTPUT.CONTAINS.md"
     },
     {
+      "apply_when": "a list or a lookup must not run one query per record, or a data access must stay within a query budget",
+      "id": "C.QUERY.COUNT",
+      "kind": "instruction",
+      "path": "instructions/C.QUERY.COUNT.md"
+    },
+    {
       "apply_when": "the interface behaves differently depending on what the browser or app has stored",
       "id": "C.STATE.GLOBAL",
       "kind": "instruction",
@@ -169,6 +175,19 @@
       "path": "instructions/C.UI.SEE.md"
     },
     {
+      "apply_when": "designing, changing or judging an HTTP, GraphQL or RPC interface that other code depends on",
+      "id": "api-design",
+      "kind": "practice",
+      "output": "an interface that follows the project's API rules, with its schema file updated on purpose and any breaking change named",
+      "pairs_with": [
+        "language-typescript",
+        "language-python",
+        "database-performance"
+      ],
+      "path": "practices/api-design.md",
+      "phase": "system-map"
+    },
+    {
       "apply_when": "the brief has gaps that would change a rule, and the person is available to answer",
       "id": "blocking-questions",
       "kind": "practice",
@@ -179,6 +198,57 @@
       ],
       "path": "practices/blocking-questions.md",
       "phase": "discover"
+    },
+    {
+      "apply_when": "the schema, a migration or a query has to behave well on PostgreSQL, MySQL or SQLite",
+      "id": "database-engines",
+      "kind": "practice",
+      "output": "engine-specific choices for types, locking, indexes and plans that match the engine the project runs in production",
+      "pairs_with": [
+        "database-schema",
+        "database-migrations",
+        "database-performance"
+      ],
+      "path": "practices/database-engines.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing, reviewing or running a change to a database schema or its data",
+      "id": "database-migrations",
+      "kind": "practice",
+      "output": "migrations that are small, applied in order, reversible or explained, safe on a live table, and tested against the engine used in production",
+      "pairs_with": [
+        "database-schema",
+        "database-engines"
+      ],
+      "path": "practices/database-migrations.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "writing or judging code that reads or writes the database, especially lists, joins, loops over records and anything on a hot path",
+      "id": "database-performance",
+      "kind": "practice",
+      "output": "data access with no query per record, bounded results, the indexes its queries need, short transactions and a query-count scenario for each collection",
+      "pairs_with": [
+        "database-schema",
+        "database-engines",
+        "api-design"
+      ],
+      "path": "practices/database-performance.md",
+      "phase": "implement"
+    },
+    {
+      "apply_when": "designing or changing tables, columns, keys, constraints or indexes",
+      "id": "database-schema",
+      "kind": "practice",
+      "output": "a schema whose keys, constraints, types and indexes follow the project's data rules and each of which has a reason",
+      "pairs_with": [
+        "database-migrations",
+        "database-performance",
+        "database-engines"
+      ],
+      "path": "practices/database-schema.md",
+      "phase": "system-map"
     },
     {
       "apply_when": "the project is an Expo or React Native app and production code is written or judged",

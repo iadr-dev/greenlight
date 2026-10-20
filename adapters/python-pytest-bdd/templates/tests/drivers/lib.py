@@ -26,9 +26,9 @@ def call(world: World, operation: str, data: Any) -> Outcome:
             value = function(*data)
         else:
             value = function(data)
-        world.outcome = Outcome("lib", body=value)
+        world.outcome = Outcome("lib", body=value, operation=operation)
     except Exception as error:                      # the scenario decides whether this error was wanted
-        world.outcome = Outcome("lib", exception=error)
+        world.outcome = Outcome("lib", exception=error, operation=operation)
     return world.outcome
 
 

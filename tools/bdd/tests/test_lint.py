@@ -139,6 +139,14 @@ class ProfileAndShapeTest(LintBase):
         self.assertEqual(issue.code, "L007")
         self.assertIn("C.UI.OPEN", issue.message)
 
+    def test_the_query_count_step_needs_the_data_profile(self):
+        text = feature("Scenario: S\n  Then list orders ran at most 2 queries\n")
+        self.assertEqual(self.codes(text), [])
+        (issue,) = self.issues(text, profiles=("base", "api"))
+        self.assertEqual(issue.code, "L007")
+        self.assertIn("C.QUERY.COUNT", issue.message)
+        self.assertEqual(self.codes(feature("Scenario: S\n  Then list orders ran at most many queries\n")), ["L002:3"])
+
     def test_domain_steps_are_not_profile_checked(self):
         text = feature("Scenario: S\n  Given Alice has a cart worth 5\n")
         self.assertEqual(self.codes(text, profiles=("cli",)), [])

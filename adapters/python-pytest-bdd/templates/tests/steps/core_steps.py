@@ -115,6 +115,11 @@ def records_unchanged(world: World, entity):
     compare.assert_equal(world.system.records(entity), world.before[entity], f"the {entity} records")
 
 
+@then(parsers.parse("{operation} ran at most {count:d} queries"))           # C.QUERY.COUNT
+def queries_at_most(world: World, operation, count):
+    world.assert_queries_at_most(operation, count)
+
+
 @then(parsers.parse("the {event} event is published with:"))                 # C.EVENT.PUBLISHED
 def event_published(world: World, event, docstring=None, datatable=None):
     compare.assert_subset(world.system.published(event), [compare.payload(datatable, docstring)], f"the {event} events")

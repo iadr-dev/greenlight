@@ -31,6 +31,28 @@ Status: DRAFT
 - Deprecation warnings are errors where the toolchain supports it (<the switch for this stack>).
 - Before using a library API, the current documentation is read (the project's docs, or a documentation tool such as context7), not recalled from memory.
 
+## API
+
+<!-- Delete this section if the project exposes no interface to other code. Read with the `api-design` card. -->
+- Schema file: <openapi.yaml, schema.graphql, a .proto file, or none>; it changes on purpose, and a breaking change is named in the report.
+- Versioning and deprecation: <where the version lives, what counts as breaking, how long a deprecated operation stays>
+- Error shape: <one shape for every error, for example RFC 9457 problem details, with a stable code>
+- Pagination: <cursor or page, default and maximum page size, the order that makes pages stable>
+- Authentication and authorization: <how a caller proves who it is; every operation states who may call it>
+- Idempotency: <operations that create or charge accept an idempotency key, or say why not>
+
+## Data
+
+<!-- Delete this section if the project has no database. Read with the `database-schema`, `database-migrations`,
+     `database-performance` and `database-engines` cards. -->
+- Engine and version used in production: <for example PostgreSQL 16>; tests run against the same engine, not a lookalike.
+- Schema: keys and foreign keys are declared; constraints state the rules (`NOT NULL`, `UNIQUE`, `CHECK`); each fact is stored once unless a measured reason says otherwise.
+- Types: money as <integer minor units or exact decimal>, instants as <timestamps with a time zone in UTC>, identifiers as <one type>.
+- Indexes: one per foreign key that is joined or filtered on, and one per query on a table that will be large; none without a query or scenario that needs it.
+- Queries: no query per record (a query-count scenario for every operation that returns a collection), every result is bounded, transactions are short.
+- Soft delete, audit columns and retention: <the policy, and which columns hold personal data and for how long>
+- Migrations: <tool>; never edit an applied migration; every migration is reversible or says why not; risky changes are done in compatible steps; tested up, down and up on the production engine.
+
 ## Dependencies
 
 - A new dependency is a decision the person makes; it is named in the report, never added silently.

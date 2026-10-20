@@ -49,6 +49,16 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | Q4 | The diff uses no deprecated or removed API: no deprecation warning is silenced or ignored, and the calls into libraries match their current documentation | yes | the deprecation check where configured; otherwise read the diff against the current documentation (project docs, or a documentation tool such as context7) |
 | Q5 | Nothing was suppressed to pass a check: no blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `// nolint` or `@ts-ignore` added without a stated reason | yes | search the diff for suppression markers |
 
+## D - API contract and data
+
+| ID | Check | Blocking | How |
+|---|---|---|---|
+| D1 | When the project has a schema file (OpenAPI, GraphQL, protobuf), its diff matches the approved rules and every breaking change is named and was approved; without a schema file this item is not applicable | yes | the diff of the schema file, the recorded `api-breaking` check where configured, the `api-design` card |
+| D2 | Every migration in the diff is reversible or says why not, does not edit an applied migration, and avoids steps that lock a large table or break the version still running during a deploy; no migration in the diff means not applicable | yes | read the migrations against the data section of `.bdd/standards.md` and the `database-migrations` and `database-engines` cards |
+| D3 | Every new table, key, constraint and index follows the data section of the standards, and each new index names the query or scenario that needs it; money, time and personal data columns are typed and recorded as the standards say | no | read the schema change against `database-schema` and the ER diagram in `design.md` |
+| D4 | When the adapter declares the `data` profile and the feature touches a collection (otherwise not applicable), every operation that returns or processes a collection has a scenario with at least three seeded records and a `ran at most N queries` step, and N does not grow with the records; the evidence is the green run, not the code | yes | read the feature files and `bdd classify FEAT-n`; the `C.QUERY.COUNT` and `database-performance` cards |
+| D5 | Results are bounded and ordered (a page size with a maximum, a stable order), transactions hold no network call, and no cache lacks an invalidation rule | no | read the diff against the `database-performance` card |
+
 ## L - Locks, gates and approvals
 
 | ID | Check | Blocking | How |
