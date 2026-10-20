@@ -32,4 +32,4 @@ Start the server with `SHOP_TEST_ENDPOINTS=1` and a test can use, without going 
 | `POST /api/test/reset` | forgets everything |
 
 Without the variable these answer 404. Feature requests to try on the app are in `evals/requests/`
-(`minimum-order`, `login-return`), with the answers a person would give in `evals/answers/`.
+(`minimum-order`, `login-return`), with the answers a person would give in `evals/requests/*.answers.json`.

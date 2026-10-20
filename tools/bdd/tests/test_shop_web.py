@@ -96,7 +96,7 @@ class AppTest(unittest.TestCase):
             with self.subTest(request=name):
                 self.assertTrue(harness.APPS[app].is_dir())
                 self.assertIn(harness.ADAPTERS[app], adapter.available())
-                self.assertTrue((REPO / "evals" / "answers" / f"{name}.md").is_file())
+                self.assertTrue((REPO / "evals" / "requests" / f"{name}.answers.json").is_file())
         self.assertEqual(set(harness.APPS), set(harness.ADAPTERS))
 
     def test_the_fixture_features_and_seams_fit_the_adapter(self):

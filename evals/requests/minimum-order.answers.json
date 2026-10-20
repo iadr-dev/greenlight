@@ -1,0 +1,27 @@
+[
+  {
+    "id": "what the minimum is measured on",
+    "about": ["minimum", "total"],
+    "expect": ["cart"]
+  },
+  {
+    "id": "an order of exactly 5.00",
+    "about": ["exactly", "5.00"],
+    "expect": ["allow"]
+  },
+  {
+    "id": "what the message says",
+    "about": ["message", "minimum"],
+    "expect": ["minimum order"]
+  },
+  {
+    "id": "where the minimum applies",
+    "about": ["cart page"],
+    "expect": ["only at checkout"]
+  },
+  {
+    "id": "what happens to the cart when checkout is refused",
+    "about": ["cart", "refus"],
+    "expect": ["stay"]
+  }
+]

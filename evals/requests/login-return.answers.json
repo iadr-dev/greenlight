@@ -1,0 +1,27 @@
+[
+  {
+    "id": "which pages remember where the visitor was going",
+    "about": ["pages", "sign-in"],
+    "expect": ["cart", "checkout"]
+  },
+  {
+    "id": "where the wanted page is kept",
+    "about": ["wanted page", "kept"],
+    "expect": ["address"]
+  },
+  {
+    "id": "which addresses are accepted",
+    "about": ["wanted page", "address"],
+    "expect": ["path", "shop"]
+  },
+  {
+    "id": "what happens after a failed sign-in",
+    "about": ["failed", "sign-in"],
+    "expect": ["same"]
+  },
+  {
+    "id": "signing in with no wanted page",
+    "about": ["no wanted page"],
+    "expect": ["cart"]
+  }
+]

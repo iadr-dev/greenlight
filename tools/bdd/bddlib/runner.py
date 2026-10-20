@@ -218,13 +218,18 @@ def scenarios_of(rules: cfg.RunRules, scenarios: list[dict], several: bool) -> l
     return [s["name"] for s in scenarios if not several or not prefix or s["path"].startswith(prefix)]
 
 
+def fresh_seed() -> int:
+    """A new shuffle seed, recorded with the run so the order can be repeated."""
+    return random.SystemRandom().randrange(1, 10**6)
+
+
 def run_feature(root: Path, feature_id: str, scenarios: list[dict], adapters: list[cfg.RunRules], *, shuffle: bool = False,
                 isolated: bool = False, seed: int | None = None) -> dict:
     """Run the feature's tests with every adapter in ``adapters`` (one process per scenario when ``isolated``) and
     record the outcome as one run: the cases of all of them, side by side."""
     folder = runs_dir(root, feature_id)
     folder.mkdir(parents=True, exist_ok=True)
-    seed = (seed if seed is not None else random.SystemRandom().randrange(1, 10**6)) if shuffle else None
+    seed = (seed if seed is not None else fresh_seed()) if shuffle else None
     runs, cases = [], []
     for rules in adapters:
         names = scenarios_of(rules, scenarios, len(adapters) > 1)

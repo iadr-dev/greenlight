@@ -1,0 +1,22 @@
+[
+  {
+    "id": "what the order response shows",
+    "about": ["discount"],
+    "expect": ["amount"]
+  },
+  {
+    "id": "what the threshold is measured on",
+    "about": ["1000"],
+    "expect": ["before"]
+  },
+  {
+    "id": "an order of exactly 1000",
+    "about": ["exactly 1000"],
+    "expect": ["qualif"]
+  },
+  {
+    "id": "rounding",
+    "about": ["round"],
+    "expect": ["2", "half"]
+  }
+]
