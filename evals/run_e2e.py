@@ -39,7 +39,7 @@ GIT = ["git", "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "-c", "
 # A feature request is judged by reaching `done`, an adoption request by the invariants in adoption_invariants.
 REQUEST_KINDS = {
     "discounts": {"app": "shop-api", "skill": "feature", "packages": ["fastapi", "httpx"]},
-    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "packages": ["flask"]},
+    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "packages": ["flask", "flask-wtf"]},
 }
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.

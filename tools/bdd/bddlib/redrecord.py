@@ -72,7 +72,7 @@ def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> l
             continue
         if "R" in entry[:2] or "C" in entry[:2]:
             i += 1                                    # a rename/copy entry is followed by the original path
-        if not (entry[:2] == "??" and is_generated_bytecode(entry[3:])):
+        if not (entry.startswith("??") and is_generated_bytecode(entry[3:])):
             paths.append(entry[3:])
     return [p for p in paths if is_production(p, excluded)]
 

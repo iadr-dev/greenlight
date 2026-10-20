@@ -4,7 +4,7 @@ A small Flask billing service with **no tests, on purpose**. It is the reference
 evaluation asks greenlight to describe what the code does today, lock that description and leave the code alone.
 
 ```sh
-uv pip install flask
+uv pip install --require-hashes -r requirements.txt
 python smoke.py        # starts the app and makes two requests
 ```
 

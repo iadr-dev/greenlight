@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from flask import Flask, jsonify, request
+from flask_wtf.csrf import CSRFProtect
 
 from . import fees, pricing
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.config["SECRET_KEY"] = "legacy-billing-reference-app"       # a fixed key is fine here: the app keeps no sessions
+    CSRFProtect(app)                                                  # any state-changing route added later is covered
 
     @app.get("/invoice")
     def quote_invoice():
