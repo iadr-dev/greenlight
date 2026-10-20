@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Seven practice cards (`cards/practices/`) for the product and QA ideas of decisions D21 and D22: request decoder, blocking questions, story splitting, pre-mortem, test data, mutation check and stability rerun, each with the phase it belongs to, a worked example and known pitfalls. `phase` in a card's front matter must be a real phase.
+
 - Knowledge cards: `cards/<kind>/<id>.md` with flat front matter (`id` equal to the file name, `kind`, `apply_when`, and for techniques `output` and `cost`, optional `pairs_with`) and required sections, always including `## Known pitfalls`. `bdd cards build [--check]` validates every card (kind matches folder, ids unique, `pairs_with` names real cards, sections present and non-empty) and writes `cards/index.json`; `--check` fails when the index has drifted, and a unit test does the same on every CI run. `bdd cards list [--kind K]` prints the front matter only, so an agent can choose cards cheaply. The first six cards are the test-design techniques: boundary value, equivalence partitioning, decision table, state transition, pairwise and negative cases, written for greenlight's rules, examples and trace tags.
 
 - CI installs the adapter contract's requirements with `uv` (`uv pip install --require-hashes --no-build`) from the pinned `requirements-dev.txt`.

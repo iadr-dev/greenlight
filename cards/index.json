@@ -1,6 +1,89 @@
 {
   "cards": [
     {
+      "apply_when": "the brief has gaps that would change a rule, and the person is available to answer",
+      "id": "blocking-questions",
+      "kind": "practice",
+      "output": "at most three questions asked one at a time, and every other gap recorded as an assumption with its rationale and alternatives",
+      "pairs_with": [
+        "request-decoder",
+        "pre-mortem"
+      ],
+      "path": "practices/blocking-questions.md",
+      "phase": "discover"
+    },
+    {
+      "apply_when": "verifying that tests written or helped by an AI would really catch a defect, once the implementation is green",
+      "id": "mutation-check",
+      "kind": "practice",
+      "output": "a mutation score for the changed production files, the surviving mutants, and an example added for every survivor that matters",
+      "pairs_with": [
+        "stability-rerun",
+        "negative-cases"
+      ],
+      "path": "practices/mutation-check.md",
+      "phase": "verify"
+    },
+    {
+      "apply_when": "the draft rules and examples are ready and before the person is asked to approve them",
+      "id": "pre-mortem",
+      "kind": "practice",
+      "output": "a short list of how this feature could fail in the real world, each marked blocking, tracked or noise, with a rule or example added for every blocking one",
+      "pairs_with": [
+        "negative-cases",
+        "blocking-questions"
+      ],
+      "path": "practices/pre-mortem.md",
+      "phase": "specify"
+    },
+    {
+      "apply_when": "a feature request has just arrived, in the person's own words, before any rule is written",
+      "id": "request-decoder",
+      "kind": "practice",
+      "output": "the literal ask, the job behind it, must-haves and nice-to-haves, a problem statement with goals and non-goals, and a list of gaps",
+      "pairs_with": [
+        "blocking-questions",
+        "story-splitting"
+      ],
+      "path": "practices/request-decoder.md",
+      "phase": "discover"
+    },
+    {
+      "apply_when": "a scenario failed intermittently, or before declaring a feature done when it touches time, concurrency, the network or a UI",
+      "id": "stability-rerun",
+      "kind": "practice",
+      "output": "results of several runs on the same commit, shuffled and isolated, with each unstable scenario classified as product, test, environment or data",
+      "pairs_with": [
+        "test-data",
+        "mutation-check"
+      ],
+      "path": "practices/stability-rerun.md",
+      "phase": "verify"
+    },
+    {
+      "apply_when": "a request carries more than a handful of rules, several kinds of users, or more than one independent outcome",
+      "id": "story-splitting",
+      "kind": "practice",
+      "output": "thin vertical slices, each with its own rules and examples, in the order they should be built",
+      "pairs_with": [
+        "request-decoder",
+        "blocking-questions"
+      ],
+      "path": "practices/story-splitting.md",
+      "phase": "specify"
+    },
+    {
+      "apply_when": "writing the Given steps and drivers that create the records, files and clock a scenario depends on",
+      "id": "test-data",
+      "kind": "practice",
+      "output": "data that each scenario creates for itself, with factories, fixed seeds and no personal data",
+      "pairs_with": [
+        "stability-rerun"
+      ],
+      "path": "practices/test-data.md",
+      "phase": "bind"
+    },
+    {
       "apply_when": "a rule has a threshold, limit, range, cut-off time or size, or a count that changes behaviour",
       "cost": "low",
       "id": "boundary-value",

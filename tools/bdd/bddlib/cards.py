@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import frontmatter, store
+from . import frontmatter, state, store
 from .errors import UsageError
 from .statecmd import guarded
 
@@ -76,6 +76,8 @@ def check_card(base: Path, path: Path) -> tuple[dict | None, list[str]]:
     unknown = set(meta) - {"id", "kind", *REQUIRED[kind], *OPTIONAL}
     if unknown:
         problems.append(f"{rel}: unknown front matter key(s) {', '.join(sorted(unknown))}")
+    if "phase" in meta and meta["phase"] not in state.PHASES:
+        problems.append(f"{rel}: phase must be one of {', '.join(state.PHASES)}")
     if "pairs_with" in meta and not isinstance(meta["pairs_with"], list):
         problems.append(f"{rel}: pairs_with must be a list like [a, b]")
     found = sections(body)
