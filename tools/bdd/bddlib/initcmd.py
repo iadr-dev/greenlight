@@ -1,0 +1,138 @@
+"""`bdd init`: set a repository up for greenlight.
+
+    bdd init --detect                       which adapters fit this repository, and why
+    bdd init [--adapter NAME] [--autonomy LEVEL]
+                                            create .bdd/ (config, glossary, ignore file) and apply the adapter
+    bdd init --smoke                        prove the adapter's sample feature runs green, leaving nothing behind
+
+Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none).
+"""
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import shutil
+import sys
+from pathlib import Path
+
+from . import adapter, classify, runner, state
+from . import config as cfg
+from .errors import UsageError
+from .statecmd import guarded
+
+IGNORED = (".enforcement/", ".integrity/", ".runs/")      # machine-local data: not for version control
+SAMPLE = "FEAT-000"
+
+
+def first_match(root: Path, rule: dict) -> str | None:
+    """Why ``rule`` (a ``[detect]`` table: files to look at, words to look for) fits ``root``, or None."""
+    words = [w.casefold() for w in rule.get("contains", [])]
+    for pattern in rule.get("files", []):
+        for path in sorted(p for p in root.iterdir() if p.is_file() and fnmatch.fnmatch(p.name, pattern)):
+            text = path.read_text(encoding="utf-8", errors="replace").casefold()
+            hit = next((w for w in words if w in text), None)
+            if hit:
+                return f"{path.name} mentions {hit}"
+    return None
+
+
+def detect(root: Path) -> list[tuple[str, str]]:
+    """(adapter, reason) for every adapter whose detection rule matches a file in ``root``."""
+    found = []
+    for name in adapter.available():
+        reason = first_match(root, adapter.load(adapter.find(name)).get("detect", {}))
+        if reason:
+            found.append((name, reason))
+    return found
+
+
+def config_text(autonomy: str, profiles: list[str] | None) -> str:
+    lines = [f'autonomy = "{autonomy}"', 'language = "auto"', 'enforcement = "auto"']
+    if profiles:
+        lines.append("profiles = " + adapter.toml_value(profiles))
+    return "\n".join(lines) + "\n"
+
+
+def write_project(root: Path, autonomy: str, profiles: list[str] | None) -> list[str]:
+    if autonomy not in state.AUTONOMY:
+        raise UsageError(f"autonomy must be one of {', '.join(state.AUTONOMY)}")
+    bdd = root / cfg.BDD_DIR
+    if (bdd / "config.toml").exists():
+        raise UsageError(f"{bdd / 'config.toml'} already exists; this repository is already set up")
+    created = []
+    (bdd / "features").mkdir(parents=True, exist_ok=True)
+    for rel, text in (("config.toml", config_text(autonomy, profiles)), (".gitignore", "".join(f"{i}\n" for i in IGNORED))):
+        (bdd / rel).write_text(text, encoding="utf-8", newline="\n")
+        created.append(f"{cfg.BDD_DIR}/{rel}")
+    glossary = bdd / "glossary.md"
+    if not glossary.exists():
+        shutil.copyfile(adapter.adapters_dir().parent / "templates" / "glossary.md", glossary)
+        created.append(f"{cfg.BDD_DIR}/glossary.md")
+    return created
+
+
+def do_init(root: Path, name: str | None, autonomy: str) -> int:
+    existing = root / cfg.BDD_DIR / "config.toml"
+    created: list[str] = []
+    if existing.exists():
+        if not name:
+            raise UsageError("this repository is already set up; name an adapter to add with --adapter")
+    else:
+        profiles = adapter.load(adapter.find(name)).get("profiles") if name else None
+        created += write_project(root, autonomy, profiles)
+    if name:
+        files, kept = adapter.apply(root, name)
+        created += files
+        print(f"adapter {name} added" + (f" ({len(kept)} existing file(s) left alone)" if kept else ""))
+    print("\n".join(f"  + {path}" for path in created))
+    print("next: bdd init --smoke   (proves the sample feature runs green)" if name else
+          "next: bdd init --detect, then bdd init --adapter NAME")
+    return 0
+
+
+def do_smoke(root: Path) -> int:
+    config = cfg.load(root)
+    rules = runner.pick_rules(config, None)
+    feature_dir = state.create(root, SAMPLE, "Sample", "standard")
+    try:
+        scenarios = [s["name"] for s in classify.feature_scenarios(root, SAMPLE)]
+        record = runner.run_feature(root, SAMPLE, scenarios, rules)
+        report = classify.classify_run(record, classify.feature_scenarios(root, SAMPLE), list(config.runs))
+    finally:
+        shutil.rmtree(feature_dir, ignore_errors=True)
+        shutil.rmtree(runner.runs_dir(root, SAMPLE), ignore_errors=True)
+    if report["green"]["valid"]:
+        print(f"the sample feature runs green ({len(report['scenarios'])} scenarios); nothing was left behind")
+        return 0
+    print(classify.render(report), file=sys.stderr)
+    print("the sample feature is not green; check the adapter's requirements (see its guide.md)", file=sys.stderr)
+    return 1
+
+
+def run(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="bdd init", description="Set this repository up for greenlight.")
+    ap.add_argument("--detect", action="store_true", help="list the adapters that fit this repository")
+    ap.add_argument("--adapter", help="the adapter to apply (see bdd adapter list)")
+    ap.add_argument("--autonomy", default="guided", choices=state.AUTONOMY, help="default autonomy level (default: guided)")
+    ap.add_argument("--smoke", action="store_true", help="run the adapter's sample feature and clean up")
+    args = ap.parse_args(argv)
+
+    def action() -> int:
+        here = Path.cwd()
+        if args.detect:
+            found = detect(here)
+            print("\n".join(f"{name}: {why}" for name, why in found) or "no adapter matched this repository")
+            return 0
+        if args.smoke:
+            root = cfg.find_root(here)
+            if root is None:
+                raise UsageError("not inside a greenlight project; run bdd init first")
+            return do_smoke(root)
+        root = cfg.find_root(here) or here
+        return do_init(root, args.adapter, args.autonomy)
+
+    try:
+        return guarded("init", action)
+    except cfg.ConfigError as exc:
+        print(f"bdd init: {exc}", file=sys.stderr)
+        return 2
