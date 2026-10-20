@@ -1,7 +1,7 @@
 ---
 id: C.STUB.RESPOND
 kind: instruction
-apply_when: the system calls something outside it: a payment provider, an email service, another team's API
+apply_when: "the system calls something outside it: a payment provider, an email service, another team's API"
 ---
 ## Semantics
 

@@ -1,7 +1,7 @@
 ---
 id: C.ACTOR.AUTH
 kind: instruction
-apply_when: a rule depends on who is asking: roles, permissions, ownership
+apply_when: "a rule depends on who is asking: roles, permissions, ownership"
 ---
 ## Semantics
 

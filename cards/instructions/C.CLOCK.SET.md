@@ -1,7 +1,7 @@
 ---
 id: C.CLOCK.SET
 kind: instruction
-apply_when: the outcome depends on the current date or time: expiry, schedules, age, cut-offs
+apply_when: "the outcome depends on the current date or time: expiry, schedules, age, cut-offs"
 ---
 ## Semantics
 

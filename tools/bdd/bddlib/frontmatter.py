@@ -37,6 +37,16 @@ def _value(raw: str):
             raise FrontmatterError(f"unterminated list: {raw!r}")
         inner = raw[1:-1].strip()
         return [_scalar(x) for x in inner.split(",")] if inner else []
+    return _plain(raw)
+
+
+def _plain(raw: str):
+    """An unquoted value must be valid YAML as it stands: Claude Code and Codex read this with a real YAML parser,
+    where ``: `` inside a plain value is an error, `` #`` starts a comment, and some first characters are syntax."""
+    if raw[:1] in "\"'":
+        return _scalar(raw)
+    if ": " in raw or " #" in raw or raw.endswith(":") or raw[:1] in "{&*!|>%@`":
+        raise FrontmatterError(f"value {raw!r} is not valid YAML as written: put it in double quotes")
     return _scalar(raw)
 
 
