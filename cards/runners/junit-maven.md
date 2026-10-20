@@ -3,6 +3,8 @@ id: junit-maven
 kind: runner
 apply_when: "a Java or Kotlin project built with Maven and tested with JUnit 5 through Surefire (the generic-junit adapter)"
 ---
+> For a Spring Boot service (Maven) or an Android/Kotlin module (Gradle) written with Cucumber-JVM, the `java-cucumber-spring` adapter ships this setup ready made: steps, drivers, run command and classification. Use this card when your tests are plain JUnit.
+
 ## Run
 
 Tag the tests of a feature with the marker and select them with Surefire's `groups` property:
