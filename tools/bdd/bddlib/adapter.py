@@ -1,9 +1,13 @@
 """Adapters: a directory with ``adapter.toml``, a guide, and ``templates/`` to copy into a project.
 
     bdd adapter list
-    bdd adapter apply NAME      copy the templates into the project and add the adapter to .bdd/config.toml
+    bdd adapter apply NAME [--into DIR]
+                                copy the templates into the project (or into its folder DIR) and add the adapter
+                                to .bdd/config.toml
 
-``apply`` never overwrites a file that exists, and refuses an adapter the project already has.
+``apply`` never overwrites a file that exists, and refuses an adapter the project already has in that folder.
+``--into`` is for a repository with several adapters, for example a backend in ``api`` and a web front end in ``web``:
+the adapter's files and its run command then live under that folder, and ``bdd run`` runs every adapter.
 """
 from __future__ import annotations
 
@@ -66,9 +70,11 @@ def toml_value(value) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
-def config_block(data: dict) -> str:
-    """The ``[[adapters]]`` tables of config.toml for this adapter."""
+def config_block(data: dict, into: str = "") -> str:
+    """The ``[[adapters]]`` tables of config.toml for this adapter (``root`` names the folder it works in)."""
     lines = ["", "[[adapters]]", f"name = {toml_value(data['name'])}"]
+    if into:
+        lines.append(f"root = {toml_value(into)}")
     lines += [f"{key} = {toml_value(value)}" for key, value in data.get("paths", {}).items()]
     for table in ("run", "classify", "scan"):
         if table in data:
@@ -81,17 +87,27 @@ def template_files(path: Path) -> list[Path]:
     return sorted(p for p in base.rglob("*") if p.is_file() and p.name != ".gitkeep" and not SKIPPED_PARTS & set(p.parts))
 
 
-def apply(root: Path, name: str) -> tuple[list[str], list[str]]:
+def destination(root: Path, into: str) -> str:
+    """The folder ``--into`` names, checked to be a folder inside the project (blank: the project itself)."""
+    base = cfg.adapter_base({"root": into}, root / cfg.BDD_DIR / "config.toml")
+    target = (root / base).resolve() if base else root.resolve()
+    if target != root.resolve() and root.resolve() not in target.parents:
+        raise UsageError(f"--into {into!r} is outside the project")
+    return base
+
+
+def apply(root: Path, name: str, into: str = "") -> tuple[list[str], list[str]]:
     """Copy the templates and register the adapter. Returns (created, left alone because they exist)."""
     path = find(name)
     data = load(path)
+    base = destination(root, into)
     config_path = root / cfg.BDD_DIR / "config.toml"
     existing = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
-    if any(a.get("name") == name for a in tomllib.loads(existing).get("adapters", [])):
-        raise UsageError(f"adapter {name} is already in .bdd/config.toml")
+    if any(a.get("name") == name and cfg.adapter_base(a, config_path) == base for a in tomllib.loads(existing).get("adapters", [])):
+        raise UsageError(f"adapter {name} is already in .bdd/config.toml" + (f" for {base}" if base else ""))
     created, kept = [], []
     for source in template_files(path):
-        rel = source.relative_to(path / "templates")
+        rel = Path(base) / source.relative_to(path / "templates") if base else source.relative_to(path / "templates")
         target = root / rel
         if target.exists():
             kept.append(rel.as_posix())
@@ -100,7 +116,7 @@ def apply(root: Path, name: str) -> tuple[list[str], list[str]]:
         shutil.copyfile(source, target)
         created.append(rel.as_posix())
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(existing.rstrip("\n") + ("\n" if existing.strip() else "") + config_block(data),
+    config_path.write_text(existing.rstrip("\n") + ("\n" if existing.strip() else "") + config_block(data, base),
                            encoding="utf-8", newline="\n")
     return created, kept
 
@@ -109,13 +125,13 @@ def run(argv: list[str]) -> int:
     if argv[:1] == ["list"] and len(argv) == 1:
         print("\n".join(available()) or "no adapters installed")
         return 0
-    if argv[:1] == ["apply"] and len(argv) == 2:
+    if argv[:1] == ["apply"] and (len(argv) == 2 or (len(argv) == 4 and argv[2] == "--into")):
         def action() -> int:
-            created, kept = apply(project_root(), argv[1])
+            created, kept = apply(project_root(), argv[1], argv[3] if len(argv) == 4 else "")
             print(f"adapter {argv[1]} added: {len(created)} file(s) created" + (f", {len(kept)} left alone" if kept else ""))
             print("\n".join(f"  + {p}" for p in created))
             print("\n".join(f"  = {p} (exists)" for p in kept))
             return 0
         return guarded("adapter", action)
-    print("usage: bdd adapter list | bdd adapter apply NAME", file=sys.stderr)
+    print("usage: bdd adapter list | bdd adapter apply NAME [--into DIR]", file=sys.stderr)
     return 2

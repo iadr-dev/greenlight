@@ -1,7 +1,8 @@
 """`bdd run` and `bdd classify`.
 
     bdd run FEAT-007 [--adapter NAME] [--shuffle [--seed N]] [--isolated]
-        run the feature's tests with the adapter's command and record what happened
+        run the feature's tests with the adapter's command (with every adapter's, when a repository has several)
+        and record what happened
     bdd classify FEAT-007 [--expect red|green] [--json]
         classify the recorded run per scenario; with --expect, exit 1 unless that verdict holds
 
@@ -22,7 +23,7 @@ from .statecmd import guarded, project_root
 def run_run(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="bdd run", description="Run a feature's tests and record the result.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
-    ap.add_argument("--adapter", help="which adapter's command to use (needed when several have one)")
+    ap.add_argument("--adapter", help="run only this adapter's tests (by default every adapter that has a run command runs)")
     ap.add_argument("--shuffle", action="store_true", help="random order, to expose scenarios that depend on each other")
     ap.add_argument("--seed", type=int, help="repeat a shuffled order (with --shuffle)")
     ap.add_argument("--isolated", action="store_true", help="one process per scenario, to expose shared state")
@@ -37,10 +38,9 @@ def run_run(argv: list[str]) -> int:
 def do_run(args: argparse.Namespace) -> int:
     root = project_root()
     store.find_feature_dir(root, args.feature)
-    rules = runner.pick_rules(cfg.load(root), args.adapter)
-    names = [s["name"] for s in classify.feature_scenarios(root, args.feature)]
-    record = runner.run_feature(root, args.feature, names, rules, shuffle=args.shuffle, isolated=args.isolated,
-                                seed=args.seed)
+    adapters = runner.pick_all(cfg.load(root), args.adapter)
+    record = runner.run_feature(root, args.feature, classify.feature_scenarios(root, args.feature), adapters,
+                                shuffle=args.shuffle, isolated=args.isolated, seed=args.seed)
     counts = Counter(c["outcome"] for c in record["cases"])
     seed = f", seed {record['seed']}" if record["seed"] else ""
     print(f"{args.feature}: {len(record['runs'])} run(s) ({record['mode']}{seed}): "

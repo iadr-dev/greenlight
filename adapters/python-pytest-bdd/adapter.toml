@@ -21,7 +21,7 @@ support = ["tests/pytest.ini", "tests/conftest.py", "tests/test_features.py", "t
 # see the project's packages. pytest takes its settings only from tests/pytest.ini (-c), reads conftest files only
 # from tests/ (--confcutdir) and gets no PYTEST_* variables (scrub_env): everything that decides which scenarios run
 # is a bound file. The tags of a scenario are pytest markers.
-by_tag = '{project_python} -X utf8 -I -m pytest -c tests/pytest.ini --rootdir {root} --confcutdir tests -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
+by_tag = '{project_python} -X utf8 -I -m pytest -c tests/pytest.ini --rootdir {base} --confcutdir tests -q -p no:cacheprovider -W ignore::pytest.PytestUnknownMarkWarning -m {tag}'
 scrub_env = ["PYTEST_"]
 report = '--junitxml={out}'
 shuffle = '--bdd-shuffle-seed {seed}'

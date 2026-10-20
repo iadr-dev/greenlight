@@ -47,6 +47,25 @@ def expand_pattern(root: Path, pattern: str) -> list[Path]:
     return sorted(found)
 
 
+def adapter_base(adapter: dict, path: Path) -> str:
+    """The folder an adapter works in, relative to the project (``root = "web"``); blank means the project itself.
+    Every path of the adapter and its run commands are relative to it, so a repository can hold several adapters."""
+    value = adapter.get("root", "")
+    if not isinstance(value, str):
+        raise ConfigError(f"{path}: an adapter's root must be a folder name")
+    folder = value.replace("\\", "/").strip("/")
+    parts = [p for p in folder.split("/") if p not in ("", ".")]
+    if ".." in parts or value.startswith(("/", "\\")) or Path(value).is_absolute() or ":" in value:
+        raise ConfigError(f"{path}: an adapter's root must be a folder inside the project, not {value!r}")
+    return "/".join(parts)
+
+
+def adapter_path(adapter: dict, key: str, path: Path) -> str:
+    """The project-relative path an adapter names under ``key`` (features, steps, drivers, a support file)."""
+    base = adapter_base(adapter, path)
+    return f"{base}/{adapter[key]}" if base else str(adapter[key])
+
+
 @dataclass(frozen=True)
 class ScanRules:
     """How ``bdd scan`` reads one adapter's step definitions (``[adapters.scan]`` in config.toml)."""
@@ -73,6 +92,8 @@ class RunRules:
     test_defect: tuple[str, ...] = ()        # failure text of a broken test (first match wins, checked first)
     expected_fail: tuple[str, ...] = ()      # failure text of a test that fails because the feature is missing
     scrub_env: tuple[str, ...] = ()          # environment variables with these prefixes never reach the runner
+    base: str = ""                           # the folder the command runs in, relative to the project ("" = the project)
+    features: str = ""                       # the project-relative folder of this adapter's feature files
 
 
 @dataclass(frozen=True)
@@ -164,7 +185,7 @@ def _scan_rules(root: Path, adapter: dict, path: Path) -> ScanRules | None:
     start = _patterns({"step_start": [table["step_start"]]}, "step_start", path)[0]
     if "kind" not in re.compile(start).groupindex:
         raise ConfigError(f"{path}: [adapters.scan] step_start needs a named group (?P<kind>given|when|then)")
-    dirs = tuple(root / adapter[key] for key in ("steps", "drivers") if key in adapter)
+    dirs = tuple(root / adapter_path(adapter, key, path) for key in ("steps", "drivers") if key in adapter)
     return ScanRules(dirs, start, _patterns(table, "assert_patterns", path), _patterns(table, "sleep_patterns", path),
                      _patterns(table, "stub_patterns", path))
 
@@ -192,7 +213,8 @@ def _run_rules(adapter: dict, path: Path) -> RunRules | None:
     classify = adapter.get("classify", {})
     return RunRules(str(adapter.get("name", "")), table["by_tag"], table["report"], table.get("shuffle", ""),
                     table.get("isolated", ""), timeout, _patterns(classify, "test_defect", path),
-                    _patterns(classify, "expected_fail", path), _prefixes(table, path))
+                    _patterns(classify, "expected_fail", path), _prefixes(table, path), adapter_base(adapter, path),
+                    adapter_path(adapter, "features", path) if "features" in adapter else "")
 
 
 def _mutation_rules(adapter: dict, path: Path) -> MutationRules | None:
@@ -248,6 +270,7 @@ def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tupl
         if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
             raise ConfigError(f"{path}: support must be a list of file names or patterns")
         for name in names:
+            name = f"{adapter_base(adapter, path)}/{name}" if adapter_base(adapter, path) else name
             if "**" in name:
                 raise ConfigError(f"{path}: support pattern {name!r}: ** is not supported; use one * per folder level")
             if any(c in name for c in "*?["):
@@ -322,10 +345,11 @@ def load(root: Path | str | None) -> Config:
         root=root,
         profiles=profiles,
         near_duplicate_similarity=float(gates.get("near_duplicate_step_similarity", DEFAULT_SIMILARITY)),
-        feature_dirs=tuple(root / a["features"] for a in data.get("adapters", []) if "features" in a),
-        step_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("steps", "drivers") if key in a),
-        test_dirs=tuple(root / a[key] for a in data.get("adapters", []) for key in ("features", "steps", "drivers")
-                        if key in a) + _support(root, data, path)[0],
+        feature_dirs=tuple(root / adapter_path(a, "features", path) for a in data.get("adapters", []) if "features" in a),
+        step_dirs=tuple(root / adapter_path(a, key, path) for a in data.get("adapters", []) for key in ("steps", "drivers")
+                        if key in a),
+        test_dirs=tuple(root / adapter_path(a, key, path) for a in data.get("adapters", [])
+                        for key in ("features", "steps", "drivers") if key in a) + _support(root, data, path)[0],
         autonomy=data.get("autonomy", "standard"),
         language=data.get("language", "auto"),
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),

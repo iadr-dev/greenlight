@@ -108,8 +108,7 @@ def do_smoke(root: Path) -> int:
     rules = runner.pick_rules(config, None)
     feature_dir = state.create(root, SAMPLE, "Sample", "standard")
     try:
-        scenarios = [s["name"] for s in classify.feature_scenarios(root, SAMPLE)]
-        record = runner.run_feature(root, SAMPLE, scenarios, rules)
+        record = runner.run_feature(root, SAMPLE, classify.feature_scenarios(root, SAMPLE), [rules])
         report = classify.classify_run(record, classify.feature_scenarios(root, SAMPLE), list(config.runs))
     finally:
         shutil.rmtree(feature_dir, ignore_errors=True)
