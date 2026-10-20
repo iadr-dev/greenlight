@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The CI templates capture the list of finished features before looping, so a failing `bdd status --done` stops the job instead of passing with nothing checked.
+
 ### Added
 - Installing without the plugin, completely (decision D36): `bdd install-skills claude` installs the skills for Claude Code without the plugin (`~/.claude/skills`, or `.claude/skills` with `--project`), `--uninstall` removes exactly what the command wrote for any target (files that carry the installation note and the marked `AGENTS.md` block; anything else is kept; emptied folders are removed), and `--user` and `--project` choose the scope. A deterministic test walks a whole feature in soft mode without a model: hooks absent, self-reported approvals, a seeded edit of a locked spec detected at the implement gate, the state and `bdd status` saying soft, and `enforcement = "hard"` refusing the same approvals. The platform probe also checks Codex when it is on the path (`--codex-only`, `--claude-only`).
 
