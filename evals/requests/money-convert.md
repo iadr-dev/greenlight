@@ -1,0 +1,1 @@
+Add currency conversion to the money library. `convert(amount, to, rate)` should return the amount in the target currency, using the given rate (units of the target currency per unit of the source currency), rounded half up to the minor units of the target currency. Converting to the same currency returns the amount unchanged, and a rate that is zero or negative is refused.

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Sample.dll" tests="2" skipped="0" failures="0" errors="0" time="0.1">
+    <testsuite name="Sample.Features.SampleFeature" tests="2" failures="0">
+      <testcase classname="Sample.Features.SampleFeature" name="TwoNumbersAreAdded" time="0.012"></testcase>
+      <testcase classname="Sample.Features.SampleFeature" name="ANegativeNumberIsRefused" time="0.012"></testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>

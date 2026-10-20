@@ -18,6 +18,21 @@ arm and is judged also by invariants read from the project: `adoption.holds` is 
 clean (every scenario `@existing`, the production source pinned at the bind gate and unchanged), the recorded run is a
 valid green, and git sees no production file touched (`adoption.production_files_touched` is empty).
 
+## Requests and reference apps
+
+| Request (`--request`) | Reference app | Adapter | Profile | Skill |
+|---|---|---|---|---|
+| `discounts` | `evals/apps/shop-api` (Python, FastAPI) | `python-pytest-bdd` | api | `feature` |
+| `adopt-billing` | `evals/apps/legacy-billing` (Python, Flask, no tests) | `python-pytest-bdd` | api | `adopt` |
+| `csv-report` | `evals/apps/csv-tool` (Go, standard library only) | `generic-junit` | cli | `feature` |
+| `money-convert` | `evals/apps/money-lib` (TypeScript) | `generic-junit` | lib | `feature` |
+
+The table is `REQUEST_KINDS` in `run_e2e.py`. For the two `generic-junit` apps the harness acts as the person after
+`bdd init`: it writes the app's own run line into `.bdd/config.toml` (`go run gotest.tools/gotestsum` for Go, an npm script
+around `node --test` for TypeScript) and removes the sample. They need Go, or Node and npm, on PATH instead of `uv`, and the
+baseline arm runs the app's own tests (`go test ./...`, `npm test`). No model-driven run has been made on `csv-report` or
+`money-convert` yet.
+
 ## Targets
 
 | Metric | Row field | Target |

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="godog" tests="2" skipped="0" failures="2" errors="0" time="0">
+  <testsuite name="Sample (delete me)" tests="2" skipped="0" failures="2" errors="0" time="0">
+    <testcase name="Two numbers are added" status="failed" time="0"><failure message="Step the result is 5: expected 5, got 0" type="failed"></failure></testcase>
+    <testcase name="A negative number is refused" status="failed" time="0"><failure message="Step the call fails with negative input: expected an error, got none" type="failed"></failure></testcase>
+  </testsuite>
+</testsuites>

@@ -17,7 +17,8 @@ from bddlib.errors import UsageError
 REPO = Path(__file__).resolve().parents[3]
 ADAPTER = REPO / "adapters" / "generic-junit"
 TEMPLATES = ADAPTER / "templates"
-RUNNER_CARDS = {"junit-gradle", "junit-maven", "pytest", "jest", "go-test", "dotnet-test"}
+RUNNER_CARDS = {"junit-gradle", "junit-maven", "pytest", "jest", "go-test", "dotnet-test", "godog", "cucumber-js", "cucumber-jvm",
+                "behave", "reqnroll"}
 
 ORDERS = """@FEAT-001
 Feature: Orders
@@ -251,6 +252,13 @@ class WrapperTest(unittest.TestCase):
     def test_patterns_outside_the_project_and_unknown_commands_are_refused(self):
         self.assertEqual(self.wrap("--command", self.command("one"), reports="../*.xml").returncode, 2)
         self.assertEqual(self.wrap("--command", "no-such-runner-xyz").returncode, 127)
+
+    def test_a_program_planted_in_the_project_is_not_started(self):
+        for name in ("planted-tool.bat", "planted-tool.cmd", "planted-tool"):
+            (self.root / name).write_text("@echo off\n", encoding="utf-8")
+        done = self.wrap("--command", "planted-tool")
+        self.assertEqual(done.returncode, 127)
+        self.assertIn("not on PATH", done.stderr)
 
     def test_a_report_with_a_doctype_is_refused(self):
         evil = self.root / "evil.py"

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="godog" tests="2" skipped="0" failures="0" errors="2" time="0">
+  <testsuite name="Sample (delete me)" tests="2" skipped="0" failures="0" errors="2" time="0">
+    <testcase name="Two numbers are added" status="undefined" time="0"><error message="Step I add 2 and 3: step is undefined" type="undefined"></error></testcase>
+    <testcase name="A negative number is refused" status="undefined" time="0"><error message="Step I add -1 and 3: step is undefined" type="undefined"></error></testcase>
+  </testsuite>
+</testsuites>

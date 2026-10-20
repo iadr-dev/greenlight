@@ -70,6 +70,8 @@ Edit `.bdd/config.toml` (the person edits this file; agents cannot) and replace 
 report goes, and what a red looks like there.
 
 - A runner that takes the report path as an option (pytest `--junitxml={out}`) needs no wrapper.
+- The wrapper starts the program it finds on `PATH` (never a file in the project folder), by its full name, so `npm`, `mvn` and
+  `gradle` start on Windows too; a `.bat` or `.cmd` program is refused when an argument holds a character that cmd.exe reads as syntax.
 - A runner that writes elsewhere uses the wrapper:
   `by_tag = '{python} -I tests/run_junit.py --reports "build/test-results/test/*.xml" --command "gradle test --tests *{marker}*"'`
   with `report = '--out {out}'`.
