@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire
+from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire, workspace
 from . import config as cfg
 from .errors import StoreError, UsageError
 
