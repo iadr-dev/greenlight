@@ -214,47 +214,57 @@ def check_enforcement_files(path: Path) -> str | None:
 _INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
                       r"|\buv\s+(?:pip\s+install|add|sync)\b", re.IGNORECASE)
 _ENVIRONMENT_PATH = re.compile(r"(?<![\w.-])(?:\.venv|venv|node_modules)(?![\w.-])", re.IGNORECASE)   # a whole path segment
-# Node package managers fail closed. For an agent a command that runs npm, pnpm, yarn or bun is allowed only when the
-# first word that is not a flag is one of the read-only or script subcommands below; anything else (an install, an
-# unknown subcommand, a flag that might take a value in front of the subcommand) is refused, and so are the programs
-# that fetch a package and run it. No tool's flag parsing is modelled: the position of the subcommand has to be clear.
-NODE_PROGRAMS = {"npm": "npm", "npm-cli": "npm", "pnpm": "pnpm", "yarn": "yarn", "bun": "bun",
-                 "npx": "fetch", "npx-cli": "fetch", "pnpx": "fetch", "bunx": "fetch", "corepack": "fetch"}
-SAFE_SUBCOMMANDS = {"run", "run-script", "test", "t", "ls", "list", "ll", "la", "why", "view", "info", "outdated", "audit"}
-SAFE_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
-_SCRIPT_SUFFIX = re.compile(r"\.(?:cmd|exe|ps1|js|cjs|mjs)$")
+# Node package tools fail closed. For an agent a command that runs npm, pnpm, yarn or bun is allowed only when the
+# subcommand comes first (after at most a few flags that take no value) and is a script or read-only one; anything else
+# is refused, and so are the programs that fetch a package and run it. No tool's flag parsing is modelled: a flag that
+# might take a value in front of the subcommand makes its place unclear, and an unclear place is a refusal.
+NODE_PROGRAMS = {"npm": "npm", "pnpm": "pnpm", "yarn": "yarn", "yarnpkg": "yarn", "bun": "bun",
+                 "npx": "fetch", "pnpx": "fetch", "bunx": "fetch", "corepack": "fetch"}
+SCRIPT_SUFFIXES = {"cmd", "exe", "ps1", "js", "cjs", "mjs"}
+SAFE_SUBCOMMANDS = {"run", "run-script", "test", "t", "ls", "list", "why", "view", "info", "outdated"}
+VERSION_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
+QUIET_FLAGS = {"--silent", "-s", "--no-color", "--no-progress"}
+AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=")      # all that `audit` may be given
+CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
+                  "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
+                  "exec", "dlx", "x", "init", "create", "publish", "global"}
+DATA_COMMANDS = {"ls", "cat", "echo", "printf", "head", "tail", "wc", "stat", "file", "grep", "rg", "du", "tree", "dir",
+                 "which", "where", "realpath", "readlink", "cd", "pushd"}      # a path they are given is data, not a program
 _CONTINUATION = re.compile(r"\\\r?\n")
 _SIMPLE_COMMANDS = re.compile(r"[;&|\n`()]+")
 INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the project's environment (.venv, venv, node_modules): "
                    "that is the person's decision and it would change what the tests run on. Report the missing "
                    "requirement instead.")
 NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-manager commands other than scripts and "
-                "read-only ones (run, test, ls, why, view, info, outdated, audit, config get, pack --dry-run, --version), "
-                "and may not use npx, pnpx, bunx or corepack. Put flags after the subcommand (`npm run typecheck --prefix tests`). "
+                "read-only ones (run, test, ls, list, why, view, info, outdated, audit, --version), and may not use npx, pnpx, "
+                "bunx or corepack. Put the subcommand first and the flags after it (`npm run typecheck --prefix tests`). "
                 "Installing is the person's decision; report the missing requirement instead.")
 
 
 def node_program(word: str) -> str | None:
-    """What kind of package tool a command word starts, if any: a bare name, a script (``npm-cli.js``, ``npm.cmd``) or a
-    program in a ``bin`` folder. A folder that merely has the tool's name (``node_modules/npm``) is not a program."""
-    folder, _, name = word.replace("\\", "/").rpartition("/")
-    stem = _SCRIPT_SUFFIX.sub("", name.casefold())
-    program = NODE_PROGRAMS.get(stem)
-    runs = not folder or folder.rsplit("/", 1)[-1] in {"bin", ".bin"} or stem != name.casefold()
-    return program if runs else None
+    """What kind of package tool a command word starts, if any, whatever folder it is in: ``npm``, ``./tools/yarn``,
+    ``npm.cmd``, or a script run through node (``npm-cli.js``, ``pnpm.cjs``, ``yarn-1.22.19.cjs``)."""
+    name = word.replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if name in NODE_PROGRAMS:
+        return NODE_PROGRAMS[name]
+    stem, _, suffix = name.rpartition(".")
+    return NODE_PROGRAMS.get(stem.split("-", 1)[0]) if suffix in SCRIPT_SUFFIXES else None
 
 
 def node_arguments_are_safe(args: list[str]) -> bool:
-    """Is the first word that is not a flag a read-only or script subcommand, used in a way that changes nothing?"""
-    positional = [word for word in args if not word.startswith("-")]
-    if not positional:
-        return any(word in SAFE_FLAGS for word in args)
-    first = positional[0].casefold()
-    if first in SAFE_SUBCOMMANDS:
-        return first != "audit" or "fix" not in positional and "--fix" not in args
-    if first == "config":
-        return positional[1:2] in (["get"], ["list"])
-    return first == "pack" and "--dry-run" in args
+    """Is the subcommand the first argument (after value-less flags), a script or read-only one, with nothing later that
+    changes packages? ``audit`` is read-only only with the flags that report."""
+    first = 0
+    while first < len(args) and args[first] in QUIET_FLAGS:
+        first += 1
+    words = [word.casefold() for word in args[first:]]
+    if not words or CHANGING_WORDS & set(words):
+        return False
+    if words[0] in VERSION_FLAGS:
+        return True
+    if words[0] == "audit":
+        return all(word.startswith(AUDIT_FLAGS) for word in words[1:])
+    return words[0] in SAFE_SUBCOMMANDS
 
 
 def refuses_node_packages(command: str) -> bool:
@@ -262,8 +272,9 @@ def refuses_node_packages(command: str) -> bool:
     for reading in shell_readings(_CONTINUATION.sub("", command)):
         for simple in _SIMPLE_COMMANDS.split(reading):
             words = simple.split()
+            data_paths = bool(words) and words[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() in DATA_COMMANDS
             for at, word in enumerate(words):
-                program = node_program(word)
+                program = None if data_paths and at > 0 and ("/" in word or "\\" in word) else node_program(word)
                 if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
                     return True
     return False

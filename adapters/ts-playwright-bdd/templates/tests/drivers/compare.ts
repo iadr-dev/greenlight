@@ -90,13 +90,14 @@ const SECONDS: Record<string, number> = {
   d: 86400, day: 86400, days: 86400,
   w: 604800, week: 604800, weeks: 604800,
 };
-const AMOUNT_AND_UNIT = /(\d+(?:\.\d+)?)\s*([a-z]+)/gi;
+const AMOUNT_AND_UNIT = /([\d.]+)\s*([a-z]+)/gi;
 
 /** '2 days', '30 minutes', '1h 30m' as milliseconds. */
 export function durationMs(text: string): number {
   const found = [...text.matchAll(AMOUNT_AND_UNIT)];
   const rest = text.replaceAll(AMOUNT_AND_UNIT, '').replaceAll(/[\s,]|and/g, '');
   const unknown = found.find(([, , unit]) => SECONDS[(unit ?? '').toLowerCase()] === undefined);
-  assert.ok(found.length > 0 && rest === '' && unknown === undefined, `cannot read the duration '${text}'`);
+  const numbers = found.every(([, amount]) => Number.isFinite(Number(amount)));
+  assert.ok(found.length > 0 && rest === '' && unknown === undefined && numbers, `cannot read the duration '${text}'`);
   return found.reduce((total, [, amount, unit]) => total + Number(amount) * (SECONDS[(unit ?? '').toLowerCase()] ?? 0) * 1000, 0);
 }

@@ -115,18 +115,22 @@ class AgentCommandsTest(ProjectCase):
 
     def test_node_package_tools_are_refused_unless_a_safe_subcommand_is_clear(self):
         refused = (
-            "npm install", "npm -w x i y", "npm --workspace=x install", "npm --prefix tests install", "npm -g i left-pad",
-            "npm --silent ci", "npm clean-install", "npm uninstall x", "npm update", "npm rebuild", "npm link ../x",
-            "npm init", "npm exec some-tool", "npm config set registry http://x", "npm audit fix", "npm pack",
-            "yarn", "yarn --frozen-lockfile", "yarn add zod", "yarn global add zod", "yarn build",
+            "npm install", "npm -w x i y", "npm --workspace=x install", "npm --prefix test install", "npm --prefix tests install",
+            "npm --loglevel verbose install", "npm -g i left-pad", "npm --silent ci", "npm clean-install", "npm uninstall x",
+            "npm update", "npm rebuild", "npm link ../x", "npm init", "npm exec some-tool", "npm config set registry http://x",
+            "npm pack", "npm --prefix tests run typecheck",          # a flag that might take a value in front: place unclear
+            "npm run build install", "npm test add", "npm ls -- remove x",   # a package-changing word anywhere later
+            "yarn", "yarn --frozen-lockfile", "yarn add zod", "yarn global add zod", "yarn build", "yarnpkg add zod",
             "pnpm dlx create-thing", "pnpm --filter app add zod", "pnpm i", "bun add zod", "bun x tool",
             "npx playwright install", "pnpx thing", "bunx create-thing", "./node_modules/.bin/npx tsc", "corepack enable",
-            "npm --prefix tests run typecheck",                     # a flag in front: the subcommand's place is not clear
+            "./tools/npm install", "tools/yarn add x", "/usr/local/bin/npm i", "C:\\Tools\\npm.cmd install",
             "sudo npm i", "FOO=1 npm install", "env npm install", "cd tests && npm ci", "echo done; npm remove x", "(npm install)",
+            "echo npm install", "echo npm install | sh", "xargs npm install", "find . -exec npm install ;",
             "bash -c 'npm install'", 'sh -c "cd tests && npm ci"', "npm \\\n install",
             '"npm" install', 'n""pm install', "'npm' 'i'", "$'np\\x6d' install",
             "node node_modules/npm/bin/npm-cli.js install", "node /usr/lib/node_modules/pnpm/bin/pnpm.cjs add x",
-            "C:\\Tools\\npm.cmd install", "/usr/local/bin/npm i")
+            "node .yarn/releases/yarn-3.6.1.cjs install", "node tools/yarn.js add x", "node tools/npx-cli.js thing",
+            "npm audit fix", "npm audit --fix", "npm audit --fix --force", "npm audit signatures", "npm audit --json fix")
         for command in refused:
             with self.subTest(command=command):
                 self.assertIn("may not install packages", self.bash(command, "step-engineer"))
@@ -134,11 +138,13 @@ class AgentCommandsTest(ProjectCase):
 
     def test_node_commands_that_run_scripts_or_only_read_are_allowed(self):
         allowed = ("npm test", "npm t", "npm run build", "npm run-script lint", "npm run install-docs", "npm test -- --update",
-                   "npm --silent run lint", "npm run typecheck --prefix tests", "npm run build -- add", "npm ls", "npm list --depth 0",
-                   "npm why left-pad", "npm view left-pad version", "npm info left-pad", "npm outdated", "npm audit",
-                   "npm config get registry", "npm pack --dry-run", "npm --version", "npm -v", "yarn run build", "yarn test",
-                   "yarn why x", "pnpm test", "pnpm run build", "bun run build", "bun test",
-                   "node tests/run.mjs --tag FEAT-1 --out r.xml", "ls node_modules/npm", "cat package.json")
+                   "npm --silent run lint", "npm -s test", "npm --no-color ls", "npm run typecheck --prefix tests",
+                   "npm run build -- --mode production", "npm ls", "npm list --depth 0", "npm why left-pad",
+                   "npm view left-pad version", "npm info left-pad", "npm outdated", "npm audit", "npm audit --json --production",
+                   "npm audit --omit=dev", "npm audit --audit-level=high", "npm --version", "npm -v", "yarn run build",
+                   "yarn test", "yarn why left-pad", "pnpm test", "pnpm run build", "bun run build", "bun test",
+                   "node tests/run.mjs --tag FEAT-1 --out r.xml", "ls node_modules/npm", "ls ./tools/npm", "cd node_modules/npm",
+                   "cat tools/yarn.js", "cat package.json", "git status")
         for command in allowed:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command, "implementer"))
