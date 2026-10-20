@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Knowledge cards: `cards/<kind>/<id>.md` with flat front matter (`id` equal to the file name, `kind`, `apply_when`, and for techniques `output` and `cost`, optional `pairs_with`) and required sections, always including `## Known pitfalls`. `bdd cards build [--check]` validates every card (kind matches folder, ids unique, `pairs_with` names real cards, sections present and non-empty) and writes `cards/index.json`; `--check` fails when the index has drifted, and a unit test does the same on every CI run. `bdd cards list [--kind K]` prints the front matter only, so an agent can choose cards cheaply. The first six cards are the test-design techniques: boundary value, equivalence partitioning, decision table, state transition, pairwise and negative cases, written for greenlight's rules, examples and trace tags.
+
 - CI installs the adapter contract's requirements with `uv` (`uv pip install --require-hashes --no-build`) from the pinned `requirements-dev.txt`.
 
 - Decision D22 on QA capability: ideas from four public QA skill collections (three MIT, one noncommercial-only) are adapted in our own words into the auditor checklist, technique cards, mutation and stability checks and a test-data card; no text is imported.

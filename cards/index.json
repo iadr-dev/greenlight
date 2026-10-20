@@ -1,0 +1,76 @@
+{
+  "cards": [
+    {
+      "apply_when": "a rule has a threshold, limit, range, cut-off time or size, or a count that changes behaviour",
+      "cost": "low",
+      "id": "boundary-value",
+      "kind": "technique",
+      "output": "for every boundary, one example just outside, on, and just inside each edge",
+      "pairs_with": [
+        "equivalence-partitioning",
+        "decision-table"
+      ],
+      "path": "techniques/boundary-value.md"
+    },
+    {
+      "apply_when": "the outcome depends on a combination of several conditions, such as eligibility, pricing tiers or approval rules",
+      "cost": "medium",
+      "id": "decision-table",
+      "kind": "technique",
+      "output": "a table of every combination of conditions with its outcome, and one example per row that matters",
+      "pairs_with": [
+        "equivalence-partitioning",
+        "boundary-value"
+      ],
+      "path": "techniques/decision-table.md"
+    },
+    {
+      "apply_when": "an input can take many values that the rule treats in a few distinct ways",
+      "cost": "low",
+      "id": "equivalence-partitioning",
+      "kind": "technique",
+      "output": "one example per class of input, valid and invalid, each with a reason it is its own class",
+      "pairs_with": [
+        "boundary-value",
+        "decision-table"
+      ],
+      "path": "techniques/equivalence-partitioning.md"
+    },
+    {
+      "apply_when": "always, for every rule that takes input or depends on who is asking or on the state of the system",
+      "cost": "low",
+      "id": "negative-cases",
+      "kind": "technique",
+      "output": "for each rule, at least one example of it being refused or failing safely, or a written reason why none exists",
+      "pairs_with": [
+        "equivalence-partitioning",
+        "state-transition"
+      ],
+      "path": "techniques/negative-cases.md"
+    },
+    {
+      "apply_when": "many independent inputs each with several values, where trying every combination is too many and the rule does not link them",
+      "cost": "medium",
+      "id": "pairwise",
+      "kind": "technique",
+      "output": "a small set of examples in which every pair of values from two different inputs appears at least once",
+      "pairs_with": [
+        "equivalence-partitioning"
+      ],
+      "path": "techniques/pairwise.md"
+    },
+    {
+      "apply_when": "something has a lifecycle with states and events, such as orders, subscriptions, tickets or approvals",
+      "cost": "medium",
+      "id": "state-transition",
+      "kind": "technique",
+      "output": "the allowed transitions as a table, an example per transition, and an example per forbidden transition",
+      "pairs_with": [
+        "decision-table",
+        "equivalence-partitioning"
+      ],
+      "path": "techniques/state-transition.md"
+    }
+  ],
+  "schema": 1
+}
