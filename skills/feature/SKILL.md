@@ -97,7 +97,9 @@ Rules for the loop:
 **Findings.** If the verdict is FINDINGS, look at the *must fix* items. Under `guided` and `standard` show them to
 the person and let them decide. Under `auto` and `autopilot` fix them through the `change` flow and the phases it
 reopens, then run verify again, at most twice; after that report what is left. Should-fix and unverifiable items
-always go in the final report.
+always go in the final report. A must-fix that is an existing test encoding the behaviour the request replaces
+(for example an old amount) is not a question for the person under `auto` and `autopilot`: have the step-engineer
+update that test through the `change` flow, and record the assumption in the report.
 
 ## 4. Human gates
 

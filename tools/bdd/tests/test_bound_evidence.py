@@ -245,5 +245,55 @@ def unittest_env(values: dict):
                 os.environ[key] = value
 
 
+class RunnerEnvironmentTest(unittest.TestCase):
+    def test_variables_that_steer_a_program_never_reach_the_runner(self):
+        steering = {"PYTHONPATH": "/x", "PYTHONSTARTUP": "/x", "LD_PRELOAD": "/x", "DYLD_INSERT_LIBRARIES": "/x",
+                    "BASH_ENV": "/x", "NODE_OPTIONS": "--require x", "PYTEST_PLUGINS": "evil", "KEEP_ME": "1",
+                    "PYTHONUTF8": "1"}
+        with unittest_env(steering):
+            environment = runner.runner_environment(("PYTEST_",))
+        self.assertEqual({k for k in steering if k in environment}, {"KEEP_ME", "PYTHONUTF8"})
+
+
+class PatternTest(unittest.TestCase):
+    def test_a_star_never_crosses_a_slash_and_double_stars_are_refused(self):
+        self.assertTrue(cfg.pattern_matches("tests/*/conftest.py", "tests/extra/conftest.py"))
+        self.assertTrue(cfg.pattern_matches("tests/*/conftest.py", "Tests/Extra/Conftest.py"))
+        self.assertFalse(cfg.pattern_matches("tests/*/conftest.py", "tests/a/b/conftest.py"))
+        self.assertFalse(cfg.pattern_matches("tests/*/conftest.py", "tests/conftest.py"))
+
+    def test_expansion_and_matching_agree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            for rel in ("tests/a/conftest.py", "tests/a/b/conftest.py", "tests/conftest.py"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("x", encoding="utf-8")
+            found = [p.relative_to(root).as_posix() for p in cfg.expand_pattern(root, "tests/*/conftest.py")]
+            self.assertEqual(found, ["tests/a/conftest.py"])
+
+
+class UnlockedBoundFileTest(SupportFilesCase):
+    def test_a_matching_file_made_after_the_lock_is_a_violation(self):
+        lockfile.lock(self.root, self.feature_dir, "FEAT-007", "bind", [self.root / rel for rel in lockfile.bound_files(self.root)])
+        later = self.write("tests/extra/conftest.py", "# added after the lock\n")
+        violations = lockfile.check(self.root, self.feature_dir, "FEAT-007", ("bind",), None, lockfile.bound_files(self.root))
+        self.assertEqual([(v.kind, v.path) for v in violations], [("added", later.relative_to(self.root).as_posix())])
+        self.assertIn("never locked", str(violations[0]))
+
+
+class WatchedPackagesTest(ProjectCase):
+    def test_entry_points_and_the_runners_dependencies_are_watched(self):
+        scripts = "Scripts" if os.name == "nt" else "bin"
+        site = self.root / ".venv" / ("Lib" if os.name == "nt" else "lib/python3.12") / "site-packages"
+        self.write(f".venv/{scripts}/python" + (".exe" if os.name == "nt" else ""), "x")
+        for rel in ("pytest-8.dist-info/entry_points.txt", "pluggy/_manager.py", "gherkin/parser.py", "requests/api.py"):
+            target = site / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x", encoding="utf-8")
+        watched = {p.name for p in tripwire.environment_files(self.root)}
+        self.assertTrue({"entry_points.txt", "_manager.py", "parser.py"} <= watched)
+        self.assertNotIn("api.py", watched)
+
+
 if __name__ == "__main__":
     unittest.main()

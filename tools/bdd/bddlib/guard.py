@@ -160,8 +160,7 @@ class Project:
             return "environment"
         if key in {path_key(f) for f in self.config.support_files}:
             return "steps"
-        relative = self.relative(path).casefold()
-        if any(fnmatch.fnmatchcase(relative, pattern.casefold()) for pattern in self.config.support_patterns):
+        if any(cfg.pattern_matches(pattern, self.relative(path)) for pattern in self.config.support_patterns):
             return "steps"
         for category, dirs in (("features", self.config.feature_dirs), ("steps", self.config.step_dirs)):
             if any(key.startswith(path_key(d) + "/") for d in dirs):

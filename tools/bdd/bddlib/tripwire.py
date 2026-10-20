@@ -50,7 +50,8 @@ def _files_under(folder: Path) -> list[Path]:
     return found
 
 
-PACKAGES = ("_pytest", "pytest", "pytest_bdd")           # what runs the tests and decides which ones
+PACKAGES = ("_pytest", "pytest", "pluggy", "iniconfig", "packaging", "pytest_bdd", "gherkin", "parse", "parse_type",
+            "mako", "markupsafe")                              # what runs the tests and decides which ones
 
 
 def environment_files(root: Path) -> list[Path]:
@@ -68,6 +69,7 @@ def environment_files(root: Path) -> list[Path]:
         if not site.is_dir():
             continue
         found += [*site.glob("*.pth"), site / "sitecustomize.py", site / "usercustomize.py"]
+        found +=[*site.glob("*.dist-info/entry_points.txt")]            # how plugins register themselves
         for package in PACKAGES:
             found += _files_under(site / package)
     return [p for p in found if p.is_file()]
