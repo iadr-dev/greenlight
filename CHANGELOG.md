@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Artifact templates in `templates/` (`brief`, `rules`, `test-design`, `system`, `tasks`, `report`, `glossary`, `change-requests`), each saying who writes it and how it is read, with the id formats `bdd trace` and `bdd scan` parse, and a filled-in example feature in `docs/examples/order-discounts/` (brief, rules, test design, system map, tasks and an approved-style feature file). Tests check that the templates keep their sections and id formats, and that the example is consistent: `bdd lint` is clean, `bdd trace` shows no gaps, and the system map declares its dependency.
+
 - Twenty-two instruction cards (`cards/instructions/C.*.md`), one for every core instruction of the `base`, `api`, `cli` and `lib` profiles: the semantics, how to apply it, the patterns, good and bad Gherkin, how the `python-pytest-bdd` adapter implements it, and known pitfalls. Tests keep them honest: every instruction of those profiles has a card, no card exists for an instruction that does not, and each card lists exactly the patterns in `vocabulary/core.json`. The `ui` instruction cards come with the UI adapter.
 
 - Seven practice cards (`cards/practices/`) for the product and QA ideas of decisions D21 and D22: request decoder, blocking questions, story splitting, pre-mortem, test data, mutation check and stability rerun, each with the phase it belongs to, a worked example and known pitfalls. `phase` in a card's front matter must be a real phase.
