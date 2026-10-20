@@ -45,8 +45,7 @@ def do_lock(args: argparse.Namespace, root: Path) -> int:
     if args.bound:
         if args.scope != "bind" or paths:
             raise UsageError("--bound goes with --scope bind and no paths")
-        config = cfg.load(root)
-        paths = [p for p in (*config.step_dirs, *config.support_files) if p.exists()]
+        paths = [root / rel for rel in lockfile.bound_files(root)]
     if not paths and args.scope == "spec":
         paths = featurefiles.spec_files(root, args.feature)
         if not paths:
@@ -67,7 +66,8 @@ def do_check(args: argparse.Namespace, root: Path) -> int:
     current = None
     if "spec" in scopes and "spec" in data["scopes"]:
         current = [lockfile.relative(root, f) for f in featurefiles.spec_files(root, args.feature)]
-    violations = lockfile.check(root, feature_dir, args.feature, scopes, current)
+    bound = lockfile.bound_files(root) if "bind" in scopes and "bind" in data["scopes"] else None
+    violations = lockfile.check(root, feature_dir, args.feature, scopes, current, bound)
     unlocked = [s for s in scopes if s not in data["scopes"]] if args.require else []
     ok = not violations and not unlocked
     if args.json:

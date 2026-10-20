@@ -29,7 +29,8 @@ def lock_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
     data = lockfile.read_lock(feature_dir, feature_id)
     problems = [f"{scope} is not locked" for scope in lockfile.SCOPES if scope not in data["scopes"]]
     current = [lockfile.relative(root, f) for f in featurefiles.spec_files(root, feature_id)]
-    return problems + [str(v) for v in lockfile.check(root, feature_dir, feature_id, lockfile.SCOPES, current)]
+    bound = lockfile.bound_files(root)
+    return problems + [str(v) for v in lockfile.check(root, feature_dir, feature_id, lockfile.SCOPES, current, bound)]
 
 
 RUN_EXPECTED = {"bind": "red", "verify": "green"}

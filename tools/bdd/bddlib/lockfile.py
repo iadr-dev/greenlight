@@ -14,6 +14,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import config as cfg
 from . import store
 from .errors import UsageError
 
@@ -29,9 +30,10 @@ class Violation:
     kind: str  # changed | missing | added
 
     def __str__(self) -> str:
-        what = {"changed": "changed since it was locked", "missing": "was locked but no longer exists",
-                "added": "is tagged for this feature but was never locked"}[self.kind]
-        return f"[{self.scope}] {self.path} {what}"
+        added = ("is tagged for this feature but was never locked" if self.scope == "spec"
+                 else "is a step, driver or plumbing file that was never locked")
+        what = {"changed": "changed since it was locked", "missing": "was locked but no longer exists", "added": added}
+        return f"[{self.scope}] {self.path} {what[self.kind]}"
 
 
 def file_digest(path: Path) -> str:
@@ -104,10 +106,18 @@ def unlock(feature_dir: Path, feature_id: str, scope: str, reason: str) -> None:
     store.write_json(feature_dir / LOCK_FILE, data)
 
 
+def bound_files(root: Path) -> list[str]:
+    """Every file the bind lock is meant to cover right now: the adapter's step and driver folders and its plumbing."""
+    config = cfg.load(root)
+    present = [p for p in (*config.step_dirs, *config.support_files) if p.exists()]
+    return [relative(root, f) for f in expand(root, present)] if present else []
+
+
 def check(root: Path, feature_dir: Path, feature_id: str, scopes: tuple[str, ...] = SCOPES,
-          current_spec_files: list[str] | None = None) -> list[Violation]:
-    """Compare locked files with the disk. ``current_spec_files`` (project-relative paths of the
-    feature files tagged for this feature right now) also detects spec files added after locking."""
+          current_spec_files: list[str] | None = None, current_bound_files: list[str] | None = None) -> list[Violation]:
+    """Compare locked files with the disk. ``current_spec_files`` (project-relative paths of the feature files tagged
+    for this feature right now) also detects spec files added after locking; ``current_bound_files`` does the same for
+    steps, drivers and plumbing."""
     data = read_lock(feature_dir, feature_id)
     violations: list[Violation] = []
     for scope in (s for s in scopes if s in data["scopes"]):
@@ -118,6 +128,7 @@ def check(root: Path, feature_dir: Path, feature_id: str, scopes: tuple[str, ...
                 violations.append(Violation(scope, rel, "missing"))
             elif file_digest(target) != digest:
                 violations.append(Violation(scope, rel, "changed"))
-        if scope == "spec" and current_spec_files is not None:
-            violations += [Violation(scope, rel, "added") for rel in sorted(set(current_spec_files) - set(locked))]
+        current = {"spec": current_spec_files, "bind": current_bound_files}[scope]
+        if current is not None:
+            violations += [Violation(scope, rel, "added") for rel in sorted(set(current) - set(locked))]
     return violations

@@ -25,6 +25,18 @@ LATEST = "latest.json"
 RED = "red.json"
 SCHEMA = 1
 TAIL_CHARS = 4000
+# Variables that change what a program loads or runs never reach the test runner, whatever the adapter says; the adapter's
+# ``scrub_env`` adds to this list. (A project that needs PYTHONPATH sets ``pythonpath`` in its bound pytest.ini.)
+NEVER_PASSED_PREFIXES = ("PYTHON", "LD_", "DYLD_")
+NEVER_PASSED_NAMES = {"BASH_ENV", "ENV", "NODE_OPTIONS"}
+KEPT = {"PYTHONUTF8", "PYTHONIOENCODING"}
+
+
+def runner_environment(scrub: tuple[str, ...] = ()) -> dict[str, str]:
+    """The environment of a test run: ours, minus the variables that steer a program and the adapter's own list."""
+    blocked = NEVER_PASSED_PREFIXES + tuple(scrub)
+    return {k: v for k, v in os.environ.items()
+            if k in KEPT or not (k in NEVER_PASSED_NAMES or k.startswith(blocked))}
 SKIPPED = {"__pycache__", "node_modules", ".git"}
 
 
@@ -122,7 +134,7 @@ def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] =
     if not shutil.which(words[0]):
         raise UsageError(f"cannot run {words[0]!r}: it is not on PATH; install the adapter's requirements first")
     try:
-        env = {k: v for k, v in os.environ.items() if not k.startswith(scrub)} if scrub else None
+        env = runner_environment(scrub)
         done = subprocess.run(words, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:

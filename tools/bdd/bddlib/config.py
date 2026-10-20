@@ -1,6 +1,8 @@
 """Project configuration: ``.bdd/config.toml`` (human-edited, read with tomllib)."""
 from __future__ import annotations
 
+import fnmatch
+import os
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -15,6 +17,34 @@ SCHEMA_VERSION = 1                       # of .bdd/ as a whole; `version` in con
 
 class ConfigError(ValueError):
     pass
+
+
+IGNORED_DIRS = {"__pycache__", "node_modules", ".git"}
+
+
+def pattern_matches(pattern: str, relative: str) -> bool:
+    """Does the project-relative path ``relative`` match ``pattern``? One segment at a time, so ``*`` never crosses a
+    slash and the same answer is given wherever it is asked (the guard, the lock, the digest)."""
+    parts, names = pattern.split("/"), relative.split("/")
+    return len(parts) == len(names) and all(fnmatch.fnmatchcase(n.casefold(), p.casefold()) for p, n in zip(parts, names))
+
+
+def expand_pattern(root: Path, pattern: str) -> list[Path]:
+    """The existing files that match ``pattern``, found by walking from its literal first segments."""
+    literal: list[str] = []
+    for segment in pattern.split("/"):
+        if any(c in segment for c in "*?["):
+            break
+        literal.append(segment)
+    base = root.joinpath(*literal[:-1]) if len(literal) == len(pattern.split("/")) else root.joinpath(*literal)
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
+        for name in filenames:
+            candidate = Path(dirpath) / name
+            if pattern_matches(pattern, candidate.relative_to(root).as_posix()):
+                found.append(candidate)
+    return sorted(found)
 
 
 @dataclass(frozen=True)
@@ -139,9 +169,11 @@ def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tupl
         if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
             raise ConfigError(f"{path}: support must be a list of file names or patterns")
         for name in names:
+            if "**" in name:
+                raise ConfigError(f"{path}: support pattern {name!r}: ** is not supported; use one * per folder level")
             if any(c in name for c in "*?["):
                 patterns.append(name)
-                files += [p for p in root.glob(name) if p.is_file()]
+                files += expand_pattern(root, name)
             else:
                 files.append(root / name)
     return tuple(files), tuple(patterns)
