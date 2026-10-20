@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Run a whole feature through greenlight with real agents, and measure what happened.
 
-    python evals/run_e2e.py [--request discounts] [--model haiku] [--autonomy autopilot] [--keep]
+    python evals/run_e2e.py [--request discounts|adopt-billing] [--model haiku] [--autonomy autopilot] [--keep]
 
-It copies the reference app (evals/apps/shop-api) into a temporary project with its own virtual environment,
-sets greenlight up (`bdd init --adapter python-pytest-bdd`, proves the sample green), then asks Claude Code,
-headless, to run `/greenlight:feature "<request>"`. Afterwards it reads the project's own records, with the
+It copies the request's reference app (evals/apps/shop-api for a feature, evals/apps/legacy-billing for an adoption)
+into a temporary project with its own virtual environment, sets greenlight up (`bdd init --adapter
+python-pytest-bdd`, proves the sample green), then asks Claude Code, headless, to run `/greenlight:feature
+"<request>"` (`/greenlight:adopt "<area>"` for an adoption request). Afterwards it reads the project's own records, with the
 `bdd` CLI and git, never the conversation, and writes one metrics row to evals/results/.
 
 Needs `claude`, `uv`, `git` and `sh` on PATH, working credentials, and some money: a run makes many model
@@ -25,13 +26,20 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "evals" / "apps" / "shop-api"
+APPS = REPO / "evals" / "apps"
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
 GIT = ["git", "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "-c", "commit.gpgsign=false",
        "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
 
+
+# What each request needs: its reference app, the skill that runs it and the packages the app and its tests import.
+# A feature request is judged by reaching `done`, an adoption request by the invariants in adoption_invariants.
+REQUEST_KINDS = {
+    "discounts": {"app": "shop-api", "skill": "feature", "packages": ["fastapi", "httpx"]},
+    "adopt-billing": {"app": "legacy-billing", "skill": "adopt", "packages": ["flask"]},
+}
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
 MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us.anthropic.claude-haiku-5-5",
@@ -47,14 +55,14 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def build_project(tmp: Path) -> tuple[Path, dict, str]:
+def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
     project = tmp / "project"
-    shutil.copytree(APP, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(APPS / kind["app"], project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
     python = bin_dir / ("python.exe" if os.name == "nt" else "python")
-    run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
+    run(["uv", "pip", "install", "--python", str(python), *kind["packages"], "pytest", "pytest-bdd"], tmp, os.environ.copy())
     env = os.environ.copy()
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
     env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
@@ -78,8 +86,8 @@ def set_up(project: Path, env: dict, autonomy: str, python: str) -> None:
     run([*GIT, "commit", "-q", "-m", "greenlight set up"], project, env)
 
 
-def ask(project: Path, env: dict, request: str, model: str, autonomy: str, minutes: int) -> dict:
-    prompt = f'/greenlight:feature "{request.strip()}" --autonomy {autonomy}'
+def ask(project: Path, env: dict, request: str, skill: str, model: str, autonomy: str, minutes: int) -> dict:
+    prompt = f'/greenlight:{skill} "{request.strip()}" --autonomy {autonomy}'
     command = ["claude", "-p", "--plugin-dir", str(REPO), "--model", model, "--allowedTools", TOOLS,
                "--output-format", "json", "--setting-sources", "project"]          # the prompt goes in on stdin
     started = time.time()
@@ -102,6 +110,34 @@ def read_json(project: Path, env: dict, *args: str) -> object:
         return json.loads(done.stdout)
     except ValueError:
         return {"error": (done.stderr or done.stdout).strip()[:500]}
+
+
+NOT_PRODUCTION = (".bdd/", "tests/", ".gitignore", ".claude/")
+
+
+def production_changes(porcelain: list[str]) -> list[str]:
+    """The paths in `git status --porcelain` output that are production code: everything except greenlight's own
+    data, the test folder and ignore files, and byte-code. An adoption must leave this list empty."""
+    paths = []
+    for line in porcelain:
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        if path and "__pycache__" not in path and not path.startswith(NOT_PRODUCTION):
+            paths.append(path)
+    return paths
+
+
+def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
+    """What an adoption must satisfy, read from the project and never from the conversation: `bdd adopt --check` is
+    clean (every scenario is @existing, the bind gate pinned the production source and it is unchanged), the recorded
+    run is a valid green, and git sees no production file touched since greenlight was set up."""
+    check = bdd(project, env, "adopt", feature, "--check", check=False)
+    porcelain = run([*GIT, "status", "--porcelain"], project, env, check=False).stdout.splitlines()
+    touched = production_changes(porcelain)
+    classify = read_json(project, env, "classify", feature, "--json")
+    green = (classify.get("green") or {}).get("valid") if isinstance(classify, dict) else None
+    return {"adopt_check_clean": check.returncode == 0, "adopt_check_output": (check.stdout + check.stderr).strip()[:600],
+            "production_files_touched": touched, "green_valid": green,
+            "holds": check.returncode == 0 and not touched and green is True}
 
 
 def collect(project: Path, env: dict) -> dict:
@@ -131,14 +167,17 @@ def collect(project: Path, env: dict) -> dict:
         "tokens": sum(c.get("tokens", 0) for c in (state.get("cost") or {}).values()),
         "files_changed": changed[-1] if changed else "", "new_files": len(untracked),
         "report_written": any(f.endswith("report.md") for f in untracked),
+        "kind": state.get("kind"),
     })
+    if state.get("kind") == "adopt":
+        row["adoption"] = adoption_invariants(project, env, feature)
     return row
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
-    ap.add_argument("--request", default="discounts", choices=sorted(requests), help="a file in evals/requests/")
+    ap.add_argument("--request", default="discounts", choices=sorted(REQUEST_KINDS), help="a file in evals/requests/")
     ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
     ap.add_argument("--autonomy", default="autopilot", choices=("guided", "standard", "auto", "autopilot"))
     ap.add_argument("--minutes", type=int, default=45, help="give up after this long")
@@ -148,13 +187,14 @@ def main() -> int:
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
+    kind = REQUEST_KINDS[args.request]
     request = requests[args.request].read_text(encoding="utf-8")
     model = MODELS[args.model]
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
-        project, env, python = build_project(tmp)
+        project, env, python = build_project(tmp, kind)
         set_up(project, env, args.autonomy, python)
-        output = ask(project, env, request, model, args.autonomy, args.minutes)
+        output = ask(project, env, request, kind["skill"], model, args.autonomy, args.minutes)
         row = {"request": args.request, "model": args.model, "claude": {k: output.get(k) for k in (
             "exit", "seconds", "is_error", "num_turns", "total_cost_usd", "subtype")}, **collect(project, env)}
         RESULTS.mkdir(exist_ok=True)
@@ -164,7 +204,8 @@ def main() -> int:
             encoding="utf-8")
         print(json.dumps(row, indent=2, ensure_ascii=False))
         print("\nlast words of the session:\n" + str(output.get("result") or output.get("raw") or "")[-1500:])
-        return 0 if row.get("phase") == "done" else 1
+        held = row["adoption"]["holds"] if "adoption" in row else True
+        return 0 if row.get("phase") == "done" and held else 1
     finally:
         if args.keep:
             print(f"\nkept: {tmp}")

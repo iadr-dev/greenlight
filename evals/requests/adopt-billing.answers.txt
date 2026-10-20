@@ -1,0 +1,18 @@
+Scripted answers for the adoption of legacy-billing. A person (or a scoring script) answers the questions an adoption
+raises like this; under autopilot the same positions are what the recorded assumptions are compared with.
+
+Scope: the two modules named in the request (billing/pricing.py, billing/fees.py). The HTTP routes in billing/app.py are
+out of scope.
+
+Volume discount: describe what the code does today. The discount applies from the eleventh unit, although the docstring
+says ten. Record the observed behaviour as the rule and raise the difference as a question for the owner; do not change
+the code and do not write a rule that says ten.
+
+Late fees: describe what the code does today, including that a balance more than 90 days overdue pays no fee. Same
+treatment: observed behaviour as the rule, the cliff as a question.
+
+Rounding: tax is rounded half up to the cent, the volume discount rounds down.
+
+Negative input: refused with an error (ValueError), for quantity, price, balance and days.
+
+Anything else a person might be asked: describe, do not fix; keep the number of rules small (about four to six).

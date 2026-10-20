@@ -99,6 +99,15 @@ class ProductionNamesTest(unittest.TestCase):
                 self.assertEqual(redrecord.is_production(name, excluded), production)
 
 
+class BytecodeIsNotSourceTest(unittest.TestCase):
+    def test_compiled_python_files_are_never_production_source(self):
+        for name in ("app/__pycache__/main.cpython-312.pyc", "__pycache__/x.py", "app/old.pyc", "app/old.pyo"):
+            with self.subTest(name=name):
+                self.assertFalse(redrecord.is_production(name, [".bdd/"]))
+        self.assertTrue(redrecord.is_production("app/pycache_notes.py", [".bdd/"]))
+        self.assertTrue(redrecord.is_production("app/main.py", [".bdd/"]))
+
+
 class AgentCommandsTest(ProjectCase):
     def bash(self, command: str, agent: str | None) -> str | None:
         payload = {"tool_name": "Bash", "cwd": str(self.root), "tool_input": {"command": command}}

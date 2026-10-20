@@ -30,8 +30,20 @@ def git(root: Path, *args: str) -> str:
     return done.stdout
 
 
+BYTECODE_SUFFIXES = (".pyc", ".pyo")
+
+
+def is_bytecode(name: str) -> bool:
+    """Python's compiled files change every time the tests run (they embed the source's modification time), so a
+    project that does not ignore them would see its production source change from running its own tests."""
+    return "__pycache__" in name.split("/") or name.endswith(BYTECODE_SUFFIXES)
+
+
 def is_production(name: str, excluded: list[str]) -> bool:
-    """Folders (entries ending in a slash) match by prefix, files only by their exact name."""
+    """Folders (entries ending in a slash) match by prefix, files only by their exact name; compiled bytecode is
+    generated, not source."""
+    if is_bytecode(name):
+        return False
     return not any(name.startswith(entry) if entry.endswith("/") else name == entry for entry in excluded)
 
 

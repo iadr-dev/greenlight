@@ -54,6 +54,29 @@ jobs:
       - name: greenlight's own specs pass (dogfood)
         run: python specs/run_specs.py
 
+  reference-app-legacy-billing:
+    name: reference app (legacy-billing, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+      - name: Install the app's requirements and the test runner's (pinned, hashed, wheels only)
+        run: |
+          uv pip install --system --require-hashes --no-build -r evals/apps/legacy-billing/requirements.txt
+          uv pip install --system --require-hashes --no-build -r requirements-dev.txt
+      - name: The app starts and answers
+        working-directory: evals/apps/legacy-billing
+        run: python smoke.py
+      - name: An adoption of it goes through every gate, and the adopt gates refuse what they should
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adopt_billing.py" -v
+
   adapter-ts-playwright-bdd:
     name: adapter contract (ts-playwright-bdd, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
