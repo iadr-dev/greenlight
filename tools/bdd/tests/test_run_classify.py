@@ -291,7 +291,8 @@ class GateTest(RunCase):
 
 
 class ProjectPythonTest(ProjectCase):
-    """The project's tests run in the project's environment, not in the one that runs bdd."""
+    """The project's tests run in the project's environment, not in the one that runs bdd; the choice comes from
+    the configuration or the project, never from the environment variables of one command."""
 
     def make_env(self, folder: str) -> Path:
         scripts = self.root / folder / ("Scripts" if os.name == "nt" else "bin")
@@ -300,37 +301,50 @@ class ProjectPythonTest(ProjectCase):
         python.write_text("", encoding="utf-8")
         return python
 
-    def resolve(self, **env) -> str:
-        with mock.patch.dict(os.environ, env):
-            for key in ("GREENLIGHT_PYTHON", "VIRTUAL_ENV"):
-                if key not in env:
-                    os.environ.pop(key, None)
-            return runner.project_python(self.root)
-
     def test_without_any_environment_it_is_the_interpreter_running_bdd(self):
-        self.assertEqual(self.resolve(), sys.executable)
+        self.assertEqual(runner.project_python(self.root), sys.executable)
 
     def test_a_virtual_environment_in_the_project_is_found(self):
         python = self.make_env(".venv")
-        self.assertEqual(self.resolve(), str(python))
+        self.assertEqual(runner.project_python(self.root), str(python))
 
-    def test_the_active_environment_beats_the_one_in_the_project(self):
+    def test_the_configured_interpreter_beats_the_one_in_the_project(self):
         self.make_env(".venv")
-        active = self.make_env("elsewhere")
-        self.assertEqual(self.resolve(VIRTUAL_ENV=str(active.parents[1])), str(active))
+        chosen = self.make_env("elsewhere")
+        self.config(f"python = {json.dumps(str(chosen))}\n")
+        self.assertEqual(runner.project_python(self.root), str(chosen))
 
-    def test_an_explicit_choice_beats_everything(self):
-        self.make_env(".venv")
-        explicit = self.root / "chosen-python"
-        explicit.write_text("", encoding="utf-8")
-        self.assertEqual(self.resolve(GREENLIGHT_PYTHON=str(explicit)), str(explicit))
-        self.assertEqual(self.resolve(GREENLIGHT_PYTHON=str(self.root / "missing")), str(self.root / ".venv" / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")))
+    def test_a_relative_choice_is_relative_to_the_project(self):
+        chosen = self.make_env("tools-env")
+        self.config(f"python = {json.dumps(chosen.relative_to(self.root).as_posix())}\n")
+        self.assertEqual(Path(runner.project_python(self.root)), chosen)
+
+    def test_a_configured_interpreter_that_does_not_exist_is_an_error(self):
+        self.config('python = "no/such/python"\n')
+        with self.assertRaises(UsageError) as cm:
+            runner.project_python(self.root)
+        self.assertIn("is not a file", str(cm.exception))
+
+    def test_environment_variables_are_ignored(self):
+        """A command can set them for itself; the evidence must not depend on that."""
+        impostor = self.make_env("impostor")
+        variables = {"VIRTUAL_ENV": str(impostor.parents[1]), "GREENLIGHT_PYTHON": str(impostor)}
+        with mock.patch.dict(os.environ, variables):
+            self.assertEqual(runner.project_python(self.root), sys.executable)
 
     def test_the_adapter_runs_its_tests_with_it(self):
         rules = cfg.RunRules("x", "{project_python} -m pytest -m {tag}", "--out {out}")
         python = self.make_env(".venv")
         words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"))
         self.assertEqual(words[0], str(python))
+
+    def test_variables_the_adapter_names_do_not_reach_the_runner(self):
+        script = self.root / "env_probe.py"
+        script.write_text("import os, sys\nprint(sorted(k for k in os.environ if k.startswith(('PYTEST_', 'KEEP_'))))\n",
+                          encoding="utf-8")
+        with mock.patch.dict(os.environ, {"PYTEST_ADDOPTS": "-k nothing", "KEEP_ME": "1"}):
+            status, output = runner.execute([sys.executable, str(script)], self.root, 60, ("PYTEST_",))
+        self.assertEqual((status, output.strip()), (0, "['KEEP_ME']"))
 
 
 class JunitTest(unittest.TestCase):

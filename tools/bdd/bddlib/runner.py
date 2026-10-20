@@ -54,16 +54,19 @@ def inputs_digest(root: Path, feature_id: str) -> str:
 
 
 def project_python(root: Path) -> str:
-    """The interpreter a Python project's tests should run with: its own environment, not the one running bdd.
+    """The interpreter a Python project's tests run with: its own environment, not the one running bdd.
 
-    In order: ``GREENLIGHT_PYTHON``, the active virtual environment (``VIRTUAL_ENV``), ``.venv`` or ``venv`` in the
-    project, and finally the interpreter that runs bdd."""
-    explicit = os.environ.get("GREENLIGHT_PYTHON")
-    if explicit and Path(explicit).is_file():
-        return explicit
-    environments = [Path(os.environ["VIRTUAL_ENV"])] if os.environ.get("VIRTUAL_ENV") else []
-    environments += [root / ".venv", root / "venv"]
-    for environment in environments:
+    In order: ``python = "..."`` in ``.bdd/config.toml`` (the person's choice, written by ``bdd init --python``),
+    a ``.venv`` or ``venv`` folder in the project, and finally the interpreter that runs bdd. Environment variables
+    are deliberately not consulted: a process can set them for a single command, and this program produces the
+    evidence that gates accept."""
+    chosen = cfg.load(root).python
+    if chosen:
+        path = Path(chosen) if Path(chosen).is_absolute() else root / chosen
+        if not path.is_file():
+            raise UsageError(f"python = {chosen!r} in .bdd/config.toml is not a file")
+        return str(path)
+    for environment in (root / ".venv", root / "venv"):
         for relative in ("Scripts/python.exe", "bin/python"):
             if (environment / relative).is_file():
                 return str(environment / relative)
@@ -112,12 +115,15 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
     return words
 
 
-def execute(words: list[str], root: Path, timeout: int) -> tuple[int, str]:
-    """(exit status, combined output). A command that cannot start or runs too long is a usage problem."""
+def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] = ()) -> tuple[int, str]:
+    """(exit status, combined output). A command that cannot start or runs too long is a usage problem.
+    Variables whose names start with one of ``scrub`` (such as PYTEST_ADDOPTS) are not passed on: they can change
+    which tests run."""
     if not shutil.which(words[0]):
         raise UsageError(f"cannot run {words[0]!r}: it is not on PATH; install the adapter's requirements first")
     try:
-        done = subprocess.run(words, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env = {k: v for k, v in os.environ.items() if not k.startswith(scrub)} if scrub else None
+        done = subprocess.run(words, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
         raise UsageError(f"the test run took longer than {timeout} s and was stopped") from exc
@@ -129,7 +135,7 @@ def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str,
     report.unlink(missing_ok=True)
     words = build_command(rules, root, tag, report, **options)
     started = time.perf_counter()
-    status, output = execute(words, root, rules.timeout)
+    status, output = execute(words, root, rules.timeout, rules.scrub_env)
     entry = {"command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2),
              "scenario": options.get("scenario"), "report": report.is_file(), "tail": output[-TAIL_CHARS:]}
     return entry, junit.parse_file(report) if report.is_file() else []

@@ -46,14 +46,16 @@ def detect(root: Path) -> list[tuple[str, str]]:
     return found
 
 
-def config_text(autonomy: str, profiles: list[str] | None) -> str:
+def config_text(autonomy: str, profiles: list[str] | None, python: str | None = None) -> str:
     lines = [f'autonomy = "{autonomy}"', 'language = "auto"', 'enforcement = "auto"']
+    if python:
+        lines.append("python = " + adapter.toml_value(python))
     if profiles:
         lines.append("profiles = " + adapter.toml_value(profiles))
     return "\n".join(lines) + "\n"
 
 
-def write_project(root: Path, autonomy: str, profiles: list[str] | None) -> list[str]:
+def write_project(root: Path, autonomy: str, profiles: list[str] | None, python: str | None = None) -> list[str]:
     if autonomy not in state.AUTONOMY:
         raise UsageError(f"autonomy must be one of {', '.join(state.AUTONOMY)}")
     bdd = root / cfg.BDD_DIR
@@ -61,7 +63,7 @@ def write_project(root: Path, autonomy: str, profiles: list[str] | None) -> list
         raise UsageError(f"{bdd / 'config.toml'} already exists; this repository is already set up")
     created = []
     (bdd / "features").mkdir(parents=True, exist_ok=True)
-    for rel, text in (("config.toml", config_text(autonomy, profiles)), (".gitignore", "".join(f"{i}\n" for i in IGNORED))):
+    for rel, text in (("config.toml", config_text(autonomy, profiles, python)), (".gitignore", "".join(f"{i}\n" for i in IGNORED))):
         (bdd / rel).write_text(text, encoding="utf-8", newline="\n")
         created.append(f"{cfg.BDD_DIR}/{rel}")
     glossary = bdd / "glossary.md"
@@ -71,7 +73,7 @@ def write_project(root: Path, autonomy: str, profiles: list[str] | None) -> list
     return created
 
 
-def do_init(root: Path, name: str | None, autonomy: str) -> int:
+def do_init(root: Path, name: str | None, autonomy: str, python: str | None = None) -> int:
     existing = root / cfg.BDD_DIR / "config.toml"
     created: list[str] = []
     if existing.exists():
@@ -79,7 +81,7 @@ def do_init(root: Path, name: str | None, autonomy: str) -> int:
             raise UsageError("this repository is already set up; name an adapter to add with --adapter")
     else:
         profiles = adapter.load(adapter.find(name)).get("profiles") if name else None
-        created += write_project(root, autonomy, profiles)
+        created += write_project(root, autonomy, profiles, python)
     if name:
         files, kept = adapter.apply(root, name)
         created += files
@@ -114,6 +116,7 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--detect", action="store_true", help="list the adapters that fit this repository")
     ap.add_argument("--adapter", help="the adapter to apply (see bdd adapter list)")
     ap.add_argument("--autonomy", default="guided", choices=state.AUTONOMY, help="default autonomy level (default: guided)")
+    ap.add_argument("--python", help="the interpreter the project's tests run with (default: .venv or venv in the project)")
     ap.add_argument("--smoke", action="store_true", help="run the adapter's sample feature and clean up")
     args = ap.parse_args(argv)
 
@@ -129,7 +132,9 @@ def run(argv: list[str]) -> int:
                 raise UsageError("not inside a greenlight project; run bdd init first")
             return do_smoke(root)
         root = cfg.find_root(here) or here
-        return do_init(root, args.adapter, args.autonomy)
+        if args.python and not Path(args.python).is_file():
+            raise UsageError(f"--python {args.python!r} is not a file")
+        return do_init(root, args.adapter, args.autonomy, str(Path(args.python).resolve()) if args.python else None)
 
     try:
         return guarded("init", action)

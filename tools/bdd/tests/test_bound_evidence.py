@@ -4,10 +4,13 @@ import hashlib
 import io
 import json
 import os
+import tempfile
 import unittest
 
+from pathlib import Path
+
 from bddlib import config as cfg
-from bddlib import cli, gates, guard, lockfile, runner, tripwire
+from bddlib import cli, gates, guard, lockfile, redrecord, runner, tripwire
 
 from tests.helpers import ProjectCase
 
@@ -17,7 +20,7 @@ RUN = "[adapters.run]\nby_tag = '{project_python} -m pytest -m {tag}'\nreport = 
 class SupportFilesCase(ProjectCase):
     def setUp(self):
         super().setUp()
-        self.config(tail='support = ["tests/conftest.py"]\n')
+        self.config(tail='support = ["tests/conftest.py", "tests/*/conftest.py"]\n')
         self.conftest = self.write("tests/conftest.py", "# plumbing\n")
 
     def write_as(self, agent: str | None, rel: str) -> str | None:
@@ -69,6 +72,107 @@ class SupportFilesTest(SupportFilesCase):
         self.assertNotEqual(runner.inputs_digest(self.root, "FEAT-007"), before)
 
 
+class SupportPatternTest(SupportFilesCase):
+    def test_a_plumbing_file_made_later_is_covered_by_its_pattern(self):
+        self.assertIsNone(self.write_as("step-engineer", "tests/extra/conftest.py"))
+        for agent in ("implementer", "product-analyst"):
+            with self.subTest(agent=agent):
+                self.assertIsNotNone(self.write_as(agent, "tests/extra/conftest.py"))
+
+    def test_existing_matches_are_part_of_the_lock_and_the_digest(self):
+        nested = self.write("tests/extra/conftest.py", "# nested\n")
+        config = cfg.load(self.root)
+        self.assertIn(nested, config.support_files)
+        self.assertEqual(config.support_patterns, ("tests/*/conftest.py",))
+        before = runner.inputs_digest(self.root, "FEAT-007")
+        nested.write_text("# nested, now skipping\n", encoding="utf-8", newline="\n")
+        self.assertNotEqual(runner.inputs_digest(self.root, "FEAT-007"), before)
+
+
+class ProductionNamesTest(unittest.TestCase):
+    def test_a_file_entry_matches_only_that_file_and_a_folder_entry_its_contents(self):
+        excluded = [".bdd/", "tests/steps/", "tests/conftest.py"]
+        for name, production in {"src/app.py": True, "tests/conftest.py": False, "tests/conftest.py.bak": True,
+                                 "tests/conftest.pyx": True, "tests/steps/a.py": False, "tests/steps2/a.py": True,
+                                 ".bdd/config.toml": False}.items():
+            with self.subTest(name=name):
+                self.assertEqual(redrecord.is_production(name, excluded), production)
+
+
+class AgentCommandsTest(ProjectCase):
+    def bash(self, command: str, agent: str | None) -> str | None:
+        payload = {"tool_name": "Bash", "cwd": str(self.root), "tool_input": {"command": command}}
+        if agent:
+            payload["agent_type"] = f"greenlight:{agent}"
+        return guard.evaluate(payload)
+
+    def test_an_agent_may_not_install_packages_but_the_orchestrator_may(self):
+        for command in ("pip install requests", "python -m pip install -r requirements.txt", "uv pip install pytest",
+                        "poetry add httpx", "npm install left-pad", "uv add fastapi"):
+            with self.subTest(command=command):
+                self.assertIn("may not install packages", self.bash(command, "implementer"))
+                self.assertIsNone(self.bash(command, None))
+
+    def test_an_agent_may_not_write_into_the_environment_from_a_shell(self):
+        reason = self.bash("cp evil.py .venv/Lib/site-packages/sitecustomize.py", "step-engineer")
+        self.assertIn("may not install packages", reason)
+        self.assertIsNone(self.bash("ls .venv", "step-engineer"))                      # reading is fine
+        self.assertIsNone(self.bash("cp evil.py .venv/Lib/x.py", None))
+
+
+class EnvironmentWatchTest(ProjectCase):
+    def test_the_interpreter_its_startup_files_and_the_test_runner_are_watched(self):
+        scripts = "Scripts" if os.name == "nt" else "bin"
+        site = self.root / ".venv" / ("Lib" if os.name == "nt" else "lib/python3.12") / "site-packages"
+        for rel in (f".venv/{scripts}/python" + (".exe" if os.name == "nt" else ""), ".venv/pyvenv.cfg"):
+            self.write(rel, "x")
+        for rel in ("a.pth", "sitecustomize.py", "_pytest/main.py", "pytest_bdd/plugin.py", "pytest/__init__.py", "requests/api.py"):
+            target = site / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x", encoding="utf-8")
+        watched = {p.name for p in tripwire.environment_files(self.root)}
+        self.assertEqual(watched, {"python.exe" if os.name == "nt" else "python", "pyvenv.cfg", "a.pth", "sitecustomize.py",
+                                   "main.py", "plugin.py", "__init__.py"})                  # not the other packages
+
+    def test_an_environment_outside_the_project_is_not_watched(self):
+        self.assertEqual(tripwire.environment_files(self.root), [])
+
+
+class InitPythonTest(ProjectCase):
+    def run_init(self, folder: Path, *argv: str) -> int:
+        here = os.getcwd()
+        os.chdir(folder)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                return cli.main(["init", *argv])
+        finally:
+            os.chdir(here)
+
+    def test_python_is_recorded_in_the_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = Path(tmp).resolve()
+            interpreter = fresh / "chosen-python"
+            interpreter.write_text("", encoding="utf-8")
+            self.assertEqual(self.run_init(fresh, "--python", str(interpreter)), 0)
+            self.assertEqual(Path(cfg.load(fresh).python), interpreter)
+
+    def test_a_python_that_is_not_a_file_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = Path(tmp).resolve()
+            self.assertEqual(self.run_init(fresh, "--python", str(fresh / "nope")), 2)
+            self.assertFalse((fresh / ".bdd").exists())
+
+    def test_the_run_table_can_scrub_variables_and_must_say_it_properly(self):
+        self.config(tail="[adapters.run]\nby_tag = 'x'\nreport = 'y'\nscrub_env = ['PYTEST_']\n")
+        self.assertEqual(cfg.load(self.root).runs[0].scrub_env, ("PYTEST_",))
+        self.config(tail="[adapters.run]\nby_tag = 'x'\nreport = 'y'\nscrub_env = 3\n")
+        with self.assertRaises(cfg.ConfigError):
+            cfg.load(self.root)
+        self.config("python = 3\n")
+        with self.assertRaises(cfg.ConfigError):
+            cfg.load(self.root)
+
+
 class InterpreterTest(ProjectCase):
     def setUp(self):
         super().setUp()
@@ -113,12 +217,6 @@ class EnvironmentTest(ProjectCase):
             with self.subTest(agent=agent):
                 self.assertIsNotNone(self.evaluate(agent, ".venv/Lib/site-packages/pytest/__init__.py"))
                 self.assertIsNotNone(self.evaluate(agent, "venv/bin/python"))
-
-    def test_the_interpreter_is_watched_by_the_tripwire(self):
-        python = self.make_env()
-        with unittest_env({"VIRTUAL_ENV": None, "GREENLIGHT_PYTHON": None}):
-            watched = {str(p) for p in tripwire.watched_files(self.root, None)}
-        self.assertIn(python, watched)
 
     def test_the_kept_red_is_exactly_the_bytes_that_were_checked(self):
         runner.runs_dir(self.root, "FEAT-007").mkdir(parents=True)
