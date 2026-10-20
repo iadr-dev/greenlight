@@ -40,7 +40,8 @@ def path_of(feature_dir: Path) -> Path:
 def new_state(feature_id: str, title: str, autonomy: str) -> dict:
     return {"schema": store.SCHEMA, "feature": feature_id, "title": title, "created_at": store.utc_now(),
             "phase": PHASES[0], "autonomy": {"level": autonomy, "switches": []}, "gates": {},
-            "approvals": [], "assumptions": [], "cost": {}, "red": None, "hooks_seen": False}
+            "approvals": [], "assumptions": [], "cost": {}, "red": None, "hooks_seen": False,
+            "changes": []}
 
 
 def observe_hooks(root: Path, feature_dir: Path) -> bool:
