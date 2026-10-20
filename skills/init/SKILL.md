@@ -28,8 +28,8 @@ Do not change anything on the machine without asking first.
    ```
 
    Recommend one adapter from what was detected and say why. If nothing fits, say so plainly: only the adapters
-   listed exist today. A Go module (`go.mod`) is matched by `go-godog` and a .NET project (`*.csproj`, `*.sln`) by `dotnet-reqnroll`.
-   If the project's test runner can write a JUnit XML report and no other adapter fits, offer `generic-junit` (it is never
+   listed exist today. Detection suggests the dedicated adapters: `go-godog` for a Go module (`go.mod`), `dotnet-reqnroll` for a .NET project
+   (`*.csproj`, `*.sln`), `java-cucumber-spring` and `kotlin-android` for the JVM. If the project's test runner can write a JUnit XML report and none of them fits, offer `generic-junit` (it is never
    suggested by detection) and tell the person they will replace its sample run command with their runner's. Ask the person to confirm the adapter and the starting autonomy level
    (`guided` reviews every gate, `standard` asks only for rules and examples; `auto` and `autopilot` are for
    trusted or hands-off work). Wait for the answer.
