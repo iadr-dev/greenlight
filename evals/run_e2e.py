@@ -24,7 +24,7 @@ commands as follow-up prompts in the same session (`--resume`) when the project 
 approvals arrive as headless prompts, which greenlight grades below a keyboard-typed one; the row records the grade, so
 a standard row measures the pipeline given scripted human decisions, not provenance of a real person.
 
-Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib), working credentials, and some money: a run makes many model calls. Not
+Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib, shop-web), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
@@ -60,7 +60,11 @@ MAX_FOLLOW_UPS = 6
 # app has the run line the person would write into .bdd/config.toml after `bdd init` and the files that decide how
 # scenarios run (they are bound with the steps). Go test names carry the marker ending in "_"; the node script `bdd`
 # (package.json) compiles the TypeScript and runs node's own test runner with a JUnit reporter. A feature request is judged
-# by reaching `done`, an adoption request also by the invariants in adoption_invariants.
+# by reaching `done`, an adoption request also by the invariants in adoption_invariants. A ts-playwright-bdd app is
+# installed from its lockfile, gets the adapter's test tooling and a browser, and has its server started by the bound
+# configuration (see set_up_web).
+WEB_PORT = "3107"
+NPM_CI = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
 PYTEST = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 REQUEST_KINDS = {
     "discounts": {"app": "shop-api", "skill": "feature", "adapter": "python-pytest-bdd", "tools": ("uv",),
@@ -77,6 +81,10 @@ REQUEST_KINDS = {
                       "run": ("{python} -I tests/run_junit.py --reports node-report.xml --command "
                               "\"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
                               ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"])},
+    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+                      "baseline": ["npm", "test"]},
+    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+                     "baseline": ["npm", "test"]},
 }
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
@@ -107,8 +115,8 @@ def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", "dist"))
     if kind["adapter"] != "python-pytest-bdd":                      # the app brings its own runner; bdd runs under this Python
         env = base_environment(tmp)
-        if kind["app"] == "money-lib":
-            run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], project, env, timeout=900)
+        if kind["app"] in ("money-lib", "shop-web"):
+            run([shutil.which("npm") or "npm", *NPM_CI[1:]], project, env, timeout=900)
         return project, env, sys.executable
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
@@ -152,13 +160,33 @@ def swap_run_line(project: Path, kind: dict) -> None:
         (project / sample).unlink(missing_ok=True)
 
 
+WEB_SERVER = ("  webServer: { command: 'npm run build && node node_modules/next/dist/bin/next start -p " + WEB_PORT + "', cwd: '..', "
+              "url: 'http://127.0.0.1:" + WEB_PORT + "/login', reuseExistingServer: false, timeout: 240_000, "
+              "env: { SHOP_TEST_ENDPOINTS: '1' } },")
+WEB_SERVER_COMMENT = "  // webServer: { command: 'npm start', url: 'http://localhost:3000', reuseExistingServer: false },"
+
+
+def set_up_web(project: Path, env: dict) -> None:
+    """Act as the person: the test tooling from the adapter's lockfile, the browser, and the start of the application
+    (the agents may not install packages, and the configuration is bound with the steps)."""
+    run([shutil.which("npm") or "npm", *NPM_CI[1:], "--prefix", "tests"], project, env, timeout=900)
+    run(["node", "tests/node_modules/@playwright/test/cli.js", "install", "chromium"], project, env, timeout=900)
+    config = project / "tests" / "bdd.config.ts"
+    found = config.read_text(encoding="utf-8")
+    if WEB_SERVER_COMMENT not in found:
+        raise SystemExit("the adapter's configuration changed: update WEB_SERVER_COMMENT in evals/run_e2e.py")
+    config.write_text(found.replace(WEB_SERVER_COMMENT, WEB_SERVER), encoding="utf-8", newline="\n")
+
+
 def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> None:
     run([*GIT, "init", "-q"], project, env)
     commit_all(project, env, "reference app")
     python_adapter = kind["adapter"] == "python-pytest-bdd"
     bdd(project, env, "init", "--adapter", kind["adapter"], "--autonomy", autonomy, *(["--python", python] if python_adapter else []))
+    if kind["adapter"] == "ts-playwright-bdd":
+        set_up_web(project, env)
     print(bdd(project, env, "init", "--smoke").stdout.strip())
-    if not python_adapter:
+    if kind["adapter"] == "generic-junit":
         swap_run_line(project, kind)
     commit_all(project, env, "greenlight set up")
 

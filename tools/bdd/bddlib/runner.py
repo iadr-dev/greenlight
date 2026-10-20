@@ -106,7 +106,15 @@ def pick_rules(config: cfg.Config, adapter: str | None) -> cfg.RunRules:
     return config.runs[0]
 
 
-_PLACEHOLDER = re.compile(r"\{(root|python|project_python|tag|marker|out|seed|scenario(?::regex)?)\}")
+def pick_all(config: cfg.Config, adapter: str | None) -> list[cfg.RunRules]:
+    """The adapters to run: the one named, or every adapter that has a run command (a repository with a backend and a
+    web front end has two, and a feature can have scenarios in both)."""
+    if not config.runs:
+        raise UsageError("no [adapters.run] table in .bdd/config.toml; the adapter says how to run its tests")
+    return [pick_rules(config, adapter)] if adapter else list(config.runs)
+
+
+_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex)?)\}")
 
 
 def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed: int | None = None,
@@ -118,7 +126,8 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
         raise UsageError(f"adapter {rules.adapter} has no shuffle words in [adapters.run]")
     if scenario is not None and not rules.isolated:
         raise UsageError(f"adapter {rules.adapter} has no isolated words in [adapters.run]")
-    values = {"root": str(root), "python": sys.executable, "project_python": project_python(root), "tag": tag,
+    values = {"root": str(root), "base": str(root / rules.base) if rules.base else str(root),
+              "python": sys.executable, "project_python": project_python(root), "tag": tag,
               "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
               "scenario": scenario or "",
               # for a runner that takes a name filter as a regular expression: every metacharacter escaped, so the name
@@ -171,11 +180,12 @@ def batch_problem(program: str, arguments: list[str]) -> str | None:
     return None
 
 
-def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] = ()) -> tuple[int, str]:
+def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] = (), cwd: Path | None = None) -> tuple[int, str]:
     """(exit status, combined output). A command that cannot start or runs too long is a usage problem.
     Variables whose names start with one of ``scrub`` (such as PYTEST_ADDOPTS) are not passed on: they can change
-    which tests run."""
-    program = resolve_program(words[0], root, os.environ.get("PATH", ""), executable_suffixes())
+    which tests run. The command runs in ``cwd`` (the adapter's folder, by default the project)."""
+    workdir = cwd or root
+    program = resolve_program(words[0], workdir, os.environ.get("PATH", ""), executable_suffixes())
     if not program:
         raise UsageError(f"cannot run {words[0]!r}: it is not on PATH; install the adapter's requirements first")
     problem = batch_problem(program, words[1:])
@@ -186,7 +196,7 @@ def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] =
         if os.name == "nt":
             env["NoDefaultCurrentDirectoryInExePath"] = "1"          # nothing the tool starts looks in the project first
         # the program as found, so a script shim such as npm.cmd or gradlew.bat starts on Windows without a shell
-        done = subprocess.run([program, *words[1:]], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        done = subprocess.run([program, *words[1:]], cwd=workdir, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
         raise UsageError(f"the test run took longer than {timeout} s and was stopped") from exc
@@ -198,10 +208,17 @@ def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str,
     report.unlink(missing_ok=True)
     words = build_command(rules, root, tag, report, **options)
     started = time.perf_counter()
-    status, output = execute(words, root, rules.timeout, rules.scrub_env)
-    entry = {"command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2),
+    status, output = execute(words, root, rules.timeout, rules.scrub_env, root / rules.base if rules.base else None)
+    entry = {"adapter": rules.adapter, "command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2),
              "scenario": options.get("scenario"), "report": report.is_file(), "tail": output[-TAIL_CHARS:]}
     return entry, junit.parse_file(report) if report.is_file() else []
+
+
+def scenarios_of(rules: cfg.RunRules, scenarios: list[dict], several: bool) -> list[str]:
+    """The names of the scenarios one adapter runs one at a time: those in its own feature folder when the repository
+    has several adapters, all of them otherwise."""
+    prefix = rules.features.rstrip("/") + "/" if rules.features else ""
+    return [s["name"] for s in scenarios if not several or not prefix or s["path"].startswith(prefix)]
 
 
 def fresh_seed() -> int:
@@ -209,19 +226,24 @@ def fresh_seed() -> int:
     return random.SystemRandom().randrange(1, 10**6)
 
 
-def run_feature(root: Path, feature_id: str, scenarios: list[str], rules: cfg.RunRules, *, shuffle: bool = False,
+def run_feature(root: Path, feature_id: str, scenarios: list[dict], adapters: list[cfg.RunRules], *, shuffle: bool = False,
                 isolated: bool = False, seed: int | None = None) -> dict:
-    """Run the feature's tests (one process per scenario when ``isolated``) and record the outcome."""
+    """Run the feature's tests with every adapter in ``adapters`` (one process per scenario when ``isolated``) and
+    record the outcome as one run: the cases of all of them, side by side."""
     folder = runs_dir(root, feature_id)
     folder.mkdir(parents=True, exist_ok=True)
     seed = (seed if seed is not None else fresh_seed()) if shuffle else None
     runs, cases = [], []
-    plan = [{"scenario": name} for name in scenarios] if isolated else [{}]
-    for index, options in enumerate(plan, start=1):
-        entry, found = one_run(rules, root, folder, index, feature_id, seed=seed, **options)
-        runs.append(entry)
-        cases += found
-    record = {"schema": SCHEMA, "feature": feature_id, "adapter": rules.adapter, "at": store.utc_now(), "inputs": inputs_digest(root, feature_id),
+    for rules in adapters:
+        names = scenarios_of(rules, scenarios, len(adapters) > 1)
+        if len(adapters) > 1 and not names:
+            continue                                          # this adapter has no scenario of the feature
+        plan = [{"scenario": name} for name in names] if isolated else [{}]
+        for options in plan:
+            entry, found = one_run(rules, root, folder, len(runs) + 1, feature_id, seed=seed, **options)
+            runs.append(entry)
+            cases += found
+    record = {"schema": SCHEMA, "feature": feature_id, "adapter": ", ".join(r.adapter for r in adapters), "at": store.utc_now(), "inputs": inputs_digest(root, feature_id),
               "interpreter": interpreter_identity(root),
               "mode": "isolated" if isolated else "shuffle" if shuffle else "all", "seed": seed, "runs": runs,
               "cases": [{"name": c.name, "classname": c.classname, "outcome": c.outcome, "text": c.text} for c in cases]}

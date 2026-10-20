@@ -1,0 +1,20 @@
+{
+  "name": "shop-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny Next.js shop (catalogue, cart, sign-in, checkout) used to evaluate greenlight on a web front end. It has no BDD setup on purpose.",
+  "scripts": {
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "engines": {
+    "node": ">=20.9"
+  }
+}

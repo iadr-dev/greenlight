@@ -334,3 +334,48 @@ jobs:
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_junit_fixtures.py" -v
       - name: A missing seam is a valid red and a working one a valid green, on csv-tool and money-lib
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_generic_junit_apps.py" -v
+
+  reference-app-shop-web:
+    name: reference app (shop-web, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_NODE_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+      - name: Install the Python adapter's requirements (pinned, hashed, wheels only)
+        run: uv pip install --system --require-hashes --no-build -r requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            evals/apps/shop-web/package-lock.json
+            adapters/ts-playwright-bdd/templates/tests/package-lock.json
+      - name: Browser downloads, cached by the pinned tooling
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/AppData/Local/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('adapters/ts-playwright-bdd/templates/tests/package-lock.json') }}
+      - name: Browser system libraries (Linux), from the pinned tooling
+        if: runner.os == 'Linux'
+        run: |
+          npm ci --ignore-scripts --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
+          sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
+      - name: The app builds and its own checks pass
+        working-directory: evals/apps/shop-web
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run build
+      - name: The adapter works on the real app, and a backend plus the web front end run as one feature
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_shop_web.py" -v

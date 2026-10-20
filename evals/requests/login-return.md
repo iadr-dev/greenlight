@@ -1,0 +1,1 @@
+Send people back to where they were going. A visitor who opens the cart or the checkout page without being signed in is sent to the sign-in page; after signing in they should land on the page they asked for, not always on the cart. Signing in with no particular page in mind still goes to the cart.
