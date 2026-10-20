@@ -3,8 +3,8 @@
 
     python evals/run_e2e.py [--request discounts] [--model haiku] [--autonomy autopilot] [--keep]
 
-It copies the reference app (evals/apps/shop-api) into a temporary project with its own virtual environment,
-sets greenlight up (`bdd init --adapter python-pytest-bdd`, proves the sample green), then asks Claude Code,
+It copies the request's reference app (evals/apps/: shop-api, csv-tool or money-lib) into a temporary project, with its own
+virtual environment for the Python app, sets greenlight up (`bdd init`, proves the sample green), then asks Claude Code,
 headless, to run `/greenlight:feature "<request>"`. Afterwards it reads the project's own records, with the
 `bdd` CLI and git, never the conversation, and writes one metrics row to evals/results/.
 
@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,7 +26,6 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "evals" / "apps" / "shop-api"
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
@@ -38,6 +38,24 @@ MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us
           "sonnet-5.5": "us.anthropic.claude-sonnet-5-5", "opus-5.5": "us.anthropic.claude-opus-5-5"}
 
 
+# Each request runs on one reference app with one adapter; the answers a person would give are in
+# evals/requests/answers/<request>.md. A fixed table, so nothing typed on the command line reaches a command.
+CASES = {"discounts": ("shop-api", "python-pytest-bdd"), "csv-report": ("csv-tool", "generic-junit"),
+         "money-convert": ("money-lib", "generic-junit")}
+TOOLCHAINS = {"shop-api": ("uv",), "csv-tool": ("go",), "money-lib": ("node", "npm")}
+
+# What the person does after `bdd init --adapter generic-junit`: the run line for the app's own runner and the files that
+# decide how scenarios run (they are bound with the steps). Go test names carry the marker ending in "_"; the node
+# script `bdd` (package.json) compiles the TypeScript and runs node's own test runner with a JUnit reporter.
+GENERIC_RUNS = {
+    "csv-tool": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
+                 "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
+                 ["tests/run_junit.py", "go.mod"]),
+    "money-lib": ("{python} -I tests/run_junit.py --reports node-report.xml --command \"npm run bdd --silent -- {marker}_ dist/tests/\"",
+                  ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"]),
+}
+
+
 def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True,
         stdin_text: str | None = None) -> subprocess.CompletedProcess:
     done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -47,19 +65,31 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
-def build_project(tmp: Path) -> tuple[Path, dict, str]:
+def base_environment(tmp: Path) -> dict:
+    env = os.environ.copy()
+    env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
+    env.pop("CLAUDE_PLUGIN_DATA", None)
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def build_project(tmp: Path, case: str = "discounts") -> tuple[Path, dict, str]:
+    app, adapter = CASES[case]
     project = tmp / "project"
-    shutil.copytree(APP, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(REPO / "evals" / "apps" / app, project,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules", "dist"))
+    if adapter != "python-pytest-bdd":
+        env = base_environment(tmp)
+        if app == "money-lib":
+            run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], project, env, timeout=900)
+        return project, env, sys.executable
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
     bin_dir = venv / ("Scripts" if os.name == "nt" else "bin")
     python = bin_dir / ("python.exe" if os.name == "nt" else "python")
     run(["uv", "pip", "install", "--python", str(python), "fastapi", "httpx", "pytest", "pytest-bdd"], tmp, os.environ.copy())
-    env = os.environ.copy()
+    env = base_environment(tmp)
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]       # `python` in the project is the venv's
-    env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
-    env.pop("CLAUDE_PLUGIN_DATA", None)
-    env["PYTHONUTF8"] = "1"
     return project, env, str(python)
 
 
@@ -67,13 +97,31 @@ def bdd(project: Path, env: dict, *args: str, check: bool = True) -> subprocess.
     return run(["sh", str(REPO / "tools" / "bdd" / "bdd"), *args], project, env, check=check)
 
 
-def set_up(project: Path, env: dict, autonomy: str, python: str) -> None:
+def swap_run_line(project: Path, case: str) -> None:
+    """Act as the person: point the generic-junit adapter at the app's own runner, as its guide says to do.
+
+    The sample runner and its feature are removed, and the runner's own files are bound with the steps."""
+    by_tag, support = GENERIC_RUNS[CASES[case][0]]
+    config = project / ".bdd" / "config.toml"
+    text = config.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^by_tag = .*$", lambda _: "by_tag = " + json.dumps(by_tag), text, count=1)
+    text = re.sub(r"(?m)^support = .*$", lambda _: "support = " + json.dumps(support), text, count=1)
+    config.write_text(text, encoding="utf-8", newline="\n")
+    for sample in ("tests/features/sample.feature", "tests/steps/sample_domain.py", "tests/steps/sample_tests.py",
+                   "tests/run_tests.py"):
+        (project / sample).unlink(missing_ok=True)
+
+
+def set_up(project: Path, env: dict, autonomy: str, python: str, case: str = "discounts") -> None:
     run([*GIT, "init", "-q"], project, env)
     run([*GIT, "add", "-A"], project, env)
     run([*GIT, "commit", "-q", "-m", "reference app"], project, env)
-    bdd(project, env, "init", "--adapter", "python-pytest-bdd", "--autonomy", autonomy, "--python", python)
+    adapter = CASES[case][1]
+    bdd(project, env, "init", "--adapter", adapter, "--autonomy", autonomy, *(["--python", python] if adapter == "python-pytest-bdd" else []))
     smoke = bdd(project, env, "init", "--smoke")
     print(smoke.stdout.strip())
+    if adapter == "generic-junit":
+        swap_run_line(project, case)
     run([*GIT, "add", "-A"], project, env)
     run([*GIT, "commit", "-q", "-m", "greenlight set up"], project, env)
 
@@ -138,13 +186,14 @@ def collect(project: Path, env: dict) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
-    ap.add_argument("--request", default="discounts", choices=sorted(requests), help="a file in evals/requests/")
+    ap.add_argument("--request", default="discounts", choices=sorted(set(requests) & set(CASES)),
+                    help="a file in evals/requests/ (each runs on its own reference app)")
     ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
     ap.add_argument("--autonomy", default="autopilot", choices=("guided", "standard", "auto", "autopilot"))
     ap.add_argument("--minutes", type=int, default=45, help="give up after this long")
     ap.add_argument("--keep", action="store_true", help="keep the temporary project and print its path")
     args = ap.parse_args()
-    for tool in ("claude", "uv", "git", "sh"):
+    for tool in ("claude", "git", "sh", *TOOLCHAINS[CASES[args.request][0]]):
         if not shutil.which(tool):
             print(f"{tool} not found on PATH")
             return 2
@@ -152,8 +201,8 @@ def main() -> int:
     model = MODELS[args.model]
     tmp = Path(tempfile.mkdtemp(prefix="greenlight-e2e-")).resolve()
     try:
-        project, env, python = build_project(tmp)
-        set_up(project, env, args.autonomy, python)
+        project, env, python = build_project(tmp, args.request)
+        set_up(project, env, args.autonomy, python, args.request)
         output = ask(project, env, request, model, args.autonomy, args.minutes)
         row = {"request": args.request, "model": args.model, "claude": {k: output.get(k) for k in (
             "exit", "seconds", "is_error", "num_turns", "total_cost_usd", "subtype")}, **collect(project, env)}

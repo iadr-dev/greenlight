@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="godog" tests="2" skipped="0" failures="2" errors="0" time="0">
+  <testsuite name="Sample (delete me)" tests="2" skipped="0" failures="2" errors="0" time="0">
+    <testcase name="Two numbers are added" status="failed" time="0"><failure message="Step I add 2 and 3: BDD_EXPECTED_MISSING: add" type="failed"></failure></testcase>
+    <testcase name="A negative number is refused" status="failed" time="0"><failure message="Step I add -1 and 3: BDD_EXPECTED_MISSING: add" type="failed"></failure></testcase>
+  </testsuite>
+</testsuites>

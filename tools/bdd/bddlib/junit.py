@@ -57,4 +57,6 @@ def case_of(element: ET.Element) -> Case:
             text = "\n".join(part for part in (child.get("type"), child.get("message"), child.text) if part).strip()
             if outcome != SKIPPED:
                 break                                 # a failure outranks a skip recorded on the same case
+    if outcome in (FAILED, ERRORED) and not text:
+        text = (element.findtext("system-out") or "").strip()      # cucumber-js says "undefined" only in the output
     return Case(element.get("name", ""), element.get("classname", ""), outcome, text)

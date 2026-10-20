@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Sample.dll" tests="2" skipped="0" failures="2" errors="0" time="0.1">
+    <testsuite name="Sample.Features.SampleFeature" tests="2" failures="2">
+      <testcase classname="Sample.Features.SampleFeature" name="TwoNumbersAreAdded" time="0.012"><failure message="BDD_EXPECTED_MISSING: add" type="System.NotImplementedException">System.NotImplementedException : BDD_EXPECTED_MISSING: add
+   at Sample.Steps.Add(Int32 a, Int32 b)</failure></testcase>
+      <testcase classname="Sample.Features.SampleFeature" name="ANegativeNumberIsRefused" time="0.012"><failure message="BDD_EXPECTED_MISSING: add" type="System.NotImplementedException">System.NotImplementedException : BDD_EXPECTED_MISSING: add
+   at Sample.Steps.Add(Int32 a, Int32 b)</failure></testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>

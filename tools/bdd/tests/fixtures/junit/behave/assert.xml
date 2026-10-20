@@ -1,0 +1,31 @@
+<testsuite name="sample.Sample (delete me)" tests="2" errors="0" failures="2" skipped="0" time="0.000821" timestamp="2026-10-20T19:30:59.815358" hostname="localhost"><testcase classname="sample.Sample (delete me)" name="Two numbers are added" status="failed" time="0.000587"><failure type="AssertionError" message="0 != 5">
+<![CDATA[
+Failing step: Then the result is 5 ... failed in 0.000s
+Location: features/sample.feature:5
+ASSERT FAILED: 0 != 5]]>
+</failure><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario: Two numbers are added
+    When I add 2 and 3 ... passed in 0.000s
+    Then the result is 5 ... failed in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase><testcase classname="sample.Sample (delete me)" name="A negative number is refused" status="failed" time="0.000235"><failure type="AssertionError" message="expected an error">
+<![CDATA[
+Failing step: Then the call fails with negative input ... failed in 0.000s
+Location: features/sample.feature:9
+ASSERT FAILED: expected an error]]>
+</failure><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario: A negative number is refused
+    When I add -1 and 3 ... passed in 0.000s
+    Then the call fails with negative input ... failed in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase></testsuite>

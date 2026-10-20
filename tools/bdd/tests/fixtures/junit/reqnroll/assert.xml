@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Sample.dll" tests="2" skipped="0" failures="2" errors="0" time="0.1">
+    <testsuite name="Sample.Features.SampleFeature" tests="2" failures="2">
+      <testcase classname="Sample.Features.SampleFeature" name="TwoNumbersAreAdded" time="0.012"><failure message="Assert.Equal() Failure&#xA;Expected: 5&#xA;Actual:   0" type="Xunit.Sdk.EqualException">Xunit.Sdk.EqualException : Assert.Equal() Failure
+Expected: 5
+Actual:   0</failure></testcase>
+      <testcase classname="Sample.Features.SampleFeature" name="ANegativeNumberIsRefused" time="0.012"><failure message="Assert.NotNull() Failure" type="Xunit.Sdk.NotNullException">Xunit.Sdk.NotNullException : Assert.NotNull() Failure</failure></testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>
