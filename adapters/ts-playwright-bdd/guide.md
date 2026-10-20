@@ -148,6 +148,36 @@ Agents cannot run `npx` or install packages: the orchestrator runs `bdd check`. 
 rule to `error` in the ESLint configuration so that use of a deprecated API fails the lint. The `language-typescript`
 card (and `language-expo` or `language-nextjs`) lists the details.
 
+## Mutation check (opt-in)
+
+Nothing here is installed or enabled by default. A project that wants to know whether its tests would notice a change
+in the application code installs [Stryker](https://stryker-mutator.io) itself, pinned (a development tool, never a
+requirement of greenlight), and adds an `[adapters.mutation]` table to `.bdd/config.toml`:
+
+```sh
+npm install --save-dev --save-exact @stryker-mutator/core@10.0.0     # the version this wrapper was run against
+```
+
+```toml
+[adapters.mutation]
+command    = 'node tests/tools/mutate-ts.mjs --report {out} --test-command "npm test" -- {files}'
+threshold  = 80
+extensions = [".ts", ".tsx", ".js"]
+```
+
+`tests/tools/mutate-ts.mjs` is copied into the project with the other plumbing and is bound like it (Node's standard
+library only). `--test-command` is the project's own test command; Stryker's command runner starts it once per mutant and
+a non-zero exit status means the mutant was noticed. Choose a command that is fast and that exercises the code you mutate
+(the project's unit tests, `npm test`): running the browser scenarios once per mutant works but takes very long. The
+wrapper looks for Stryker in `node_modules` and `tests/node_modules`, writes a Stryker settings file outside the project,
+and writes the counts to `{out}`. It exits 0 whenever Stryker ran to the end, survivors or not; 2 means the arguments were
+refused, 3 that Stryker could not run. A mutant no test reached (`NoCoverage`) counts as survived, a mutant that broke
+the run for another reason (`RuntimeError`) as suspicious, and neither is a kill.
+
+Verified with Stryker 10.0.0 and Node's test runner: boundary tests killed 7 of 7 mutants of a small discount function; a
+test that only checked for a result killed 1 and let 6 survive. It has not been run with the browser scenarios of this
+adapter as the test command.
+
 ## Known pitfalls
 
 - A tag selects whole: `FEAT-7` does not run `FEAT-70`.
