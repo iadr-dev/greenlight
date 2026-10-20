@@ -69,7 +69,7 @@ def environment_files(root: Path) -> list[Path]:
         if not site.is_dir():
             continue
         found += [*site.glob("*.pth"), site / "sitecustomize.py", site / "usercustomize.py"]
-        found +=[*site.glob("*.dist-info/entry_points.txt")]            # how plugins register themselves
+        found += [*site.glob("*.dist-info/entry_points.txt"), *site.glob("*.egg-info/entry_points.txt")]  # how plugins register
         for package in PACKAGES:
             found += _files_under(site / package)
     return [p for p in found if p.is_file()]
