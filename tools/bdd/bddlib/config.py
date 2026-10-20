@@ -10,6 +10,7 @@ ALL_PROFILES = ("base", "api", "ui", "cli", "lib")
 DEFAULT_SIMILARITY = 0.85
 BDD_DIR = ".bdd"
 ENFORCEMENT_MODES = ("auto", "hard", "soft")
+SCHEMA_VERSION = 1                       # of .bdd/ as a whole; `version` in config.toml, absent means 1
 
 
 class ConfigError(ValueError):
@@ -39,6 +40,7 @@ class Config:
     allow_headless_approvals: bool = False   # accept approvals typed into `claude -p` (CI-driven flows)
     enforcement: str = "auto"                # auto | hard | soft: see approvals.self_reported_problem
     scans: tuple[ScanRules, ...] = ()        # one per adapter that has an [adapters.scan] table
+    version: int = SCHEMA_VERSION            # the schema this project's .bdd/ is at
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -80,6 +82,38 @@ def _scan_rules(root: Path, adapter: dict, path: Path) -> ScanRules | None:
                      _patterns(table, "stub_patterns", path))
 
 
+def _schema_version(data: dict, path: Path) -> int:
+    version = data.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise ConfigError(f"{path}: version must be a whole number from 1")
+    if version > SCHEMA_VERSION:
+        raise ConfigError(f"{path}: this project is at schema {version} but this greenlight understands up to "
+                          f"{SCHEMA_VERSION}; upgrade greenlight (/plugin update greenlight)")
+    return version
+
+
+# Commands that must keep working whatever the project's version (hooks must never fail on it).
+VERSION_EXEMPT = {"doctor", "guard", "tripwire", "migrate"}
+VERSION_EXEMPT_FLAGS = {"approve": "--from-hook", "status": "--brief"}
+
+
+def version_problem(command: str, args: list[str]) -> str | None:
+    """Why this command may not run on the project around the current directory, or None."""
+    if command in VERSION_EXEMPT or VERSION_EXEMPT_FLAGS.get(command) in args:
+        return None
+    root = find_root()
+    if root is None:
+        return None
+    try:
+        version = load(root).version
+    except ConfigError as exc:
+        return str(exc)
+    if version < SCHEMA_VERSION:
+        return (f"this project is at schema {version} but this greenlight writes schema {SCHEMA_VERSION}; "
+                "run `bdd migrate` first")
+    return None
+
+
 def load(root: Path | str | None) -> Config:
     """Read ``<root>/.bdd/config.toml``. Without a root or file, every profile is enabled."""
     if root is None:
@@ -92,6 +126,7 @@ def load(root: Path | str | None) -> Config:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
+    version = _schema_version(data, path)
     profiles = tuple(data.get("profiles", ALL_PROFILES))
     unknown = [p for p in profiles if p not in ALL_PROFILES]
     if unknown:
@@ -113,4 +148,5 @@ def load(root: Path | str | None) -> Config:
         allow_headless_approvals=bool(data.get("approvals", {}).get("allow_headless", False)),
         enforcement=enforcement,
         scans=tuple(r for r in (_scan_rules(root, a, path) for a in data.get("adapters", [])) if r),
+        version=version,
     )
