@@ -113,33 +113,43 @@ class AuditTest(PrHelpers, ProjectCase):
 
 
 class OutputTest(PrHelpers, ProjectCase):
-    def test_a_file_inside_the_project_is_written_and_not_replaced_without_force(self):
+    def test_the_description_is_written_to_a_fixed_file_in_the_project_root(self):
         self.prepare()
-        self.assertEqual(self.cli("--output", "PR.md")[0], 0)
-        self.assertIn("# FEAT-007", (self.root / "PR.md").read_text(encoding="utf-8"))
-        self.assertEqual(self.cli("--output", "PR.md")[0], 2)
-        self.assertEqual(self.cli("--output", "PR.md", "--force")[0], 0)
+        code, out, _ = self.cli("--write")
+        self.assertEqual((code, out.strip()), (0, "FEAT-007: wrote PULL_REQUEST.md"))
+        self.assertIn("# FEAT-007", (self.root / "PULL_REQUEST.md").read_text(encoding="utf-8"))
 
-    def test_places_outside_the_project_or_under_the_managed_folder_are_refused(self):
+    def test_an_existing_file_is_replaced_only_with_force(self):
         self.prepare()
-        for target in ("../outside.md", ".bdd/pr.md", "missing-folder/pr.md", "..", str(self.root.parent / "abs.md")):
-            with self.subTest(target=target):
-                code, _, err = self.cli("--output", target)
-                self.assertEqual(code, 2, err)
-                self.assertIn("file name", err)
-        self.assertFalse((self.root.parent / "outside.md").exists())
+        self.assertEqual(self.cli("--write")[0], 0)
+        code, _, err = self.cli("--write")
+        self.assertEqual(code, 2)
+        self.assertIn("use --force", err)
+        self.assertEqual(self.cli("--write", "--force")[0], 0)
 
-    def test_the_managed_folder_is_refused_as_the_current_folder(self):
+    def test_a_folder_in_the_way_is_never_replaced(self):
+        self.prepare()
+        (self.root / "PULL_REQUEST.md").mkdir()
+        self.assertEqual(self.cli("--write", "--force")[0], 2)
+
+    def test_the_file_is_written_in_the_root_whatever_the_current_folder(self):
+        self.prepare()
+        (self.root / "sub").mkdir()
         out, err, here = io.StringIO(), io.StringIO(), os.getcwd()
-        os.chdir(self.root / ".bdd")
+        os.chdir(self.root / "sub")
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                code = cli.main(["pr", "FEAT-007", "--output", "pr.md"])
+                code = cli.main(["pr", "FEAT-007", "--write"])
         finally:
             os.chdir(here)
-        self.assertEqual(code, 2)
-        self.assertIn("managed by the bdd command line", err.getvalue())
-        self.assertFalse((self.root / ".bdd" / "pr.md").exists())
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertTrue((self.root / "PULL_REQUEST.md").is_file())
+        self.assertFalse((self.root / "sub" / "PULL_REQUEST.md").exists())
+
+    def test_there_is_no_way_to_choose_the_path(self):
+        self.prepare()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cli("--output", "../outside.md")
 
 
 if __name__ == "__main__":

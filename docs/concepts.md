@@ -146,7 +146,7 @@ the rules and examples with their scenarios and tasks, the gates and approvals w
 enforcement level (and why it is soft, if it is), the red and latest runs as counts, the quality, mutation and stability
 results when they exist, the assumptions, the auditor's verdict and findings, and the cost. A feature that ran on
 autopilot starts with an UNREVIEWED notice. Nothing is sent anywhere, no command lines, absolute paths or session
-identifiers are printed, and `--output PR.md` writes a file with that name in the current folder (inside the project). Paste it into the pull request; the
+identifiers are printed, and `--write` saves it as `PULL_REQUEST.md` in the project root (for another name, redirect the output with `>`). Paste it into the pull request; the
 description is only as current as the records, so run it after the verify phase.
 
 ## Shared vocabularies

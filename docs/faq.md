@@ -74,7 +74,7 @@ It is installed nearly everywhere, the standard library is enough (TOML, JSON, X
 implementation of the checks is easier to trust than prompts that re-derive them.
 
 **Can I get a pull-request description out of a feature?**
-Yes: `bdd pr FEAT-n` (add `--output PR.md` or `--json`). It is built from the records, never contacts a git host and is safe to
+Yes: `bdd pr FEAT-n` (add `--write` to save `PULL_REQUEST.md`, or `--json`). It is built from the records, never contacts a git host and is safe to
 paste. See [concepts](concepts.md).
 
 **Can several projects share the same domain steps?**

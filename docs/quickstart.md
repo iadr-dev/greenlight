@@ -79,7 +79,7 @@ run without hooks, so enforcement is soft; see [concepts](concepts.md).
 
 ## Hand the result to reviewers
 
-`bdd pr FEAT-001 --output PR.md` writes a pull-request description from the recorded facts (rules, examples, evidence,
+`bdd pr FEAT-001 --write` saves a pull-request description from the recorded facts (rules, examples, evidence,
 assumptions, the auditor's verdict). Paste it into the pull request; see [concepts](concepts.md).
 
 ## Starting from existing code
