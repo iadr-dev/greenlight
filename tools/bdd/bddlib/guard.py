@@ -39,7 +39,7 @@ from pathlib import Path
 
 from . import claudepaths
 from . import config as cfg
-from . import enforcement, lockfile, store
+from . import enforcement, lockfile, sharedvocab, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -58,7 +58,7 @@ AGENT_WRITES = {
     "implementer": {"data", "production"},
     "spec-auditor": set(),
 }
-MANAGED_NAMES = {"state.json", "lock.json"}
+MANAGED_NAMES = {"state.json", "lock.json", sharedvocab.LOCK_NAME}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
@@ -131,6 +131,7 @@ class Project:
         self.root = root.resolve()
         self.config = cfg.load(self.root)
         self.locked: dict[str, Locked] = {}
+        self.shared = {path_key(f): f for f in sharedvocab.safe_closure(self.config.vocabulary_file)}   # included vocabularies
         self.load_locks()
 
     def load_locks(self) -> None:
@@ -184,7 +185,7 @@ def locked_message(project: Project, path: Path, lock: Locked) -> str:
 
 def managed_message(project: Project, path: Path) -> str:
     return (f"greenlight: {project.relative(path)} is managed by the bdd command line (state, locks, approvals, "
-            "project configuration, engineering standards). Use the bdd commands instead of editing it; the person can edit it "
+            "project configuration, engineering standards, shared vocabularies). Use the bdd commands instead of editing it; the person can edit it "
             "themselves outside the agent.")
 
 
@@ -322,7 +323,7 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
-    if project.is_data(path):
+    if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
     protected = check_enforcement_files(path)
     if protected:
@@ -417,6 +418,9 @@ def mentioned_protected(project: Project, command: str, cwd: Path | None = None)
         for managed in MANAGED_DIRS:
             if names_segment(text, managed) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
+        for shared in project.shared.values():                      # an included vocabulary, named by its path in the project
+            if project.relative(shared).casefold() in text:
+                return shared, None
     return None
 
 

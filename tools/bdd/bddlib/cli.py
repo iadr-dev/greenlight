@@ -25,6 +25,8 @@ COMMANDS = {
     "trace": ("reportcmd", "run_trace"),
     "scan": ("reportcmd", "run_scan"),
     "design": ("design", "run"),
+    "pr": ("pr", "run"),
+    "vocabulary": ("vocabcmd", "run"),
     "install-skills": ("installskills", "run"),
     "adopt": ("adopt", "run"),
     "check": ("quality", "run"),

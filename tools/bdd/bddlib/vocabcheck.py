@@ -3,6 +3,7 @@
     L004 error  a pattern mentions an implementation detail (URL, SQL, selector, ...)
     L010 error  a pattern is nearly identical to another one and has no ``justification``
     L012 error  a domain step does not compose core instructions properly
+    L014 error  two project or shared steps define the very same pattern, so a step matching it is ambiguous
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from . import denylist
 from .issues import ERROR, Issue
-from .vocabulary import Entry, Vocabulary
+from .vocabulary import Entry, Vocabulary, normalize
 
 _WORD = re.compile(r"[^\W\d_]+|\d+|\{\}", re.UNICODE)
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
@@ -63,12 +64,43 @@ def check_composition(entry: Entry, vocab: Vocabulary, profiles: set[str], path:
     return issues
 
 
-def check_near_duplicates(entries: list[Entry], threshold: float, path: str, source: str) -> list[Issue]:
+def where(entry: Entry, path: str, texts: dict[str, str]) -> tuple[str, int]:
+    """The file an entry was read from and the line it starts on."""
+    file = entry.origin or path
+    return file, locate(texts.get(file, ""), entry.id)
+
+
+def exact_duplicates(a: Entry, b: Entry) -> list[str]:
+    """Pattern texts that ``a`` and ``b`` both define, compared as the lint compares steps."""
+    mine = {normalize(p.text).casefold() for p in _own_patterns(a)}
+    return sorted(mine & {normalize(p.text).casefold() for p in _own_patterns(b)})
+
+
+def check_exact_duplicates(entries: list[Entry], path: str, texts: dict[str, str]) -> list[Issue]:
     issues = []
+    project = [e for e in entries if e.source == "project"]
+    for i, a in enumerate(project):
+        for b in project[i + 1:]:
+            if a.kind != b.kind:
+                continue
+            for text in exact_duplicates(a, b):
+                file, line = where(b, path, texts)
+                issues.append(Issue(file, line, ERROR, "L014",
+                                    f'{a.id} ({where(a, path, texts)[0]}) and {b.id} define the same pattern "{text}": a step '
+                                    "that matches it is ambiguous; keep one definition"))
+    return issues
+
+
+def check_near_duplicates(entries: list[Entry], threshold: float, path: str, source: str,
+                          texts: dict[str, str] | None = None) -> list[Issue]:
+    issues = []
+    texts = {path: source, **(texts or {})}
     for i, a in enumerate(entries):
         for b in entries[i + 1:]:
             if a.kind != b.kind or (a.source == "core" and b.source == "core"):
                 continue
+            if a.source == b.source == "project" and exact_duplicates(a, b):
+                continue                                         # reported as L014
             unjustified = [e for e in (a, b) if e.source == "project" and not e.justification]
             if not unjustified:
                 continue
@@ -76,7 +108,8 @@ def check_near_duplicates(entries: list[Entry], threshold: float, path: str, sou
                         for pa in _own_patterns(a) for pb in _own_patterns(b)), default=None)
             if best and best[0] >= threshold:
                 target = unjustified[-1]      # the later definition is the duplicate
-                issues.append(Issue(path, locate(source, target.id), ERROR, "L010",
+                file, line = where(target, path, texts)
+                issues.append(Issue(file, line, ERROR, "L010",
                                     f'{a.id} "{best[1]}" and {b.id} "{best[2]}" are nearly identical '
                                     f"(similarity {best[0]:.2f} >= {threshold:.2f}): reuse one, "
                                     f"or give {target.id} a `justification`"))
@@ -84,14 +117,17 @@ def check_near_duplicates(entries: list[Entry], threshold: float, path: str, sou
 
 
 def check_vocabulary(vocab: Vocabulary, profiles: tuple[str, ...], threshold: float,
-                     path: Path | str, source: str) -> list[Issue]:
-    """All findings for the project's domain steps. ``source`` is the file text (for line numbers)."""
+                     path: Path | str, source: str, shared_texts: dict[str, str] | None = None) -> list[Issue]:
+    """All findings for the project's domain steps and the shared ones. ``source`` is the project file's text and
+    ``shared_texts`` the text of each included file by path (both for line numbers)."""
     path = str(path)
+    texts = {path: source, **(shared_texts or {})}
     issues: list[Issue] = []
     enabled = set(profiles)
     for entry in (e for e in vocab.entries if e.source == "project"):
-        line = locate(source, entry.id)
-        issues += check_details(entry, path, line)
-        issues += check_composition(entry, vocab, enabled, path, line)
-    issues += check_near_duplicates(vocab.entries, threshold, path, source)
-    return sorted(issues, key=lambda i: (i.line, i.code))
+        file, line = where(entry, path, texts)
+        issues += check_details(entry, file, line)
+        issues += check_composition(entry, vocab, enabled, file, line)
+    issues += check_exact_duplicates(vocab.entries, path, texts)
+    issues += check_near_duplicates(vocab.entries, threshold, path, source, texts)
+    return sorted(issues, key=lambda i: (i.path, i.line, i.code))

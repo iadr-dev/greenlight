@@ -26,7 +26,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import claudepaths, config as cfg, lockfile, runner, store
+from . import claudepaths, config as cfg, lockfile, runner, sharedvocab, store
 from .errors import StoreError, UsageError
 
 INTEGRITY_DIR = ".integrity"
@@ -37,7 +37,7 @@ BASELINE_WHAT = "integrity baseline"
 RESTORED_BY_ACCEPT = (BASELINE_WHAT, "baseline backup")      # accepting writes both copies afresh
 ACCEPTED_KEPT = 50
 PROJECT_FILES = (".claude/settings.json", ".claude/settings.local.json", f"{cfg.BDD_DIR}/config.toml",
-                 f"{cfg.BDD_DIR}/standards.md")
+                 f"{cfg.BDD_DIR}/standards.md", f"{cfg.BDD_DIR}/{sharedvocab.LOCK_NAME}")
 PLUGIN_FILES = ("hooks/hooks.json", ".claude-plugin/plugin.json", "tools/bdd/bdd", "tools/bdd/main.py")
 PLUGIN_TREES = ("tools/bdd/bddlib",)
 SKIPPED = {"__pycache__", "node_modules", ".git"}
@@ -102,6 +102,7 @@ def watched_files(root: Path, plugin_root: Path | None) -> list[Path]:
     candidates = [root / rel for rel in PROJECT_FILES] + [claudepaths.config_dir() / "settings.json"]
     candidates += _files_under(root / ".claude" / "hooks")
     candidates += environment_files(root) + node_environment_files(root)
+    candidates += sharedvocab.safe_closure(cfg.load(root).vocabulary_file)          # the shared vocabularies the project includes
     if plugin_root is not None:
         candidates += [plugin_root / rel for rel in PLUGIN_FILES]
         for tree in PLUGIN_TREES:
