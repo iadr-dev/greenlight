@@ -47,6 +47,12 @@ class System:
         """Every stored ``entity`` record, read through a seam that does not change anything."""
         raise ExpectedMissing(f"a way to read {entity} records")
 
+    def queries_executed(self) -> int:
+        """How many database statements have run since the scenario began. Install a ``QueryCounter`` (see
+        ``queries.py``) on the application's data access when the system is built, and return its ``count``. Only
+        scenarios that check a query count need this seam."""
+        raise ExpectedMissing("a counter of the application's database statements")
+
     def published(self, event: str) -> list[Any]:
         """The payloads of ``event`` that the application published (a test double of the broker)."""
         raise ExpectedMissing(f"a captured {event} event")

@@ -62,6 +62,12 @@ project:
   rather than recall an API.
 - The auditor's checklist (section Q) judges the diff against the standards, the recorded result and the documentation.
 
+## APIs and databases
+
+Interfaces and data outlive the code that first used them, so the engineering standards have an API section (schema file, versioning, error shape, pagination, authorization, idempotency) and a data section (engine, keys and constraints, types for money and time, indexes, soft delete and retention, migrations, no query per record). The system map copies the contract from the project's schema file and draws the affected tables in the design view's ER diagram, so you see keys and relations before binding. The `data` profile adds one vocabulary instruction, `{operation} ran at most {count:int} queries`: a scenario that seeds several records and limits the queries makes an N+1 problem a failing test before the code exists. The practice cards `api-design`, `database-schema`, `database-migrations`, `database-performance` and `database-engines` hold the detail, and the auditor's checklist section D judges the contract, the migrations, the schema, the query counts and bounded results.
+
+What this proves is narrow and stated plainly: a query count shows "no query per record here", a query plan shows that a query can use an index, a migration lint shows known risky statements. None of it shows how the system behaves with production volume or load; load testing is outside what greenlight checks.
+
 ## Locks
 
 Approving the examples locks the feature files; passing the bind gate locks the steps, drivers and the adapter's

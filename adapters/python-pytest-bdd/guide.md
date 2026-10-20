@@ -9,7 +9,7 @@ For Python services, libraries and command-line tools tested with `pytest` and `
 | Path | What it is | Who edits it |
 |---|---|---|
 | `tests/features/` | the `.feature` files (one sample, `sample.feature`, to delete after the first real feature) | qa-designer |
-| `tests/steps/core_steps.py` | every core instruction of the `base`, `api`, `cli` and `lib` profiles bound to the drivers | nobody: add project steps in their own module |
+| `tests/steps/core_steps.py` | every core instruction of the `base`, `api`, `cli`, `lib` and `data` profiles bound to the drivers | nobody: add project steps in their own module |
 | `tests/drivers/system.py` | the seams into the system under test: seed, sign in, read records, HTTP client, jobs, events | step-engineer, from `system.md` |
 | `tests/drivers/operations.py` | logical name → API route, command, library function, file, error | step-engineer, from `system.md` |
 | `tests/drivers/*.py` (the rest) | clock, stubs, network block, files, comparison helpers, the drivers for API, CLI and library calls | nobody |
@@ -117,6 +117,47 @@ command = '{project_python} -m mypy {root}'
 Nothing here is a runtime dependency of greenlight or of the adapter; install the tools in the project's environment. To
 make deprecations fail, add `filterwarnings = ["error::DeprecationWarning"]` to the bound `tests/pytest.ini`. The
 `language-python` card lists the details.
+
+For a service with an interface or a database, the same tables can hold the contract and migration checks the
+project already uses. These are examples; install and choose your own, and wrap anything that needs a glob or a pipe in
+a script (commands run without a shell):
+
+```toml
+[adapters.quality.api-lint]
+command = 'spectral lint openapi.yaml'
+
+[adapters.quality.api-breaking]
+command = 'oasdiff breaking openapi.base.yaml openapi.yaml --fail-on ERR'
+
+[adapters.quality.migrations-drift]
+command = '{project_python} -m alembic check'
+```
+
+The cards `api-design`, `database-schema`, `database-migrations`, `database-performance` and `database-engines` say what
+each check is for.
+
+## Counting queries (the `data` profile)
+
+The `data` profile adds one instruction, `{operation} ran at most {count:int} queries`, so that an N+1 problem is a
+scenario that fails before the code exists. It needs one seam: `System.queries_executed()` returns how many database
+statements have run since the scenario began. Create a `QueryCounter` from `tests/drivers/queries.py` when your
+`System` is built, attach it to the application's data access, and return its `count`:
+
+```python
+class MySystem(System):
+    def __init__(self):
+        self.counter = QueryCounter()
+        self.counter.hook_sqlalchemy(engine)        # or: with connection.execute_wrapper(self.counter.django_wrapper)
+
+    def queries_executed(self) -> int:
+        return self.counter.count
+```
+
+`World.act()` notes the count before each action; the step compares the difference with the limit. Without the seam the
+step fails as an expected failure and every other scenario is unaffected. SQLAlchemy and Django are imported only when
+their hook is used; nothing is added to the requirements. Savepoints and transaction control are not counted, and an
+action that runs in another process (the command line) cannot be counted this way. Seed at least three records in a
+scenario about a collection, or the problem cannot show.
 
 ## Known pitfalls
 

@@ -20,8 +20,9 @@ An adapter declares the profiles it supports; a project uses the instructions of
 | `ui` | web, mobile and desktop UIs |
 | `cli` | command-line tools and scripts |
 | `lib` | libraries, SDKs and pure domain modules (shares the file instructions with cli) |
+| `data` | services that store data in a database whose queries can be counted |
 
-## Core instructions (version 1)
+## Core instructions (version 2)
 
 | ID | Kind | Profiles | Pattern | What it does |
 |---|---|---|---|---|
@@ -53,6 +54,7 @@ An adapter declares the profiles it supports; a project uses the instructions of
 | `C.OUTPUT.CONTAINS` | then | cli | `the {stream:enum(stdout,stderr)} output contains:` | Match stdout or stderr with normalized line endings and whitespace; no regular expressions in features. |
 | `C.FILE.VERIFY` | then | cli, lib | `the output file {file} contains:` | Check a produced file by logical name. |
 | `C.LIB.RESULT` | then | lib | `the result is:` | Check the return value (exact or subset) or the logical error raised. |
+| `C.QUERY.COUNT` | then | data | `{operation} ran at most {count:int} queries` | Check how many database statements the last action ran, through a counter the project installs on its data access. A list of several records that needs one query per record is the classic N+1 failure; the scenario must seed enough records for it to show. |
 
 `{name:enum(a,b)}` means the placeholder must be one of the listed words. Where a pattern ends in a colon,
 a data table (or docstring) follows. Some instructions also have translations (for example Traditional Chinese);

@@ -1,11 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "profiles": {
     "base": "every project",
     "api": "HTTP/RPC services",
     "ui": "web, mobile and desktop UIs",
     "cli": "command-line tools and scripts",
-    "lib": "libraries, SDKs and pure domain modules (shares the file instructions with cli)"
+    "lib": "libraries, SDKs and pure domain modules (shares the file instructions with cli)",
+    "data": "services that store data in a database whose queries can be counted"
   },
   "instructions": [
     {
@@ -490,6 +491,23 @@
       },
       "requires": "table_or_docstring_optional",
       "semantics": "Check the return value (exact or subset) or the logical error raised."
+    },
+    {
+      "id": "C.QUERY.COUNT",
+      "kind": "then",
+      "profiles": [
+        "data"
+      ],
+      "patterns": [
+        "{operation} ran at most {count:int} queries"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{operation}最多執行了{count:int}次查詢"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Check how many database statements the last action ran, through a counter the project installs on its data access. A list of several records that needs one query per record is the classic N+1 failure; the scenario must seed enough records for it to show."
     }
   ]
 }

@@ -172,6 +172,13 @@ class ContractTest(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
+    def test_7_a_query_count_needs_a_counter_and_fails_over_the_limit(self):
+        probe = self.root / "tests/test_queries.py"
+        probe.write_text(QUERIES, encoding="utf-8", newline="\n")
+        self.addCleanup(probe.unlink)
+        done = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(probe)], cwd=self.root,
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
 
 ORDERS = """@FEAT-001
@@ -276,6 +283,54 @@ def test_complete_fills_in_what_the_scenario_left_out(tmp_path):
     world.system = Mine()
     api.call(world, "alice", "look up order", None)
     assert world.system.client.calls[0][:2] == ("GET", "/orders/1")
+'''
+
+
+QUERIES = '''
+import pytest
+
+from tests.drivers.errors import ExpectedMissing
+from tests.drivers.queries import QueryCounter
+from tests.drivers.system import System
+from tests.drivers.world import Outcome, new_world
+
+
+class Counting(System):
+    def __init__(self):
+        self.counter = QueryCounter()
+
+    def queries_executed(self):
+        return self.counter.count
+
+
+def test_without_a_counter_an_action_still_runs_and_the_check_is_an_expected_failure(tmp_path):
+    world = new_world(tmp_path)
+    world.act()
+    with pytest.raises(ExpectedMissing):
+        world.assert_queries_at_most("list orders", 3)
+
+
+def test_the_count_is_the_statements_since_the_action_and_ignores_savepoints(tmp_path):
+    world = new_world(tmp_path)
+    world.system = Counting()
+    world.system.counter.record("SELECT before the action")
+    world.act()
+    world.outcome = Outcome("api", status=200, operation="list orders")
+    for _ in range(4):
+        world.system.counter.record("SELECT 1")
+    world.system.counter.record("SAVEPOINT sp")
+    world.assert_queries_at_most("list orders", 4)
+    with pytest.raises(AssertionError, match="N.1 problem"):
+        world.assert_queries_at_most("list orders", 3)
+
+
+def test_the_check_must_be_about_the_last_operation(tmp_path):
+    world = new_world(tmp_path)
+    world.system = Counting()
+    world.act()
+    world.outcome = Outcome("api", status=200, operation="list orders")
+    with pytest.raises(AssertionError, match="not 'cancel order'"):
+        world.assert_queries_at_most("cancel order", 9)
 '''
 
 

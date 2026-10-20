@@ -17,7 +17,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 CORE_FILE = PLUGIN_ROOT / "vocabulary" / "core.json"
 
 KINDS = ("given", "when", "then")
-PROFILES = ("base", "api", "ui", "cli", "lib")
+PROFILES = ("base", "api", "ui", "cli", "lib", "data")
 REQUIRES = ("none", "table", "docstring", "table_or_docstring", "table_or_docstring_optional")
 
 # Full-width punctuation is normalised to ASCII on both the pattern and the step text, so a

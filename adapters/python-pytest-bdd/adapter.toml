@@ -1,6 +1,6 @@
 name = "python-pytest-bdd"
 version = 1
-profiles = ["base", "api", "cli", "lib"]     # every instruction of these profiles is bound in tests/steps/core_steps.py
+profiles = ["base", "api", "cli", "lib", "data"] # every instruction of these profiles is bound in tests/steps/core_steps.py
 
 [detect]                                      # `init` suggests this adapter when a file matches and contains a word
 files = ["pyproject.toml", "requirements*.txt", "setup.cfg", "Pipfile"]

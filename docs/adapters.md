@@ -8,7 +8,7 @@ broken test.
 
 | Adapter | Status | For |
 |---|---|---|
-| `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib` |
+| `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
@@ -82,6 +82,23 @@ depends on. Once a table exists, the implement and verify gates need a current, 
 is not held to it); without it nothing changes. The guides of the Python and the Playwright adapters show suggested
 tables, and the language cards under `cards/practices` list the commands for Kotlin, Swift, Go, Rust, TypeScript, Expo
 and Next.js.
+
+## API contract and database checks (optional)
+
+The same quality tables hold the checks a service with an interface or a database already uses. greenlight chooses none of them; the practice cards `api-design`, `database-schema`, `database-migrations`, `database-performance` and `database-engines` say what each is for, and the API and data sections of `.bdd/standards.md` hold the project's rules.
+
+```toml
+[adapters.quality.api-lint]
+command = 'spectral lint openapi.yaml'
+
+[adapters.quality.api-breaking]
+command = 'oasdiff breaking openapi.base.yaml openapi.yaml --fail-on ERR'
+
+[adapters.quality.migrations-drift]
+command = '{project_python} -m alembic check'
+```
+
+Commands run without a shell, so a glob or a pipe goes in a small script the project owns. Queries are counted by the `data` profile: `{operation} ran at most {count:int} queries` fails a scenario when an action runs a query per record (see the adapter guide for the one seam it needs). Plans and counts show "no N+1 here" and "this query can use an index"; they say nothing about speed at production volume.
 
 ## Mutation check (optional)
 

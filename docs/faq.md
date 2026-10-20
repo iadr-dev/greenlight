@@ -46,6 +46,9 @@ linter, type checker and deprecation check, which `bdd check` runs and the gates
 the current stable release; an existing one keeps its version until you decide to upgrade, and no agent upgrades or adds a
 toolchain or dependency on its own. See [concepts](concepts.md) and the language cards under `cards/practices`.
 
+**Does greenlight consider APIs and databases: schema design, N+1 queries, migrations?**
+Yes, as far as a test or a check can show it. The standards file has API and data sections; the system map copies the contract from your schema file and draws the tables in the design view; a scenario can limit the queries an action runs (`{operation} ran at most {count:int} queries`, seed three or more records so a query per record shows); your own contract, breaking-change and migration tools run as `[adapters.quality.NAME]` checks; and the auditor judges the contract, migrations, schema and query counts. It does not measure speed at production volume, and load testing is outside its scope. See [concepts](concepts.md).
+
 **Can I add my own step phrases?**
 Yes, in `.bdd/vocabulary.toml`; each one must be composed from core instructions so it still means something the
 drivers can execute.
