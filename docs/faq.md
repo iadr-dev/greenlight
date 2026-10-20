@@ -28,8 +28,9 @@ block to `AGENTS.md` for tools that read it. Those tools run no greenlight hooks
 detected afterwards: run `bdd lock FEAT-n --check --require` in CI. See [concepts](concepts.md).
 
 **Which languages and test stacks are supported?**
-Today: Python with pytest and pytest-bdd (services, libraries, command-line tools) and web UIs with Playwright
-(TypeScript). See [adapters](adapters.md) for what is planned. The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
+Today: Python with pytest and pytest-bdd, Go with godog, .NET with Reqnroll (services, libraries, command-line tools), web UIs
+with Playwright (TypeScript), and any other runner that writes a JUnit report through the generic-junit adapter. See
+[adapters](adapters.md). The `bdd` tool itself is language independent and needs only Python 3.11+ on the machine.
 
 **Do I have to write Gherkin?**
 No; the qa-designer does, from the approved rules, in a fixed [vocabulary](vocabulary.md). You review it.

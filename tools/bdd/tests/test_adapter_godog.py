@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import adapter, cli, state
+from bddlib import adapter, cli, initcmd, state
 from bddlib import config as cfg
 
 REPO = Path(__file__).resolve().parents[3]
@@ -134,6 +134,14 @@ class PackageTest(unittest.TestCase):
                     self.assertEqual(cli.main(["lint", "tests/features"]), 0, out.getvalue())
             finally:
                 os.chdir(here)
+
+    def test_init_suggests_it_for_a_go_module_and_for_nothing_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "go.mod").write_text("module example.com/app\n\ngo 1.24\n", encoding="utf-8")
+            self.assertEqual([name for name, _ in initcmd.detect(root)], ["go-godog"])
+            (root / "go.mod").unlink()
+            self.assertEqual(initcmd.detect(root), [])
 
     def test_apply_registers_the_plumbing_as_bound_files(self):
         with tempfile.TemporaryDirectory() as tmp:

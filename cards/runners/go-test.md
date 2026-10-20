@@ -20,9 +20,9 @@ report = '--out {out}'
 shuffle = '--add=-shuffle={seed}'
 ```
 
-Add `tests/run_junit.py` and `go.mod` to `support`. `-shuffle` needs Go 1.17 or newer. For godog, name the scenarios as usual
-and run `go test` with the godog test function; the case names are the scenario names, and the marker filter becomes a godog
-tag option in the test options (`Tags: "@FEAT-007"`) read from a bound file.
+Add `tests/run_junit.py` and `go.mod` to `support`. `-shuffle` needs Go 1.17 or newer. For godog features use the `go-godog`
+adapter instead of this recipe: it ships the steps, the drivers, godog's own JUnit report and the run command, with the tag
+passed as a test flag (`Tags: "@FEAT-007"` in the test options).
 
 ## Report
 

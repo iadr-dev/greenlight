@@ -80,3 +80,58 @@ jobs:
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
+
+  adapter-go-godog:
+    name: adapter contract (go-godog, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_GO_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.26"
+          cache-dependency-path: adapters/go-godog/templates/tests/go.sum
+      - name: Fresh scaffold runs green, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_godog.py" -v
+      - name: The shipped templates are gofmt-clean and vet-clean
+        shell: bash
+        run: |
+          go -C adapters/go-godog/templates/tests mod download
+          test -z "$(gofmt -l adapters/go-godog/templates/tests)"
+          go -C adapters/go-godog/templates/tests vet ./...
+
+  adapter-dotnet-reqnroll:
+    name: adapter contract (dotnet-reqnroll, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      GREENLIGHT_DOTNET_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: adapters/dotnet-reqnroll/templates/tests/packages.lock.json
+      - name: Packages come from the lock file (locked restore, hashed)
+        run: dotnet restore adapters/dotnet-reqnroll/templates/tests --locked-mode
+      - name: Fresh scaffold runs green, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_reqnroll.py" -v
+      - name: The shipped templates are format-clean and build without warnings
+        run: |
+          dotnet format adapters/dotnet-reqnroll/templates/tests --verify-no-changes --no-restore
+          dotnet build adapters/dotnet-reqnroll/templates/tests --no-restore -warnaserror

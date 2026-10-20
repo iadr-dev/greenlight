@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import adapter, cli, state
+from bddlib import adapter, cli, initcmd, state
 from bddlib import config as cfg
 
 REPO = Path(__file__).resolve().parents[3]
@@ -185,6 +185,14 @@ class PackageTest(unittest.TestCase):
                     self.assertEqual(cli.main(["lint", "tests/features"]), 0, out.getvalue())
             finally:
                 os.chdir(here)
+
+    def test_init_suggests_it_for_a_dotnet_project_and_for_nothing_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "App.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk"></Project>\n', encoding="utf-8")
+            self.assertEqual([name for name, _ in initcmd.detect(root)], ["dotnet-reqnroll"])
+            (root / "App.csproj").unlink()
+            self.assertEqual(initcmd.detect(root), [])
 
     def test_apply_registers_the_plumbing_as_bound_files(self):
         with tempfile.TemporaryDirectory() as tmp:
