@@ -3,6 +3,8 @@
 Agent: **step-engineer**. Cards: `test-data`, the instruction cards, and the adapter guide. No production code is
 written in this phase.
 
+Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
+
 ## Inputs
 
 - The approved, locked feature files, `system.md`, `.bdd/vocabulary.toml`.
@@ -22,7 +24,8 @@ written in this phase.
 6. Run the checks: `bdd scan FEAT-n` (assertion-free then steps, fixed waits, stubs of undeclared dependencies),
    `bdd run FEAT-n --shuffle` and `bdd run FEAT-n --isolated` (they must not depend on each other); run
    `bdd run FEAT-n` again last so the recorded run is the plain one.
-7. Lock the bound files: `bdd lock FEAT-n --scope bind tests/steps tests/drivers` (the paths the adapter uses).
+7. Report that the red is valid; after checking it, the orchestrator locks the bound files with `bdd lock FEAT-n
+   --scope bind tests/steps tests/drivers` (the paths the adapter uses).
 
 ## Output files
 

@@ -2,6 +2,8 @@
 
 Agent: **qa-designer**. Cards: every technique card, chosen per rule.
 
+Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
+
 ## Inputs
 
 - `rules.md`, approved.
@@ -18,7 +20,7 @@ Agent: **qa-designer**. Cards: every technique card, chosen per rule.
    example per decision-table row or an exclusion, one example per state transition.
 4. Every rule with inputs gets a negative example (card `negative-cases`) or an exclusion with a reason.
 5. List excluded cases with their reasons. Fill in the coverage check.
-6. Record the cost for the phase with `bdd cost`.
+6. Report the tokens and time you spent; the orchestrator records them with `bdd cost`.
 
 ## Output files
 

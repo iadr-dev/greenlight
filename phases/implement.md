@@ -2,6 +2,8 @@
 
 Agent: **implementer**. Production code only. Features, step definitions and drivers are read-only.
 
+Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
+
 ## Inputs
 
 - `tasks.md`, `system.md` (the seams to build), the red record.
@@ -17,7 +19,8 @@ Per task, in order:
 3. When a scenario cannot pass without changing a locked file, **stop** and raise a change request
    (`templates/change-requests.md`). Do not edit the file, do not loosen an assertion, do not delete a
    scenario. The change flow unlocks, edits, gets approval and re-locks.
-4. Record the cost: `bdd cost FEAT-n --phase implement --tokens N --seconds S`.
+4. Report the tokens and time you spent; the orchestrator records them with `bdd cost FEAT-n --phase implement
+   --tokens N --seconds S`.
 
 When all tasks are done, run the whole feature once more with `bdd run FEAT-n`.
 

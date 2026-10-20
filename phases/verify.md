@@ -3,6 +3,8 @@
 Agent: **spec-auditor** (read-only, fresh context). Cards: every card cited in `test-design.md`, `mutation-check`,
 `stability-rerun`. Checklist: `review/checklist.md`.
 
+Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
+
 ## Inputs
 
 Artifacts only: rules, assumptions, test design, features, step definitions and drivers, system map, tasks, the

@@ -2,6 +2,8 @@
 
 Agent: **product-analyst**. Cards: `pre-mortem`, `negative-cases`.
 
+Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd assume`, `bdd cost`, `bdd lock` and `bdd approve` from your report. You run none of them, and your last message says what is ready to record.
+
 ## Inputs
 
 - `brief.md` with the discover gate passed.
