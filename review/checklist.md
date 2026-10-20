@@ -46,6 +46,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | L3 | The red gate was recorded before any production-code change | yes | the red record in `state.json` (commit, clean source digest) against `git log` |
 | L4 | Every mid-run autonomy switch has the person's words recorded | no | `bdd state show FEAT-n` |
 | L5 | No integrity violation is open or was left unexplained | yes | `bdd status`, `.bdd/.integrity/violations.json` |
+| L6 | Every unlock in `lock.json` history matches a change recorded in `state.json` (reason `change: ...`), and the specification was approved again afterwards | yes | `lock.json` history against `state.json` `changes` and approvals |
 
 ## E - Execution
 

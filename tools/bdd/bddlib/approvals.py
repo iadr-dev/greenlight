@@ -52,7 +52,8 @@ def artifact_hashes(root: Path, feature_dir: Path, feature_id: str, gate: str) -
 def prerequisite_problems(data: dict, gate: str) -> list[str]:
     problems = [f"the {g} gate has not passed yet" for g in PREREQUISITE_GATES[gate]
                 if data["gates"].get(g, {}).get("result") != "pass"]
-    if gate == "examples" and not _last(data, "rules", "approve"):
+    rules = _last(data, "rules", "approve")
+    if gate == "examples" and (not rules or rules.get("revoked")):
         problems.append("the rules must be approved first")
     return problems
 
@@ -282,6 +283,8 @@ def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
         return [f"{gate} has not been approved"]
     if last["decision"] != "approve":
         return [f"{gate} was rejected" + (f": {last['reason']}" if last.get("reason") else "")]
+    if last.get("revoked"):
+        return [f"the {gate} approval was revoked by a change ({last['revoked']}); it has to be approved again"]
     problems = grade_problems(root, data, gate, last)
     for rel, digest in last["artifacts"].items():
         target = root / rel

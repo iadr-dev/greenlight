@@ -40,6 +40,12 @@ class PlaybookTest(unittest.TestCase):
                 with self.subTest(playbook=path.stem, command=command):
                     self.assertIn(command, cli.COMMANDS)
 
+    def test_every_bdd_command_a_skill_names_exists(self):
+        for path in (REPO / "skills").glob("*/SKILL.md"):
+            for command in set(BDD_COMMAND.findall(path.read_text(encoding="utf-8"))):
+                with self.subTest(skill=path.parent.name, command=command):
+                    self.assertIn(command, cli.COMMANDS)
+
     def test_the_gate_each_playbook_records_is_a_real_machine_gate_of_its_phase(self):
         own = {"discover": "discover", "test-design": "test-design", "system-map": "system-map", "refine": "refine",
                "bind": "bind", "tasks": "tasks", "implement": "implement", "verify": "verify"}
