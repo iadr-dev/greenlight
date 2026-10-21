@@ -60,6 +60,31 @@ class CodexTest(InstallCase):
                 self.assertEqual("Repeat that line and what has to happen first, then stop." in text, name == "approve")
         self.assertIn("greenlight approval:", self.skill("approve").read_text(encoding="utf-8"))
 
+    def test_the_approve_skill_cannot_be_picked_by_the_model_in_codex(self):
+        """Codex's equivalent of `disable-model-invocation`: `policy.allow_implicit_invocation: false` in agents/openai.yaml."""
+        self.assertEqual(self.bdd("codex")[0], 0)
+        policy = self.skill("approve").parent / "agents" / "openai.yaml"
+        text = policy.read_text(encoding="utf-8")
+        self.assertIn("policy:\n  allow_implicit_invocation: false\n", text)
+        self.assertTrue(installskills.is_ours(text))
+        for name in SKILLS:
+            if name != "approve":
+                with self.subTest(skill=name):
+                    self.assertFalse((self.skill(name).parent / "agents").exists())
+        self.assertIn("same", self.bdd("codex")[1])
+
+    def test_uninstall_removes_the_policy_file_too_but_not_one_of_the_persons(self):
+        self.bdd("codex")
+        self.assertEqual(self.bdd("codex", "--uninstall")[0], 0)
+        self.assertFalse((self.root / ".agents").exists())
+        self.bdd("codex")
+        policy = self.skill("approve").parent / "agents" / "openai.yaml"
+        policy.write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")   # rewritten by the person
+        code, out, _ = self.bdd("codex", "--uninstall")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(policy.is_file())
+        self.assertFalse(self.skill("approve").exists())
+
     def test_dry_run_changes_nothing(self):
         code, out, _ = self.bdd("codex", "--dry-run")
         self.assertEqual(code, 0)
@@ -119,6 +144,22 @@ class AgentsMdTest(InstallCase):
         self.assertIn("Enforcement here is soft", text)
         self.assertIn("lock FEAT-n --check --require", text)
         self.assertNotIn("{plugin_root}", text)
+
+    def test_an_override_file_that_would_hide_the_block_is_named(self):
+        (self.root / "AGENTS.override.md").write_text("# local rules\n", encoding="utf-8")
+        code, out, _ = self.bdd("agents-md")
+        self.assertEqual(code, 0, out)
+        self.assertIn("note", out)
+        self.assertIn("AGENTS.override.md", out)
+        self.assertIn("will not be seen", out)
+        self.assertEqual((self.root / "AGENTS.override.md").read_text(encoding="utf-8"), "# local rules\n")
+        self.assertTrue(self.path.is_file())
+
+    def test_a_file_too_long_for_codex_is_named(self):
+        self.path.write_text("x" * (32 * 1024), encoding="utf-8")
+        code, out, _ = self.bdd("agents-md")
+        self.assertEqual(code, 0, out)
+        self.assertIn("32 KiB", out)
 
     def test_an_existing_file_keeps_its_content_and_gets_the_block_appended_once(self):
         self.path.write_text("# My project\n\nRules of the house.\n", encoding="utf-8")

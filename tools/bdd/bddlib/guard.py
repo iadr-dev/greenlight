@@ -357,7 +357,8 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
     protected = check_enforcement_files(path)
-    if not protected and _CODEX_STATE.search(path.as_posix().replace("\\", "/")):
+    if not protected and any(_CODEX_STATE.search(spelling.replace("\\", "/"))       # as written, and with links followed
+                             for spelling in (path.as_posix(), os.path.realpath(path))):
         protected = CODEX_STATE_MESSAGE
     if protected:
         return protected
@@ -374,12 +375,17 @@ _TOKEN_BREAKS = re.compile(r"[\s;&|()`<>=\"']+")          # a path starts after 
 _WILDCARDS_ONLY = re.compile(r"[*?\[\]]*")
 
 
+def shell_pattern(segment: str) -> str:
+    """A shell glob as ``fnmatch`` reads it: case-folded, and `[^x]` (a negated class to a shell) written `[!x]`."""
+    return segment.casefold().replace("[^", "[!")
+
+
 def glob_matches(name: str, segment: str) -> bool:
     """Would the shell glob ``segment`` match the file name ``name`` (which starts with a dot)? A glob that starts with a
     dot matches it as it is; one that does not matches it only when the shell's dotglob option is on, so it is tried
     against the name without its dot, but only if it has a literal character (`b*`, `ru?s`): a bare `*` is everywhere.
     `[^x]` means `[!x]` to a shell."""
-    pattern = segment.casefold().replace("[^", "[!")
+    pattern = shell_pattern(segment)
     if pattern.startswith("."):
         return fnmatch.fnmatchcase(name, pattern)
     return not _WILDCARDS_ONLY.fullmatch(pattern) and fnmatch.fnmatchcase(name.lstrip("."), pattern)
@@ -394,6 +400,32 @@ def segment_glob_reaches(text: str, name: str) -> bool:
         if any(_GLOB.search(segment) and glob_matches(name, segment) for segment in token.split("/")):
             return True
     return False
+
+
+CODEX_FOLDER_NAME = ".codex"
+_ROLLOUT_PREFIX = "rollout-"
+_ROLLOUT_SAMPLE = "rollout-2026-01-01t00-00-00-00000000-0000-0000-0000-000000000000.jsonl"   # the shape of a session file
+
+
+def glob_reaches_rollout(text: str) -> bool:
+    """Could a glob in the command expand to one of Codex's session files (`rollout-<time>-<id>.jsonl`)? Only a glob that
+    spells the start of that name counts (`r*.jsonl`, `rollout-?*`, `ro[l]lout*`): `*.jsonl` alone is anybody's file."""
+    for token in _TOKEN_BREAKS.split(text):
+        for segment in token.split("/"):
+            match = _GLOB.search(segment)
+            if not match:
+                continue
+            literal = segment[:match.start()].casefold()
+            spells_it = bool(literal) and (_ROLLOUT_PREFIX.startswith(literal) or literal.startswith(_ROLLOUT_PREFIX))
+            if spells_it and fnmatch.fnmatchcase(_ROLLOUT_SAMPLE, shell_pattern(segment)):
+                return True
+    return False
+
+
+def names_codex_state(text: str) -> bool:
+    """Does the text name a `.codex` folder, Codex's home variable or a session file, spelled out or reached by a glob?"""
+    text = text.replace("\\", "/")
+    return bool(_CODEX_STATE.search(text)) or segment_glob_reaches(text, CODEX_FOLDER_NAME) or glob_reaches_rollout(text)
 
 
 def names_segment(text: str, name: str) -> bool:
@@ -533,11 +565,11 @@ def glob_reaches_claude(text: str) -> bool:
     for token in re.split(r"[\s;&|()`]+", text):
         segments = token.split("/")
         for position, segment in enumerate(segments):
-            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(".claude", segment.casefold()):
+            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(".claude", shell_pattern(segment)):
                 return True
             following = segments[position + 1] if position + 1 < len(segments) else ""
             if segment.casefold() == ".claude" and _GLOB.search(following) and any(
-                    fnmatch.fnmatchcase(name, following.casefold()) for name in (*SETTINGS_NAMES, *CLAUDE_PROTECTED_DIRS)):
+                    fnmatch.fnmatchcase(name, shell_pattern(following)) for name in (*SETTINGS_NAMES, *CLAUDE_PROTECTED_DIRS)):
                 return True
     return False
 
@@ -599,7 +631,7 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
         return refused
     if not _SHELL_WRITES.search(scrubbed):
         return None
-    if any(_CODEX_STATE.search(_NOISE.sub(" ", reading)) for reading in readings):
+    if any(names_codex_state(_NOISE.sub(" ", reading)) for reading in readings):
         return CODEX_STATE_MESSAGE
     if agent and _ENVIRONMENT_PATH.search(scrubbed):
         return INSTALL_MESSAGE
