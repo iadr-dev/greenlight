@@ -96,13 +96,23 @@ def mentions_codex_state(text: str, root: Path | None) -> bool:
                 or any(base in flattened for base in protected_roots(root)))
 
 
+def accepts_codex_approvals(root: Path | None) -> bool:
+    """Does the project take approvals typed in Codex? An unreadable configuration counts as yes: fail closed."""
+    if root is None:
+        return False
+    try:
+        return cfg.load(root).accept_codex
+    except Exception:          # deliberate: a broken configuration must not relax a check
+        return True
+
+
 def check_reading(text: str, root: Path | None, derived: bool = False) -> str | None:
     """The Codex-specific reason to refuse one reading of a shell command, or None."""
     if APPROVAL_TEXT.search(text):
         return APPROVAL_MESSAGE
     if _HOOK_ENTRY.search(text):
         return HOOK_MESSAGE
-    if starts_codex_session(text, derived):
+    if starts_codex_session(text, derived, strict=accepts_codex_approvals(root)):
         return NESTED_MESSAGE
     if _SETS_HOME.search(text):
         return CONFIG_MESSAGE

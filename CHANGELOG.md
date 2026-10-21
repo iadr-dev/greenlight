@@ -6,6 +6,10 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- In a project that takes approvals typed in Codex (`[approvals] accept_codex = true`), the nested-session check counts every `codex` word again, whatever quotes surround it: a nested session is how such an approval could be forged, and the relaxed reading of quoted text added with the false-positive fix could be fooled by quoting tricks. Without the opt-in the relaxed rule stays, because Codex approvals are refused there anyway.
+
+### Fixed
+
 - The cost per phase is recorded by the tools and not estimated by the model. A real end-to-end run had recorded one invented figure for the discover phase and nothing for the others, although every agent's completion notice carried its own. The plugin now registers a `SubagentStop` hook (`bdd subagent-stop`) that notes each finished agent of the plugin, and `bdd cost FEAT-n --collect` records the phase's seconds from the hook and its tokens from the agent's own transcript; `bdd status` names a passed phase with no cost record. The feature skill tells the orchestrator to collect after every agent and never to estimate.
 - The `cards_read` metric of the evaluation was always empty: the agents, not the orchestrator, read the cards, and their transcripts were not read. The collector now reads the subagent transcripts too and counts a card only when a Read, Bash, Grep or Glob call names it.
 

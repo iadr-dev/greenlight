@@ -80,16 +80,18 @@ def _quoted_flags(tokens: list[str]) -> list[bool]:
     return flags
 
 
-def starts_codex_session(command: str, derived: bool = False) -> bool:
+def starts_codex_session(command: str, derived: bool = False, strict: bool = False) -> bool:
     """Does the command start a (nested) Codex session, other than to read something? A ``codex`` word outside quotes counts
     wherever it sits; inside quotes it counts only where a program would start (a quoted script, ``-Value '# by codex'`` is text).
     ``derived`` is for a reading of the command with its quotes already removed (``co""dex``): there every word counts only
-    where a program would start, since a quote that is gone can no longer say what was text."""
+    where a program would start, since a quote that is gone can no longer say what was text. ``strict`` is for a project that
+    accepts approvals typed in Codex: there a nested session is the way to forge one, so every ``codex`` word counts wherever it
+    sits and whatever quotes surround it (a quoted text that merely mentions it is refused too: the price of the opt-in)."""
     tokens = _tokens(command)
     quoted = _quoted_flags(tokens)
     words = [(i, t) for i, t in enumerate(tokens) if t not in _QUOTES and t not in _BOUNDARIES and t not in _OTHER_PUNCTUATION]
     for place, (index, word) in enumerate(words):
-        if program(word) == "codex" and (not quoted[index] and not derived or _is_program_position(tokens, index)):
+        if program(word) == "codex" and (strict or not quoted[index] and not derived or _is_program_position(tokens, index)):
             rest = tuple(next_word.casefold() for _, next_word in words[place + 1:place + 3])
             if not any(rest[:size] in READ_ONLY for size in (1, 2)):
                 return True
