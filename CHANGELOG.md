@@ -6,6 +6,10 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- The cost per phase is recorded by the tools and not estimated by the model. A real end-to-end run had recorded one invented figure for the discover phase and nothing for the others, although every agent's completion notice carried its own. The plugin now registers a `SubagentStop` hook (`bdd subagent-stop`) that notes each finished agent of the plugin, and `bdd cost FEAT-n --collect` records the phase's seconds from the hook and its tokens from the agent's own transcript; `bdd status` names a passed phase with no cost record. The feature skill tells the orchestrator to collect after every agent and never to estimate.
+- The `cards_read` metric of the evaluation was always empty: the agents, not the orchestrator, read the cards, and their transcripts were not read. The collector now reads the subagent transcripts too and counts a card only when a Read, Bash, Grep or Glob call names it.
+
+### Fixed
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 
 ### Fixed

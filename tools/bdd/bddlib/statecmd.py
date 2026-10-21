@@ -5,6 +5,7 @@
     bdd gate FEAT-007 bind --result pass [--detail key=value ...] [--record-red]
     bdd assume FEAT-007 --text "..." --rationale "..." [--alt "..."]
     bdd cost FEAT-007 --phase bind --tokens 12000 --seconds 95
+    bdd cost FEAT-007 --collect               the agents that finished, from the hook's notes and their transcripts
     bdd mode FEAT-007 --switch autopilot --reason "you decide"
 """
 from __future__ import annotations
@@ -15,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import config as cfg
-from . import approvals, enforcement, gates, lockfile, redrecord, state, store
+from . import agentcost, approvals, enforcement, gates, lockfile, redrecord, state, store
 from .errors import StoreError, UsageError
 
 
@@ -179,14 +180,24 @@ def run_assume(argv: list[str]) -> int:
 
 
 def run_cost(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="bdd cost", description="Add tokens and time spent in a phase.")
+    ap = argparse.ArgumentParser(prog="bdd cost", description="Add tokens and time spent in a phase, or collect what the agents "
+                                 "that finished cost (their time from the hook, their tokens from their own transcripts).")
     ap.add_argument("feature")
-    ap.add_argument("--phase", required=True, choices=state.PHASES)
+    ap.add_argument("--phase", choices=state.PHASES, help="the phase; with --collect, only for agents the hook could not place")
     ap.add_argument("--tokens", type=int, default=0)
     ap.add_argument("--seconds", type=float, default=0.0)
+    ap.add_argument("--collect", action="store_true", help="record the agents that finished and are not recorded yet")
     args = ap.parse_args(argv)
+    if args.collect and (args.tokens or args.seconds):
+        ap.error("--collect takes the figures from the agents' transcripts; do not give --tokens or --seconds")
+    if not args.collect and not args.phase:
+        ap.error("--phase is required unless --collect is given")
 
     def action() -> int:
+        if args.collect:
+            lines = agentcost.collect(project_root(), args.feature, args.phase)
+            print("\n".join(lines) if lines else f"{args.feature}: no finished agent is waiting to be recorded")
+            return 0
         feature_dir = feature_dir_of(project_root(), args.feature)
         entry = state.add_cost(feature_dir, args.phase, args.tokens, args.seconds)["cost"][args.phase]
         print(f"{args.feature} {args.phase}: {entry['tokens']:,} tokens, {entry['seconds']:.1f} s in {entry['runs']} run(s)")
