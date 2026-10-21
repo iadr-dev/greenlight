@@ -36,6 +36,15 @@ test (import error, unmapped step) is a *test defect* and blocks the gate. A sce
 implementation must be tagged `@existing` (the behaviour is already there) or it blocks. The run that proved the red
 is kept as evidence and later runs cannot replace it.
 
+The bind gate's `--record-red` also keeps a snapshot of the production source at that moment: a commit object under
+`refs/greenlight/red/`, made without touching your index, branch or working tree, that includes changes you had not
+committed. It matters when an example changes after the code was written (an audit finding, a change you ask for): the
+rebound tests must still be shown to fail without the feature's code, and in the project they cannot, because the
+code is there. `bdd run FEAT-n --against-red` runs them in a temporary git worktree of that snapshot, with today's
+feature files, steps, drivers and plumbing laid over it (production files always come from the snapshot), and the bind
+gate accepts that run and keeps the first red as the feature's red. Installed dependency folders (`node_modules`,
+`.venv`, `venv`) are linked into the worktree; build output never is.
+
 ## Mutation check (optional)
 
 Green tests prove that code and tests agree, not that the tests would notice a wrong change. A project can enable a
@@ -199,7 +208,9 @@ a member the session never touches is protected only by its locks and by CI.
 
 `/greenlight:change FEAT-n "<what and why>"` is the one sanctioned route: it releases the affected locks, revokes the
 affected approvals (they must be given again), forgets later gate results, and records the change in the feature's
-history. Editing a locked file by any other route is a violation.
+history. A reopen at or before the binding moves the recorded red into the history (with a copy of its kept run)
+rather than dropping it, so the red can be proven again against it (see Red, then green). Editing a locked file by
+any other route is a violation.
 
 ## Where things live
 
