@@ -243,6 +243,15 @@ class WrapperTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(c.name for c in junit.parse_file(self.root / "merged.xml")), ["extra", "one"])
 
+    def test_words_that_are_not_added_with_add_are_refused_and_the_message_says_how(self):
+        """The sample runner's `--seed 5` or `--only name` is not a word of the test command: say so, run nothing."""
+        done = self.wrap("--command", self.command("one"), "--seed", "5")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("unrecognized arguments: --seed 5", done.stderr)
+        self.assertIn("--add=WORD", done.stderr)
+        self.assertFalse((self.root / "merged.xml").exists())
+        self.assertFalse((self.root / "reports" / "one.xml").exists())          # the command never started
+
     def test_no_report_is_an_error_not_a_silent_pass(self):
         done = self.wrap("--command", self.command(), reports="reports/*.xml")
         self.assertNotEqual(done.returncode, 0)

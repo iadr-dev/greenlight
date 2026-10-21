@@ -84,7 +84,8 @@ class RunRules:
     Commands are split into words before ``{root}``, ``{python}`` (the interpreter running bdd),
     ``{project_python}`` (the project's own environment), ``{tag}``, ``{marker}``, ``{out}``, ``{seed}`` and
     ``{scenario}`` (or ``{scenario:regex}``, the same name with every regular-expression metacharacter escaped, for a
-    runner that filters by a pattern, or ``{scenario:device}``, that pattern written for an Android device's shell) are
+    runner that filters by a pattern, ``{scenario:alnum}``, only its letters and digits, for a runner whose test names are
+    written without spaces or punctuation, or ``{scenario:device}``, that pattern written for an Android device's shell) are
     filled in, so a value can never add words to the command."""
     adapter: str
     by_tag: str                              # runs the tests carrying {tag}
