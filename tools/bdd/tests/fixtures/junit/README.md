@@ -9,11 +9,11 @@ refused`): `red.xml` (the system part is missing: `BDD_EXPECTED_MISSING`), `asse
 |---|---|
 | `cucumber-js` | **A real run**: `@cucumber/cucumber` 11.2.0 on Node 26, `--format junit:FILE`, 2026-10-20 (the temporary project path and the host name were replaced by placeholders). |
 | `behave` | **A real run**: the current `behave` release from PyPI on Python 3.14, `--junit --junit-directory DIR`, 2026-10-20. |
-| `godog` | **Written from the documented report format** (the `junit` formatter of godog). Not produced by a run: check the shape against your godog version. |
-| `cucumber-jvm` | **Written from the documented report format** (the `junit` plugin of Cucumber-JVM, strict mode). Not produced by a run. |
+| `godog` | **A real run**: godog v0.16.0 (`junit` formatter) with Go 1.27.3 on Windows, 2026-10-21; a two-scenario module with steps that fail on purpose, one run per state. The test process exit status was ignored, as `bdd run` does with the report. |
+| `cucumber-jvm` | **A real run**: Cucumber-JVM 8.0.4 with `cucumber-junit-platform-engine` on Maven 3.9.16 and JDK 25, `-Dcucumber.plugin=junit:FILE`, 2026-10-21. |
 | `reqnroll` | **Written from the documented report format** of the JUnit logger for `dotnet test` (JunitXml.TestLogger) with xUnit. Not produced by a run. |
 
-What the real runs showed, which the hand-written files do not need to repeat: cucumber-js writes an **empty**
-`<failure/>` for an undefined step and says `undefined` only in `system-out`, and behave writes `<error type="NoneType"
+What the real runs showed, which the hand-written file does not need to repeat: cucumber-js and Cucumber-JVM write an **empty**
+`<failure/>` for an undefined step and say `undefined` only in `system-out`, godog writes `<error type="undefined">` (and lists every undefined step of a scenario as its own element, and a `status="passed"` scenario can still carry a failure from a later step), and behave writes `<error type="NoneType"
 message="None">` with `undefined` in the body. `bdd classify` reads `system-out` when a failure has no text of its own,
 and the `generic-junit` defect patterns know both spellings.

@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite failures="0" name="io.cucumber.core.plugin.JUnitFormatter" skipped="0" tests="2" time="0.02">
-  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.01"></testcase>
-  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.01"></testcase>
+<testsuite name="Cucumber" time="0.158" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-21T03:21:46.452272600Z">
+<testcase classname="Sample (delete me)" name="Two numbers are added" time="0.014">
+<system-out><![CDATA[
+When I add 2 and 3..........................................................passed
+Then the result is 5........................................................passed
+]]></system-out>
+</testcase>
+<testcase classname="Sample (delete me)" name="A negative number is refused" time="0.001">
+<system-out><![CDATA[
+When I add -1 and 3.........................................................passed
+Then the call fails with negative input.....................................passed
+]]></system-out>
+</testcase>
 </testsuite>
