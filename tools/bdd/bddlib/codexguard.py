@@ -166,11 +166,14 @@ def check_where(command: str, cwd: Path, root: Path) -> str | None:
     both changes folder (in any form) and writes is refused unless every place it writes is an absolute path outside
     Codex's folders: which folder a shell is in after `cd`, `pushd`, `popd`, a subshell or a conditional is not modelled.
     A relative glob is joined to the working folder, normalised (`..` taken out) and matched against Codex's folders."""
+    readings = [command, *guard.shell_readings(command)]
+    pointed = [folder for text in readings for folder in option_folders(text)]
+    if any(folder is not None and touches_codex_state(folder, cwd, root) for folder in pointed):
+        return CONFIG_MESSAGE                    # `make --directory=.codex`, `git -C ~/.codex ...`: whatever it does, it does there
     if not guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)):
         return None
     if touches_codex_state(".", cwd, root):
         return CONFIG_MESSAGE
-    readings = [command, *guard.shell_readings(command)]
     relative_globs = [word for text in readings for word in guard._TOKEN_BREAKS.split(text)
                       if guard._GLOB.search(word) and not path_like_absolute(word)]
     if any(glob_reaches_home(posixpath.normpath(_key(cwd) + "/" + word.replace("\\", "/")), root) for word in relative_globs):
@@ -184,8 +187,9 @@ def check_where(command: str, cwd: Path, root: Path) -> str | None:
 
 MOVE_MESSAGE = ("greenlight: this command changes folder and writes, so where the write lands cannot be checked. Run the write "
                 "as its own command, without changing folder, or give it an absolute path.")
-_MOVE_WORD = re.compile(r"(?<![\w.-])(?:cd|pushd|popd|chdir|set-location|push-location|pop-location|sl)(?![\w.-])",
-                        re.IGNORECASE)
+_MOVE_WORD = re.compile(r"(?<!\w)(?:cd|pushd|popd|chdir|set-location|push-location|pop-location|sl)(?![\w.-])",
+                        re.IGNORECASE)                       # also `--chdir`, `os.chdir(`, `process.chdir(`
+_DESTINATION_OPTIONS = {"-t", "--target-directory", "-path", "-literalpath", "-destination", "-filepath"}
 _SUBSHELL = re.compile(r"(?:^|[\s;&|(])\(")
 _REDIRECT_TARGET = re.compile(r"\d?>>?\|?\s*([^\s;&|()<>]+)")
 _FILE_VERBS = {"tee", "cp", "mv", "rm", "touch", "truncate", "ln", "install", "chmod", "set-content", "add-content",
@@ -195,21 +199,26 @@ _OPAQUE_WRITES = re.compile(r"write_text|write_bytes|open\(|\.write\(|\.writelin
 
 
 def changes_directory(text: str) -> bool:
-    """Does the command change folder anywhere: a `cd`-like word wherever it sits, or a subshell?"""
-    return bool(_MOVE_WORD.search(text) or _SUBSHELL.search(text) or "$(" in text)
+    """Does the command change folder anywhere: a `cd`-like word wherever it sits (an interpreter's `chdir` included), a
+    folder option (`-C`, `--directory`, `--chdir`), or a subshell?"""
+    return bool(_MOVE_WORD.search(text) or _SUBSHELL.search(text) or "$(" in text or directory_changes(text))
 
 
 def write_targets(text: str) -> list[str] | None:
     """The places a command writes, when they can be read off it: redirection targets and the arguments of the plain file
     commands. None when it also writes in a way whose target cannot be read off (an interpreter, `sed -i`, a version-control
-    command)."""
+    command, a file command with an option that carries a value or names a destination)."""
     if _OPAQUE_WRITES.search(text):
         return None
     targets = [_unquote(word) for word in _REDIRECT_TARGET.findall(guard._NOISE.sub(" ", text)) if not word.startswith("&")]
     for simple in _SIMPLE.split(text):
         words = [_unquote(word) for word in _WORD.findall(simple)]
-        if words and Path(words[0].replace("\\", "/")).name.casefold() in _FILE_VERBS:
-            targets += [word for word in words[1:] if not word.startswith("-") and word not in (">", ">>")]
+        if not words or Path(words[0].replace("\\", "/")).name.casefold() not in _FILE_VERBS:
+            continue
+        options = [word for word in words[1:] if word.startswith("-")]
+        if any("=" in word or ":" in word or word.casefold() in _DESTINATION_OPTIONS for word in options):
+            return None
+        targets += [word for word in words[1:] if not word.startswith("-") and word not in (">", ">>")]
     return targets
 
 
@@ -245,7 +254,7 @@ UNRESOLVED_MESSAGE = ("greenlight: this command names a path that cannot be reso
 
 MOVES = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
 _VALUE_OPTIONS = {"-path", "-literalpath", "-lp"}                     # PowerShell: the folder follows the option
-_DIRECTORY_FLAGS = {"--directory", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir"}   # and `-C`, exactly
+_DIRECTORY_FLAGS = {"--directory", "--chdir", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir"}   # and `-C`, exactly
 _SIMPLE = re.compile(r"&&|\|\||[;&|\n()`{}]")
 _WORD = re.compile(r"\"[^\"]*\"|'[^']*'|[^\s\"']+")
 
@@ -287,12 +296,24 @@ def directory_changes(text: str) -> list[str | None]:
         if Path(_unquote(words[0]).replace("\\", "/")).name.casefold() in MOVES:
             found.append(_move_operand(words))
             continue
-        for index, word in enumerate(words):
-            flag, _, value = _unquote(word).partition("=")
-            if flag == "-C" or flag.casefold() in _DIRECTORY_FLAGS:
-                operand = value or (_unquote(words[index + 1]) if index + 1 < len(words) else None)
-                found.append(operand)
+        found += _option_operands(words)
     return found
+
+
+def _option_operands(words: list[str]) -> list[str | None]:
+    """The folders named by folder options (`-C dir`, `--directory=dir`, `--chdir dir`); None for one without its value."""
+    found: list[str | None] = []
+    for index, word in enumerate(words):
+        flag, _, value = _unquote(word).partition("=")
+        if flag == "-C" or flag.casefold() in _DIRECTORY_FLAGS:
+            found.append(value or (_unquote(words[index + 1]) if index + 1 < len(words) else None))
+    return found
+
+
+def option_folders(text: str) -> list[str | None]:
+    """The folders any program in the command is pointed at by a folder option: the program then works, and may write,
+    there."""
+    return [operand for simple in _SIMPLE.split(text) for operand in _option_operands(_WORD.findall(simple))]
 
 
 def directory_operands(text: str) -> list[str]:

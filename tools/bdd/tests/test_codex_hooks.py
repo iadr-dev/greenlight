@@ -482,6 +482,16 @@ class GuardTest(CodexCase):
             with self.subTest(command=command):
                 self.assertIsNone(self.blocked("Bash", {"command": command}))
 
+    def test_folder_options_and_interpreter_moves_count_as_a_change_of_folder(self):
+        for command in ("git -C .codex apply x", "make --directory=.codex", "make -C .codex install",
+                        "python -c \"import os; os.chdir('.codex'); open('hooks.json','w')\"",
+                        "tool --chdir=sub && echo x > out.txt", "cd x && cp -t ../.codex a",
+                        "Copy-Item -Destination:..\\.codex\\hooks.json a", "cd x && Copy-Item a -Destination:b",
+                        "cd x && cp --target-directory=y a", "cd x && Set-Content -Path:a.txt x"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.blocked("Bash", {"command": command}))
+        self.assertIsNone(self.blocked("Bash", {"command": "make -C build"}))
+
     def test_after_a_change_of_folder_only_absolute_writes_outside_codexs_folders_go(self):
         target = (self.root / "build" / "out.txt").as_posix()
         self.assertIsNone(self.blocked("Bash", {"command": f"cd src && echo x > {target}"}))
