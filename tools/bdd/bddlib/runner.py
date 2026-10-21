@@ -123,7 +123,20 @@ def regex_escape(text: str) -> str:
     return "".join(f"\\x{{{ord(char):X}}}" if ord(char) > 127 else re.escape(char) for char in text)
 
 
-_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex)?)\}")
+def device_shell_regex(text: str) -> str:
+    r"""A name filter that reaches a regular-expression engine on an Android device. Instrumentation arguments pass
+    through the device's shell unquoted (``am instrument -e name <value>``), which splits words on spaces and removes one
+    level of backslashes, so the pattern is written for that shell: a character other than an ASCII letter or digit is
+    sent as ``\\\c`` (the shell leaves ``\c``, which the engine reads as a literal ``c``), and a character outside ASCII as
+    ``\\x\{HEX\}`` (``\x{HEX}`` after the shell). The result is plain ASCII, so a Windows code page cannot change it."""
+    def one(char: str) -> str:
+        if ord(char) > 127:
+            return "\\\\x\\{" + f"{ord(char):X}" + "\\}"
+        return char if char.isalnum() else "\\\\\\" + char
+    return "".join(one(char) for char in text)
+
+
+_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex|:device)?)\}")
 
 
 def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed: int | None = None,
@@ -139,7 +152,7 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
               "python": sys.executable, "project_python": project_python(root), "tag": tag,
               "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
               "scenario": scenario or "",
-              "scenario:regex": regex_escape(scenario or "")}
+              "scenario:regex": regex_escape(scenario or ""), "scenario:device": device_shell_regex(scenario or "")}
     # one pass over each word: a value that contains something that looks like a placeholder is not filled in again
     return [_PLACEHOLDER.sub(lambda found: values[found.group(1)], word) for word in shlex.split(template)]
 
