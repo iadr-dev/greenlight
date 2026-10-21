@@ -152,7 +152,7 @@ def do_gate(args: argparse.Namespace) -> int:
     feature_dir = feature_dir_of(root, args.feature)
     if args.record_red and args.name != "bind":
         raise UsageError("--record-red belongs to the bind gate")
-    red = redrecord.capture(root, cfg.load(root).test_dirs) if args.record_red else None
+    red = redrecord.capture(root, cfg.load(root).test_dirs, args.feature) if args.record_red else None
     data = gates.record_gate(root, feature_dir, args.name, args.result, parse_details(args.detail), red)
     print(f"{args.feature}: {args.name} {args.result}; phase is now {data['phase']}")
     return 0
