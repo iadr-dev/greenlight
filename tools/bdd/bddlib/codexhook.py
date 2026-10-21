@@ -3,8 +3,11 @@
 Codex sends the event as JSON on stdin (``hook_event_name`` says which). This turns each into what greenlight already does:
 
     PreToolUse        the guard (``codexguard``): locks, managed data, nested sessions, Codex's own hook files;
-                      a reason is printed on stderr and the exit status is 2, which blocks the call
-    PostToolUse       the tripwire: a difference from the baseline or the locks is reported the same way
+                      a refusal is a JSON ``permissionDecision: deny`` on stdout with exit status 0. Checked live
+                      (codex-cli 0.142.3, ``codex exec``): that blocks the call, while exit status 2 with the reason on
+                      stderr, as the documentation describes, let it through
+    PostToolUse       the tripwire: a difference from the baseline or the locks is reported to the model with a JSON
+                      ``decision: block`` (the call has already run; this only feeds the finding back)
     UserPromptSubmit  refresh the tripwire baseline, and record ``$greenlight-approve FEAT-n rules|examples`` as an
                       approval that stays pending until Codex's own record of the session shows the person typed it
 
@@ -45,26 +48,36 @@ def plugin_root_set():
             os.environ["CLAUDE_PLUGIN_ROOT"] = saved
 
 
+def deny(reason: str) -> int:
+    """Refuse a tool call the way Codex acts on: a deny decision on stdout and exit status 0. The reason also goes to stderr."""
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                             "permissionDecisionReason": reason}}))
+    print(reason, file=sys.stderr)
+    return 0
+
+
+def feed_back(reason: str) -> int:
+    """After a tool call has run: give the model the finding (``decision: block`` replaces the tool result with it)."""
+    print(json.dumps({"decision": "block", "reason": reason}))
+    print(reason, file=sys.stderr)
+    return 0
+
+
 def pre_tool_use(payload: dict) -> int:
     reason = codexguard.evaluate(payload)
-    if reason:
-        print(reason, file=sys.stderr)
-        return 2
-    return 0
+    return deny(reason) if reason else 0
 
 
 def post_tool_use(root: Path, payload: dict) -> int:
     try:
         new = tripwire.check(root, PLUGIN_ROOT, payload.get("tool_name"))
     except CONTEXT_ERRORS as exc:
-        print(f"greenlight: the integrity check could not run ({exc}). The implement and verify gates will refuse until "
-              "the integrity data under .bdd/.integrity is readable again; tell the person.", file=sys.stderr)
-        return 2
+        return feed_back(f"greenlight: the integrity check could not run ({exc}). The implement and verify gates will refuse "
+                         "until the integrity data under .bdd/.integrity is readable again; tell the person.")
     if new:
-        print("greenlight: integrity check failed after this tool call:\n  " + "\n  ".join(tripwire.describe(i) for i in new)
-              + "\nThe implement and verify gates will refuse to pass until this is undone. Restore the file (for example "
-              "with git) and tell the person what happened.", file=sys.stderr)
-        return 2
+        return feed_back("greenlight: integrity check failed after this tool call:\n  " + "\n  ".join(tripwire.describe(i) for i in new)
+                         + "\nThe implement and verify gates will refuse to pass until this is undone. Restore the file (for example "
+                         "with git) and tell the person what happened.")
     return 0
 
 
@@ -105,9 +118,8 @@ def guard_from_outside(payload: dict) -> int:
             projects, unresolved = [], True
         if not projects and not unresolved:
             return 0
-        print(f"greenlight: the Codex hook hit an internal error ({type(exc).__name__}: {exc}) on a call that names a path "
-              "inside a greenlight project, and blocks it to stay safe.", file=sys.stderr)
-        return 2
+        return deny(f"greenlight: the Codex hook hit an internal error ({type(exc).__name__}: {exc}) on a call that names a path "
+                    "inside a greenlight project, and blocks it to stay safe.")
 
 
 def main(_argv: list[str]) -> int:
@@ -132,7 +144,7 @@ def main(_argv: list[str]) -> int:
                 return user_prompt_submit(root, payload)
     except Exception as exc:          # deliberate: inside a project a failure must not become "allowed"
         if event in ("PreToolUse", "PostToolUse"):
-            print(f"greenlight: the Codex hook hit an internal error ({type(exc).__name__}: {exc}) and blocks this call "
-                  "to stay safe. Please report it.", file=sys.stderr)
-            return 2
+            message = (f"greenlight: the Codex hook hit an internal error ({type(exc).__name__}: {exc}) and blocks this call "
+                       "to stay safe. Please report it.")
+            return deny(message) if event == "PreToolUse" else feed_back(message)
     return 0

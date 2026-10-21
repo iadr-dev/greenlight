@@ -96,13 +96,13 @@ def mentions_codex_state(text: str, root: Path | None) -> bool:
                 or any(base in flattened for base in protected_roots(root)))
 
 
-def check_reading(text: str, root: Path | None) -> str | None:
+def check_reading(text: str, root: Path | None, derived: bool = False) -> str | None:
     """The Codex-specific reason to refuse one reading of a shell command, or None."""
     if APPROVAL_TEXT.search(text):
         return APPROVAL_MESSAGE
     if _HOOK_ENTRY.search(text):
         return HOOK_MESSAGE
-    if starts_codex_session(text):
+    if starts_codex_session(text, derived):
         return NESTED_MESSAGE
     if _SETS_HOME.search(text):
         return CONFIG_MESSAGE
@@ -115,8 +115,8 @@ def check_reading(text: str, root: Path | None) -> str | None:
 def check_text(command: str, root: Path | None = None) -> str | None:
     """The reason a shell command is refused for Codex-specific reasons, or None. The command is checked as written and
     in each way a shell could read it, so a quote, a variable or a brace in the middle of a name does not hide it."""
-    for reading in [command, *guard.shell_readings(command)]:
-        reason = check_reading(reading, root)
+    for derived, reading in [(False, command), *((True, other) for other in guard.shell_readings(command))]:
+        reason = check_reading(reading, root, derived)
         if reason:
             return reason
     return None

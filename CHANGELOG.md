@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Found by the first live Codex run (codex-cli 0.142.3 on Windows): the Codex PreToolUse hook refused a call with exit status 2 and the reason on stderr, which Codex did not act on, so a locked spec could be edited (the tripwire noticed afterwards). A refusal is now the `permissionDecision: deny` decision on stdout with exit 0, which stopped the same edit, and the tripwire's finding after a call is a `decision: block` with a reason. The nested-session check also no longer refuses a command that merely has the word `codex` inside a quoted argument (`-Value '# edited by codex'`); a `codex` program word outside quotes, or at the start of a command inside a quoted script, is still refused. An opt-in live test (`tests/test_codex_live.py`) and platform note P31 record the procedure.
+
+### Fixed
 - Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
 
 - `bdd run` now fails a run whose test report holds no test cases and prints the runner's exit status and its own output, as it already did for a missing report; every run record carries the number of cases it found. This makes an intermittent first-run failure of the Kotlin contract job in CI diagnosable (it ended with only "no test cases").
