@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs the commands of cards/practices/language-swift.md on a small Swift package and checks that each one behaves as
-# the card says. CI runs it on macOS; it needs the Swift toolchain (Xcode) and installs SwiftLint with Homebrew if missing.
+# the card says. CI runs it on macOS; it needs the Swift toolchain (Xcode) and uses the SwiftLint of the runner image (a missing one fails the check).
 set -eu
 
 . "$(dirname "$0")/expect.sh"
@@ -60,7 +60,7 @@ else
     swift_format="swift format"
 fi
 echo "swift-format is reached as: $swift_format"
-command -v swiftlint >/dev/null 2>&1 || brew install --quiet swiftlint
+# SwiftLint comes with the macOS runner image; nothing unpinned is installed here. A missing one is reported, not fetched.
 echo "swiftlint $(swiftlint version)"
 
 expect_pass "a plain build only warns about the deprecated call" swift build

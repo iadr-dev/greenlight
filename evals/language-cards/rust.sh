@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs the commands of cards/practices/language-rust.md on a small crate and checks that each one behaves as the card
 # says: it fails on the finding it exists for and passes once the finding is fixed. CI runs it; it needs cargo with
-# rustfmt and clippy, and installs cargo-audit if it is missing.
+# rustfmt and clippy, and installs cargo-audit 0.22.2 (pinned, with its lock file) if it is missing.
 set -eu
 
 . "$(dirname "$0")/expect.sh"
@@ -53,7 +53,7 @@ sed 's/    total_after_discount(5)/    old_total(5)/' src/lib.rs > src/lib.rs.ne
 { printf '#![deny(deprecated)]\n'; cat src/lib.rs; } > src/lib.rs.new && mv src/lib.rs.new src/lib.rs
 expect_fail "#![deny(deprecated)] in the crate makes a plain build refuse it" cargo build --quiet
 
-command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked --quiet
+command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --version 0.22.2 --locked --quiet   # the version the card was checked with
 cargo audit --version
 cargo generate-lockfile --quiet
 expect_pass "cargo audit on a crate without dependencies" cargo audit
