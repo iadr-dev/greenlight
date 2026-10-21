@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import adapter, classify, cli, initcmd, junit, state
+from bddlib import adapter, classify, cli, initcmd, junit, runner, state
 from bddlib import config as cfg
 
 REPO = Path(__file__).resolve().parents[3]
@@ -29,6 +29,28 @@ HAVE_JAVA = WANTED and shutil.which("java") is not None
 HAVE_MAVEN = HAVE_JAVA and shutil.which("mvn") is not None
 HAVE_GRADLE = HAVE_JAVA and shutil.which("gradle") is not None
 HAVE_ANDROID = HAVE_GRADLE and bool(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT"))
+
+
+def android_sdk() -> Path | None:
+    """The Android SDK: ANDROID_HOME or ANDROID_SDK_ROOT, else where Android Studio and Google's `android` tool put it."""
+    named = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+    candidates = [Path(named)] if named else [Path(os.environ.get("LOCALAPPDATA", "~")) / "Android" / "Sdk",
+                                              Path.home() / "Library" / "Android" / "sdk", Path.home() / "Android" / "Sdk"]
+    return next((path.expanduser() for path in candidates if (path.expanduser() / "platform-tools").is_dir()), None)
+
+
+def connected_devices() -> list[str]:
+    """The serial numbers `adb devices` lists as ready ("device"), or none when adb is missing."""
+    adb = shutil.which("adb")
+    if adb is None:
+        return []
+    done = subprocess.run([adb, "devices"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    return [line.split()[0] for line in done.stdout.splitlines()[1:] if line.strip().endswith("\tdevice")]
+
+
+# Scenarios on a device need a phone or an emulator, so they run only when a person asks for them with one connected.
+HAVE_DEVICE = (os.environ.get("GREENLIGHT_ANDROID_DEVICE") == "1" and shutil.which("java") is not None
+               and shutil.which("gradle") is not None and android_sdk() is not None and bool(connected_devices()))
 
 ORDERS = """@FEAT-001
 Feature: Orders
@@ -416,6 +438,181 @@ class AndroidContractTest(ScaffoldCase):
         self.assertEqual(code, 0, out + err)
         code, out, _ = self.bdd("classify", "FEAT-000", "--expect", "green")
         self.assertEqual(code, 0, out)
+
+
+DEVICE_ORDERS = """@FEAT-001
+Feature: Orders
+
+  @R-001.1
+  Rule: Orders can be counted
+
+    @EX-001.1.1
+    Scenario: Seeding needs a seam
+      Given the following order exist:
+        | id |
+        | 1  |
+      Then the order records are:
+        | id |
+        | 1  |
+
+    @EX-001.1.2
+    Scenario: A name nobody mapped
+      When cancel is called with:
+        | id |
+        | 1  |
+      Then the result is:
+        \"\"\"
+        1
+        \"\"\"
+
+    @EX-001.1.3
+    Scenario: A step nobody wrote
+      When the moon is full
+      Then the result is:
+        \"\"\"
+        1
+        \"\"\"
+"""
+
+DEVICE_TITLES = """@FEAT-004
+Feature: Titles that are not plain ASCII
+
+  @R-004.1
+  Rule: A scenario keeps its title on the device
+
+    @EX-004.1.1
+    Scenario: Café: two numbers are added
+      When add is called with:
+        | a | b |
+        | 2 | 3 |
+      Then the result is:
+        \"\"\"
+        5
+        \"\"\"
+
+    @EX-004.1.2
+    Scenario: 兩個數字相加
+      When add is called with:
+        | a | b |
+        | 1 | 1 |
+      Then the result is:
+        \"\"\"
+        2
+        \"\"\"
+"""
+
+
+def device_block() -> str:
+    """The second adapter block the guide tells a person to add to .bdd/config.toml for a device."""
+    guide = (KOTLIN / "guide.md").read_text(encoding="utf-8")
+    after = guide[guide.index("<!-- device adapter block"):]
+    start = after.index("```toml\n") + len("```toml\n")
+    return "\n".join(line.removeprefix("   ") for line in after[start:after.index("```", start)].splitlines()) + "\n"
+
+
+class DeviceSettingsTest(unittest.TestCase):
+    """What the device run is made of, checked without a device."""
+
+    def config_with_the_device_block(self, root: Path) -> cfg.Config:
+        (root / ".bdd").mkdir()
+        text = adapter.config_block(adapter.load(KOTLIN)) + "\n" + device_block()
+        (root / ".bdd" / "config.toml").write_text(text, encoding="utf-8")
+        return cfg.load(root)
+
+    def test_the_guides_block_adds_a_second_run_that_reuses_the_same_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.config_with_the_device_block(Path(tmp))
+        jvm, device = config.runs
+        self.assertEqual((jvm.adapter, device.adapter), ("kotlin-android", "kotlin-android-device"))
+        self.assertIn("connectedDebugAndroidTest", device.by_tag)
+        self.assertIn("{scenario:device}", device.isolated)
+        self.assertEqual(device.shuffle, "")                           # Cucumber-Android has no order setting
+        self.assertEqual(len(config.feature_dirs), 1)                  # one set of feature files, run twice
+        self.assertIn("BDD_EXPECTED_MISSING", device.expected_fail)
+        self.assertIn("NotMapped", device.test_defect)
+        self.assertIn("CucumberException", device.test_defect)        # e.g. no @CucumberOptions class found
+
+    def test_the_device_plumbing_is_shipped_and_bound(self):
+        support = adapter.load(KOTLIN)["paths"]["support"]
+        for name in ("greenlight-device.gradle.kts", "src/device/kotlin/greenlight/RunCucumberOnDevice.kt"):
+            self.assertIn(name, support)
+            self.assertTrue((KOTLIN / "templates" / name).is_file(), name)
+        script = (KOTLIN / "templates" / "greenlight-device.gradle.kts").read_text(encoding="utf-8")
+        for needle in ("greenlight.report", "deleteRecursively()", "finalizedBy", "reports.size != 1", "RunCucumberTest.kt"):
+            self.assertIn(needle, script)
+        options = (KOTLIN / "templates" / "src/device/kotlin/greenlight/RunCucumberOnDevice.kt").read_text(encoding="utf-8")
+        self.assertIn('@CucumberOptions(glue = ["greenlight"], features = ["features"])', options)
+
+    def test_a_scenario_name_is_written_for_the_devices_shell(self):
+        # the device's shell takes one level of backslashes away: what reaches the engine is `\ `, `\(` and `\x{E9}`
+        self.assertEqual(runner.device_shell_regex("Order 999"), "Order\\\\\\ 999")
+        self.assertEqual(runner.device_shell_regex("a(b)"), "a\\\\\\(b\\\\\\)")
+        self.assertEqual(runner.device_shell_regex("Café"), "Caf\\\\x\\{E9\\}")
+        self.assertTrue(runner.device_shell_regex("兩個 'x'; rm -rf $HOME").isascii())
+
+    def test_the_isolated_words_reach_the_device_as_one_escaped_word(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.config_with_the_device_block(Path(tmp))
+            words = runner.build_command(config.runs[1], Path(tmp), "@FEAT-001", Path(tmp) / "r.xml", scenario="A name; rm x")
+        self.assertEqual(words[-1], "-Pandroid.testInstrumentationRunnerArguments.name=\\\\AA\\\\\\ name\\\\\\;\\\\\\ rm\\\\\\ x\\\\z")
+
+
+@unittest.skipUnless(HAVE_DEVICE, "set GREENLIGHT_ANDROID_DEVICE=1 with a JDK, Gradle, the Android SDK and a device in `adb devices`")
+class DeviceContractTest(ScaffoldCase):
+    """The scenarios on a real device (or an emulator), through Cucumber-Android: the sample is green, red looks like red,
+    a title in Chinese or with an accent maps to its scenario, and one scenario runs alone."""
+
+    fixture = "android-device"
+    adapter_name = "kotlin-android"
+
+    @classmethod
+    def prepare(cls) -> None:
+        if not (os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")):
+            (cls.root / "local.properties").write_text(f"sdk.dir={android_sdk().as_posix()}\n", encoding="utf-8")
+        config = cls.root / ".bdd" / "config.toml"
+        config.write_text(config.read_text(encoding="utf-8") + "\n" + device_block(), encoding="utf-8", newline="\n")
+        make_gradle_wrapper(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        wrapper = cls.root / ("gradlew.bat" if os.name == "nt" else "gradlew")
+        subprocess.run([str(wrapper), "--stop"], cwd=cls.root, capture_output=True, timeout=120)   # a daemon holds the folder
+        super().tearDownClass()
+
+    def run_on_device(self, feature: str, *flags: str) -> tuple[int, str]:
+        code, out, err = self.bdd("run", feature, "--adapter", "kotlin-android-device", *flags)
+        return code, out + err
+
+    def test_1_the_sample_feature_is_green_on_the_device(self):
+        code, out = self.run_on_device("FEAT-000")
+        self.assertEqual(code, 0, out)
+        self.assertIn("3 passed", out)
+        code, out, _ = self.bdd("classify", "FEAT-000", "--expect", "green")
+        self.assertEqual(code, 0, out)
+
+    def test_2_red_looks_like_red_on_the_device(self):
+        self.add_feature("src/test/resources/features/orders.feature", DEVICE_ORDERS)
+        code, out = self.run_on_device("FEAT-001")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.results("FEAT-001"),
+                         {"EX-001.1.1": "expected-fail", "EX-001.1.2": "test-defect", "EX-001.1.3": "test-defect"})
+
+    def test_3_one_scenario_runs_alone_and_titles_that_are_not_plain_ascii_map(self):
+        self.add_feature("src/test/resources/features/titles.feature", DEVICE_TITLES, "FEAT-004")
+        for flags in ((), ("--isolated",)):
+            with self.subTest(flags=flags):
+                code, out = self.run_on_device("FEAT-004", *flags)
+                self.assertEqual(code, 0, out)
+                self.assertEqual(self.results("FEAT-004"), {"EX-004.1.1": "pass", "EX-004.1.2": "pass"})
+        record = json.loads((self.root / ".bdd/.runs/FEAT-004/latest.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(record["runs"]), 2)                       # one instrumentation run per scenario
+        self.assertEqual(len(record["cases"]), 2)
+
+    def test_4_both_sides_run_together_by_default(self):
+        code, out, err = self.bdd("run", "FEAT-000")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("2 run(s)", out)                                 # the JVM run and the device run
+        self.assertIn("6 passed", out)
 
 
 if __name__ == "__main__":
