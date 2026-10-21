@@ -125,6 +125,19 @@ class RunTest(RunCase):
         self.assertEqual(code, 1)
         self.assertIn("no test report was written", err)
 
+    def test_a_report_without_test_cases_fails_and_shows_what_the_runner_said(self):
+        code, out, err = self.run_feature(cases=[], env={"FAKE_NOTE": "no scenario matched the filter"})
+        self.assertEqual(code, 1)
+        self.assertIn("no test cases", out)
+        self.assertIn("the test report holds no test cases (the runner exited with status 0)", err)
+        self.assertIn("no scenario matched the filter", err)                         # the runner's own words are shown
+        record = runner.load_latest(self.root, "FEAT-007")
+        self.assertEqual((record["runs"][0]["report"], record["runs"][0]["cases"]), (True, 0))
+
+    def test_every_run_records_how_many_test_cases_it_found(self):
+        self.run_feature()
+        self.assertEqual([r["cases"] for r in runner.load_latest(self.root, "FEAT-007")["runs"]], [3])
+
     def test_missing_commands_timeouts_and_missing_tables_are_usage_problems(self):
         self.config(tail="[adapters.run]\nby_tag = 'no-such-runner-xyz {tag}'\nreport = '--out {out}'\n")
         code, _, err = self.run_feature()
