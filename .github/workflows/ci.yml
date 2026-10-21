@@ -371,7 +371,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
-          go-version: "1.23"
+          go-version: "1.26"                 # gotestsum v1.13.0 needs Go 1.24 or newer; v1.12.1 does not build on 1.25+
           cache: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:

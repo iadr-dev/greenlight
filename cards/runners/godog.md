@@ -38,4 +38,5 @@ and a `status="passed"` scenario can still carry a `<failure>` from a later step
 - `--tags @FEAT-007` needs the tag on the `Feature:` line.
 - The `junit` formatter writes the file at the end of the run; a panic in a step can leave no file. `bdd run` then shows the output.
 - godog's `--strict` makes undefined and pending steps fail the run; keep it on, so a missing step is loud.
-- Random order: `--random=SEED` exists in godog; use `shuffle = '--random={seed}'`.
+- Random order: `--random=SEED` (checked on godog v0.16.0); use `shuffle = '--random={seed}'` with godog's own command line, or
+  `-godog.random={seed}` when the scenarios run inside `go test`. Behind the wrapper `tests/run_junit.py` write it `--add=WORD`.
