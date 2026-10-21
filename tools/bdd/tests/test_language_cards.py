@@ -40,7 +40,7 @@ class LanguageCardChecksTest(unittest.TestCase):
             if script.name == "expect.sh":
                 continue
             with self.subTest(check=script.name):
-                self.assertIn(f"sh evals/language-cards/{script.name}", ci)
+                self.assertIn(f"bash evals/language-cards/{script.name}", ci)
 
     def test_every_command_of_a_checked_card_is_run_or_explained(self):
         for script in sorted(CHECKS.glob("*.sh")):

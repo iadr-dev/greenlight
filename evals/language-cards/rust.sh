@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Runs the commands of cards/practices/language-rust.md on a small crate and checks that each one behaves as the card
 # says: it fails on the finding it exists for and passes once the finding is fixed. CI runs it; it needs cargo with
 # rustfmt and clippy, and installs cargo-audit 0.22.2 (pinned, with its lock file) if it is missing.
-set -eu
+set -euo pipefail
 
 . "$(dirname "$0")/expect.sh"
 

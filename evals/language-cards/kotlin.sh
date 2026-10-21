@@ -1,7 +1,7 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Runs the commands of cards/practices/language-kotlin.md on a small Kotlin/JVM Gradle project and checks that each one
 # behaves as the card says. CI runs it; it needs a JDK and Gradle on PATH (to create the wrapper the card insists on).
-set -eu
+set -euo pipefail
 
 . "$(dirname "$0")/expect.sh"
 
