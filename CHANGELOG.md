@@ -5,6 +5,35 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-21
+
+The first complete release: the flow from feature request to verified code for seven test stacks, with Claude Code hooks for hard
+enforcement and plain skills (Claude Code without the plugin, Codex, `AGENTS.md`) for soft enforcement. The entries below are
+everything added since 0.1.0.
+
+**Measured, and what that does not show.** One end-to-end run of the `discounts` request on the Python adapter (Claude Sonnet
+5.5, `autopilot`, hooks on) reached `done` with an auditor verdict of PASS (marked UNREVIEWED, as every autopilot result is)
+and met all six release metrics: every rule had examples, valid red on the first bind 100%, green 100%, no locked-spec
+violations, vocabulary resolution 100%, no forged approvals. That is one run of one request with one model. The standard
+autonomy arm, the no-plugin baseline, the other requests and repeated runs are supported by the harness (`evals/run_e2e.py`,
+`evals/collect.py`) but have not been measured. An earlier run of the same request stopped at FINDINGS; it led to the change
+to audit item Q4 below. The cost of the PASS run was recorded for the discover phase only.
+
+**Known limits.**
+- The `kotlin-android` contract job fails now and then in CI with "no test cases" and passes on rerun; the cause is not
+  found. `bdd run` now prints the runner's output in that case so the next occurrence can be diagnosed.
+- Codex: hooks block edits to locked files on a best-effort basis and the tripwire detects tampering, but the text checks on
+  shell commands have known gaps (glob spellings of the Codex state folder, relative paths in typed input into a shell whose
+  directory was changed, split input), and typed input into long-running shells is restricted to a few short answers inside
+  a project. Approvals typed in Codex are never graded hard and are refused unless `[approvals] accept_codex = true`. The
+  hooks have not run inside a live Codex session: a sign-in was available, but no Codex model could be used with that
+  account. The payload shapes come from the documentation and a local session file.
+- Fixtures and commands from documentation, not from runs: the godog, Cucumber-JVM and Reqnroll reports, the SQLAlchemy and
+  Django query hooks and most language cards. Not covered: Android UI on a device, mutmut on native Windows, non-ASCII
+  scenario titles in .NET, Go and .NET on macOS.
+- The guard is a best-effort text check on shell commands. The tripwire, your deny rules (`bdd doctor` shows them) and CI
+  (`docs/ci.md`) are the guarantees. The CI templates clone the release tag `v1.0.0`.
+
 ### Fixed
 - Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
 
