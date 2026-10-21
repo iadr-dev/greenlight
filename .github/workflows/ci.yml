@@ -275,6 +275,47 @@ jobs:
       - name: Fresh scaffold runs green as an Android library's local unit test (the SDK is preinstalled on the runner)
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k AndroidContractTest -v
 
+  language-card-rust:
+    name: language card commands (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The rustup toolchain of the runner, with rustfmt and clippy
+        run: rustup component add rustfmt clippy
+      - name: Every command of the Rust card behaves as the card says
+        run: bash evals/language-cards/rust.sh
+
+  language-card-swift:
+    name: language card commands (Swift)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SwiftLint 0.65.1, the release the card was checked with (checksum pinned)
+        env:
+          SWIFTLINT_SHA256: c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSLf -o "$RUNNER_TEMP/swiftlint.zip" https://github.com/realm/SwiftLint/releases/download/0.65.1/portable_swiftlint.zip
+          echo "$SWIFTLINT_SHA256  $RUNNER_TEMP/swiftlint.zip" | shasum -a 256 -c -
+          unzip -q -o "$RUNNER_TEMP/swiftlint.zip" swiftlint -d "$RUNNER_TEMP/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+      - name: Every command of the Swift card behaves as the card says
+        run: bash evals/language-cards/swift.sh
+
+  language-card-kotlin:
+    name: language card commands (Kotlin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
+        with:
+          gradle-version: "9.8.2"
+      - name: Every command of the Kotlin card behaves as the card says
+        run: bash evals/language-cards/kotlin.sh
+
   reference-app-csv-tool:
     name: reference app (csv-tool, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
