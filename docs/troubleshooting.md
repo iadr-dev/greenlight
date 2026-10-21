@@ -22,6 +22,9 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | `pytest` or `pytest_bdd` not found | Install them in the project's environment (`uv pip install pytest pytest-bdd`, or pip), or point greenlight at the right interpreter: `bdd init --python PATH` or `python = "PATH"` in `.bdd/config.toml`. The agents cannot install packages. |
 | Tests need `PYTHONPATH` | It is not passed on. Set `pythonpath` in `tests/pytest.ini` (a bound file). |
 | `not a valid red` | Read the listed problems: a *test defect* (import error, unmapped name, undefined step) needs the steps fixed; an *unknown* failure needs a classification pattern or a fix; a scenario that passes needs `@existing` if the behaviour truly exists. |
+| `not a valid red` after `/greenlight:change`, with scenarios that "passed before implementation" | The feature was reopened after its code was written, so the code makes the tests pass. Run `bdd run FEAT-n --against-red`: it proves the red against the production source of the first red, in a temporary worktree. Do not stash or revert the code, and do not tag those scenarios `@existing`. |
+| `--against-red`: "no recorded red", "not committed", or "digest differs" | The feature never passed the bind gate with `--record-red`; or its red was recorded, before snapshots were kept, with production changes that were not committed; or the source at that commit is not the one the red was proven on. None can be reproduced: say so in the report and ask the person how to proceed. |
+| `--against-red` tests fail with missing packages | A dependency folder could not be linked into the worktree (on Windows a link needs Developer Mode or an administrator), or the project's environment holds an editable install that points at the project's own source. Enable links, or install the project without editable mode. |
 | A scenario in `unknown` | Its failure text matches no pattern. Run `bdd classify FEAT-n` to see the text. |
 
 ## Gates, locks and approvals

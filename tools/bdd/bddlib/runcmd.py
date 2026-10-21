@@ -3,6 +3,8 @@
     bdd run FEAT-007 [--adapter NAME] [--shuffle [--seed N]] [--isolated]
         run the feature's tests with the adapter's command (with every adapter's, when a repository has several)
         and record what happened
+    bdd run FEAT-007 --against-red [--adapter NAME]
+        run them against the production source the red was first proven on (after a reopen past the code)
     bdd classify FEAT-007 [--expect red|green] [--json]
         classify the recorded run per scenario; with --expect, exit 1 unless that verdict holds
 
@@ -15,7 +17,7 @@ import json
 import sys
 from collections import Counter
 
-from . import classify, config as cfg, runner, state, store
+from . import againstred, classify, config as cfg, runner, state, store
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
 
@@ -27,7 +29,12 @@ def run_run(argv: list[str]) -> int:
     ap.add_argument("--shuffle", action="store_true", help="random order, to expose scenarios that depend on each other")
     ap.add_argument("--seed", type=int, help="repeat a shuffled order (with --shuffle)")
     ap.add_argument("--isolated", action="store_true", help="one process per scenario, to expose shared state")
+    ap.add_argument("--against-red", action="store_true",
+                    help="run in a temporary worktree of the production source the red was proven on, with today's "
+                         "tests laid over it: proves the red again after the feature was reopened past its code")
     args = ap.parse_intermixed_args(argv)
+    if args.against_red and (args.shuffle or args.isolated):
+        ap.error("--against-red makes one plain run; shuffle or isolate the tests in the project afterwards")
     if args.seed is not None and not args.shuffle:
         ap.error("--seed only makes sense with --shuffle")
     if args.shuffle and args.isolated:
@@ -37,10 +44,15 @@ def run_run(argv: list[str]) -> int:
 
 def do_run(args: argparse.Namespace) -> int:
     root = project_root()
-    store.find_feature_dir(root, args.feature)
-    adapters = runner.pick_all(cfg.load(root), args.adapter)
-    record = runner.run_feature(root, args.feature, classify.feature_scenarios(root, args.feature), adapters,
-                                shuffle=args.shuffle, isolated=args.isolated, seed=args.seed)
+    feature_dir = store.find_feature_dir(root, args.feature)
+    config = cfg.load(root)
+    adapters = runner.pick_all(config, args.adapter)
+    scenarios = classify.feature_scenarios(root, args.feature)
+    if args.against_red:
+        record = run_against_red(root, args.feature, state.load(feature_dir), config, scenarios, adapters)
+    else:
+        record = runner.run_feature(root, args.feature, scenarios, adapters,
+                                    shuffle=args.shuffle, isolated=args.isolated, seed=args.seed)
     counts = Counter(c["outcome"] for c in record["cases"])
     seed = f", seed {record['seed']}" if record["seed"] else ""
     print(f"{args.feature}: {len(record['runs'])} run(s) ({record['mode']}{seed}): "
@@ -53,6 +65,25 @@ def do_run(args: argparse.Namespace) -> int:
         print(f"the test report holds no test cases (the runner exited with status {r['exit']}): {' '.join(r['command'])}\n"
               f"Nothing matched the feature's tag, or the runner found no tests to run. Its output was:\n{r['tail']}", file=sys.stderr)
     return 1 if missing or empty or not record["cases"] else 0
+
+
+def run_against_red(root, feature_id: str, data: dict, config: cfg.Config, scenarios: list[dict],
+                    adapters: list[cfg.RunRules]) -> dict:
+    """Run the feature's current tests against the production source of its recorded red (see ``againstred``)."""
+    why = againstred.problem(data)
+    if why:
+        raise UsageError(why)
+    red = againstred.baseline(data)
+    with againstred.red_worktree(root, red, config) as (place, missing):
+        if missing:
+            print("could not link these installed dependency folders into the temporary worktree (on Windows a link "
+                  f"needs Developer Mode or an administrator): {', '.join(missing)}; tests that need them will fail",
+                  file=sys.stderr)
+        record = runner.run_feature(root, feature_id, scenarios, adapters, workdir=place,
+                                    against_red=againstred.describe(red))
+    source = red.get("snapshot") or red.get("commit") or ""
+    print(f"{feature_id}: ran against the red recorded at {red.get('at')} (production source {source[:12]})")
+    return record
 
 
 def run_classify(argv: list[str]) -> int:

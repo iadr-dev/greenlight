@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire, workspace
+from . import adopt, againstred, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, runner, stability, state, store, tripwire, workspace
 from . import config as cfg
 from .errors import StoreError, UsageError
 
@@ -36,9 +36,29 @@ def lock_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
 RUN_EXPECTED = {"bind": "red", "verify": "green"}
 
 
-def run_problems(root: Path, feature_id: str, gate: str, raw: bytes | None) -> list[str]:
+REOPENED_HINT = ("the feature was reopened after its red was proven, so its production code may already be there: run "
+                 "`bdd run {feature} --against-red` to prove the red against the production source of that red")
+
+
+def run_problems(root: Path, feature_id: str, gate: str, raw: bytes | None, data: dict | None = None) -> list[str]:
     """When the adapter has a run command, ``bind`` needs a valid red and ``verify`` a green, from a
-    run that ``bdd run`` recorded against the files as they are now."""
+    run that ``bdd run`` recorded against the files as they are now. With the feature's ``data``, a run made
+    ``--against-red`` backs the bind gate only if it was made against this feature's own red."""
+    problems = _run_problems(root, feature_id, gate, raw)
+    if gate != "bind" or data is None or raw is None:
+        return problems
+    try:
+        record = json.loads(raw)
+    except ValueError:
+        return problems
+    if "against_red" in record and not againstred.matches(record, data):
+        problems.append("the run was made against another red than the one recorded for this feature")
+    elif problems and "against_red" not in record and data.get("red_history"):
+        problems.append(REOPENED_HINT.format(feature=feature_id))
+    return problems
+
+
+def _run_problems(root: Path, feature_id: str, gate: str, raw: bytes | None) -> list[str]:
     config = cfg.load(root)
     if gate not in RUN_EXPECTED or not config.runs:
         return []
@@ -127,7 +147,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     problems: list[str] = []
     for human_gate in APPROVALS_NEEDED.get(gate, ()):
         problems += approvals.effective_problems(root, data, human_gate)
-    problems += run_problems(root, data["feature"], gate, raw)
+    problems += run_problems(root, data["feature"], gate, raw, data)
     kept = None if data.get("kind") == "adopt" else data.get("members_red", {})
     problems += workspace_problems(root, data["feature"], gate, member_raws, kept)
     if gate == "system-map" and (feature_dir / design.DESIGN_FILE).is_file():
@@ -177,8 +197,13 @@ def record_gate(root: Path, feature_dir: Path, name: str, result: str, detail: d
                 raise UsageError(f"cannot record {name}=pass: " + "; ".join(problems))
         current["gates"][name] = {"result": result, "at": store.utc_now(), "detail": detail,
                                   "session": enforcement.current_session()}
+        original = againstred.baseline(current)
         if red is not None:
             current["red"] = red
+        if name == "bind" and result == "pass" and raw is not None and "against_red" in json.loads(raw):
+            # the red was proven again against the source of the original red: that red, not today's HEAD, stays the
+            # point the production code is measured from (the order "red, then code" for the whole feature)
+            current["red"] = {**original, "reproduced_at": store.utc_now()}
         if name == "bind" and result == "pass" and raw is not None:
             current["red_run"] = runner.keep_red(root, current["feature"], raw)
         if name == "bind" and result == "pass" and member_raws:
