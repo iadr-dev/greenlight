@@ -1,7 +1,7 @@
 """Reports of real runners, classified with the generic-junit defaults.
 
-Each folder under tests/fixtures/junit holds the same two-scenario feature in four states. Four runners (cucumber-js,
-behave, godog, cucumber-jvm) are real runs; reqnroll is written from its documented report format (see the README there)."""
+Each folder under tests/fixtures/junit holds the same two-scenario feature in four states. All five runners (cucumber-js,
+behave, godog, cucumber-jvm, reqnroll) are real runs (see the README there for the versions)."""
 import tempfile
 import unittest
 from pathlib import Path

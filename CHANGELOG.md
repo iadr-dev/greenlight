@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Fixtures and cards now come from real runs where a toolchain was available: the godog, Cucumber-JVM and Reqnroll JUnit reports (every runner fixture is now a real run), the SQLAlchemy and Django query-counter hooks (contract tests against the real libraries, with both in the pinned hashed dev requirements), and the Go, Python, TypeScript, Next.js and Expo language cards. The runs corrected the cards: `go mod tidy -diff` for the tidy check, `go test -race` needs cgo, `next lint` no longer exists in Next.js 16, `npx expo lint` installs ESLint into a project without one, the TypeScript deprecation rule needs type-aware linting, and the ruff UP rules miss `datetime.utcnow()`. The Kotlin, Swift and Rust cards say plainly that they were not run.
+
 ### Fixed
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 

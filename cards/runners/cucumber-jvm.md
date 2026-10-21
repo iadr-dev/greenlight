@@ -19,16 +19,17 @@ With Gradle, pass the properties through the test task (`systemProperty` in `bui
 
 ## Report
 
-`<testsuite name="io.cucumber.core.plugin.JUnitFormatter">` with one `<testcase classname="<feature>" name="<scenario>">` per
-scenario. The scenario name is the test name. This card and the fixtures in `tools/bdd/tests/fixtures/junit/cucumber-jvm` were
-written from the documented format and **not produced by a run**: run once with a failing and an undefined step and compare.
+`<testsuite name="Cucumber">` with one `<testcase classname="<feature>" name="<scenario>">` per scenario; the step lines with their
+status are in `system-out`. The scenario name is the test name. The fixtures in `tools/bdd/tests/fixtures/junit/cucumber-jvm` are
+a real run (Cucumber-JVM 8.0.4 with `cucumber-junit-platform-engine`, Maven 3.9.16, JDK 25, 2026-10-21).
 
 ## What red looks like
 
 - A step that throws `new UnsupportedOperationException("BDD_EXPECTED_MISSING: add")` is a `<failure type="java.lang.UnsupportedOperationException">`
   with the message: an expected failure. A failed JUnit assertion is `org.opentest4j.AssertionFailedError: expected: <5> but was: <0>`: also expected.
-- In strict mode (the default since Cucumber 7) an undefined step fails with `The step "..." is undefined`; the default patterns
-  call it a test defect. If the plugin writes `<skipped message="...undefined">` instead, the run is not strict: turn strict on.
+- An undefined step is an **empty** `<failure/>` and the word `undefined` appears only in the `system-out` step list
+  (`When I add 2 and 3.....undefined`); `bdd classify` reads `system-out` when a failure has no text of its own, and the default
+  patterns call it a test defect. If the plugin writes `<skipped message="...undefined">` instead, the run is not strict: turn strict on.
 - A compile error makes Maven fail before any test runs: no report, scenarios `not-run`.
 
 ## Known pitfalls
