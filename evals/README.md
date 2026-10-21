@@ -55,11 +55,22 @@ assumptions with the scripted answers (`evals/requests/<request>.answers.json`).
 
 - **Cost.** The plugin's `SubagentStop` hook notes every finished agent and `bdd cost FEAT-n --collect` turns the notes
   into tokens (from the agent's own transcript: input, output and cache writes, each model reply once) and seconds (from the
-  hook) per phase; the completion notice's own figure can differ by a few percent. `tokens` in a row is that sum and
-  `cost_recorded` says whether anything was recorded. A run that stops early
+  hook when its payload says, otherwise from the first and last time stamp in the agent's transcript; in real runs the
+  payload had no duration) per phase; the completion notice's own figure can differ by a few percent. `tokens` in a row is
+  that sum and `cost_recorded` says whether anything was recorded. A run that stops early
   (for example at `auto`, which asks a blocking question nobody can answer headless) has nothing recorded, which is why a
-  zero there is not a bug. `claude.total_cost_usd` and `claude.tokens_reported` are Claude Code's own totals for the
-  whole session. A row whose feature got past discover without recorded cost carries a `cost_warning`.
+  zero there is not a bug. `claude_cost_usd` (also `claude.total_cost_usd`) and `claude.tokens_reported` are Claude
+  Code's own totals for the whole session. A row whose feature got past discover without recorded cost carries a
+  `cost_warning`.
+- **Isolation.** The plugin a run loads is a snapshot of the last commit (`plugin_commit`; `checkout_changes` counts the
+  uncommitted changes that were left out), and the run has its own Codex home and, when the login is in the environment,
+  its own Claude Code folder, so other work on the machine cannot change what the run's tripwire watches. What it cannot
+  make its own (`~/.codex`, watched whatever `CODEX_HOME` says, and the person's Claude Code settings when the folder had to
+  be shared) is hashed before and after: `host_changes` lists what changed. `foreign_violations` are the open integrity
+  violations that name a file outside the run; a row with any is `contaminated` and is left out of the summary's targets
+  and listed under it. Three early runs stopped at the implement gate for this reason (the plugin's checkout, the person's
+  Claude Code settings and Codex configuration were edited by other work while they ran); greenlight's refusal was right,
+  the measurement was not.
 - **Enforcement.** `enforcement` is greenlight's classification of the feature. `hooks_active` is whether the guard
   hook ever ran in the project (`.bdd/.enforcement/_seen`). With `--hooks on`, a row where hooks did not run carries a
   `warning` and is not a hard-enforcement result. With `--hooks off` the plugin is loaded from a copy with an empty hooks

@@ -13,7 +13,7 @@ broken test.
 | `dotnet-reqnroll` | available | .NET services, libraries and command-line tools with Reqnroll and xUnit; profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
-| `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests (no device); profiles `base`, `lib`, `data` |
+| `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests, and (opt-in) the same scenarios on a device through Cucumber-Android; profiles `base`, `lib`, `data` |
 | `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
@@ -44,7 +44,7 @@ The contract tests run such titles in the usual order, shuffled and one scenario
 
 `java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests on Linux, Windows and macOS: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters, or written in Chinese or with accents, runs alone. The name filter reaches Maven and Gradle as plain ASCII (characters outside ASCII as `\x{HEX}`), because Windows converts a command line that reaches a `.cmd` or `.bat` launcher to the active code page. Two limits are worth knowing before you choose:
 
-- **Android.** The scenarios are local JVM unit tests. Code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine, and screens (Compose, Espresso) need a device or emulator and stay outside this adapter. The guide says exactly what is covered.
+- **Android.** The scenarios are local JVM unit tests, and can also run on a phone or an emulator through Cucumber-Android: a second adapter block, `kotlin-android-device`, runs the same feature files and steps as instrumented tests, and `bdd run` records both sets of cases (tested on a Samsung phone on Android 15). On the JVM, code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine. No step drives a screen (Compose, Espresso), so the `ui` profile is not declared. The guide says exactly what is covered.
 - **Network.** The JVM has no process-wide hook for raw sockets, so the Spring adapter's network guard covers the JDK HTTP client and `HttpURLConnection` only; run the tests without network access in CI for the rest.
 
 ## The generic-junit adapter

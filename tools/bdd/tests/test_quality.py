@@ -343,6 +343,24 @@ class DoctorTest(ProjectCase):
         self.write(".bdd/standards.md", "# Engineering standards\n\nStatus: APPROVED\n")
         self.assertEqual(doctor.check_standards(self.root).status, "ok")
 
+    def test_an_approved_file_with_a_placeholder_left_is_reported(self):
+        self.write(".bdd/standards.md", "Status: APPROVED\n\n- Formatter: <ruff format, prettier or gofmt>\n")
+        check = doctor.check_standards(self.root)
+        self.assertEqual(check.status, "warn")
+        self.assertIn("<ruff format, prettier or gofmt>", check.detail)
+
+    def test_comments_code_blocks_and_generic_types_are_not_placeholders(self):
+        text = ("Status: APPROVED\n<!-- fill in <the tool> here -->\n- Return `List<Order>` or `Map<K,V>`, never `<br>`.\n"
+                "```\nsrc/<feature>/api/   # one folder per feature\n```\n")
+        self.write(".bdd/standards.md", text)
+        self.assertEqual(doctor.check_standards(self.root).status, "ok")
+
+    def test_the_template_itself_is_a_draft_full_of_placeholders(self):
+        template = (Path(__file__).resolve().parents[3] / "templates" / "standards.md").read_text(encoding="utf-8")
+        self.assertIn("Status: DRAFT", template)
+        self.assertTrue(doctor.unfilled_placeholders(template))
+        self.assertTrue(template.endswith("\n"))
+
 
 class InitTest(unittest.TestCase):
     def test_a_new_project_gets_the_template_and_an_existing_one_can_add_it(self):

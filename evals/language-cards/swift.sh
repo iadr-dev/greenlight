@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs the commands of cards/practices/language-swift.md on a small Swift package and checks that each one behaves as
-# the card says. CI runs it on macOS; it needs the Swift toolchain (Xcode) and uses the SwiftLint of the runner image (a missing one fails the check).
+# the card says. CI runs it on macOS; it needs the Swift toolchain (Xcode) and SwiftLint on the PATH;
+# the CI job puts SwiftLint 0.65.1 there from its release, checksum pinned. A missing one fails the check, nothing is fetched here.
 set -eu
 
 . "$(dirname "$0")/expect.sh"

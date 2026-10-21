@@ -30,7 +30,7 @@ detected afterwards: run `bdd lock FEAT-n --check --require` in CI. In Codex `bd
 
 **Which languages and test stacks are supported?**
 Today: Python with pytest and pytest-bdd, Go with godog, .NET with Reqnroll (services, libraries, command-line tools), web UIs
-with Playwright (TypeScript), Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests, and any runner
+with Playwright (TypeScript), Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests and, opt-in, on a device, and any runner
 that writes a JUnit report (`generic-junit`). See [adapters](adapters.md) for what each covers and what it does not. The `bdd` tool
 itself is language independent and needs only Python 3.11+ on the machine.
 

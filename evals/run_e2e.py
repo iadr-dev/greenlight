@@ -24,12 +24,24 @@ commands as follow-up prompts in the same session (`--resume`) when the project 
 approvals arrive as headless prompts, which greenlight grades below a keyboard-typed one; the row records the grade, so
 a standard row measures the pipeline given scripted human decisions, not provenance of a real person.
 
+Isolation: a run measures greenlight, not the machine it runs on, so it does not share what the tripwire watches with
+other work going on at the same time. The plugin is loaded from a snapshot of the committed tree (`git read-tree` and
+`checkout-index` into the run's folder through a private index; uncommitted changes in the checkout are not in it, and the
+harness says so), and the `bdd` commands the harness runs come from the same snapshot. The run gets its own Codex home, and
+its own Claude Code configuration folder when Claude Code authenticates through the environment (Bedrock, Vertex or an API
+key) rather than through a login kept in that folder. The machine-wide files the tripwire watches whatever the run's
+environment says (`~/.codex`, and the person's Claude Code settings when the configuration folder could not be private) are
+hashed before and after the run, and a change is listed in the row (`host_changes`). A row whose open integrity violations
+name a file outside the run's project and its private folders is marked `contaminated` and kept out of the targets in the
+summary table, which lists it apart.
+
 Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib, shop-web), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -101,12 +113,81 @@ def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: boo
     return done
 
 
+# Claude Code authenticates through these variables without anything in its configuration folder; with none of them the
+# login lives in the folder, and a private folder would have no login.
+ENVIRONMENT_AUTH = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+PLUGIN_SNAPSHOT = "plugin"
+PRIVATE_FOLDERS = ("codex-home", "claude-config")
+PLUGIN_ROOT_KEY = "GREENLIGHT_EVAL_PLUGIN_ROOT"     # the snapshot the harness's own bdd commands run from
+
+
+def authenticates_through_environment(environ: dict) -> bool:
+    return any(str(environ.get(name) or "").strip().casefold() not in ("", "0", "false") for name in ENVIRONMENT_AUTH)
+
+
 def base_environment(tmp: Path) -> dict:
+    """The run's environment: its cache, its own Codex home and, when the login allows it, its own Claude Code folder."""
     env = os.environ.copy()
     env["GREENLIGHT_CACHE_DIR"] = str(tmp / ".cache")
     env.pop("CLAUDE_PLUGIN_DATA", None)
     env["PYTHONUTF8"] = "1"
+    env["CODEX_HOME"] = str(tmp / "codex-home")
+    if authenticates_through_environment(os.environ):
+        env["CLAUDE_CONFIG_DIR"] = str(tmp / "claude-config")
+    for name in PRIVATE_FOLDERS:
+        (tmp / name).mkdir(exist_ok=True)
+    snapshot = tmp / PLUGIN_SNAPSHOT
+    if snapshot.is_dir():
+        env[PLUGIN_ROOT_KEY] = str(snapshot)
     return env
+
+
+def checkout_changes() -> list[str]:
+    """Tracked files the checkout has changed but not committed: the snapshot does not have them."""
+    done = run([*GIT, "status", "--porcelain", "--untracked-files=no"], REPO, os.environ.copy(), check=False)
+    return [line[3:].strip() for line in done.stdout.splitlines() if line.strip()]
+
+
+def plugin_snapshot(tmp: Path, hooks: str) -> Path:
+    """The committed tree of the plugin, written into the run's folder through a private index: nothing the checkout has
+    not committed, and nothing anyone edits there while the run is going. With hooks off, its hooks file is empty, which
+    is how a soft-enforcement arm is made."""
+    target = tmp / PLUGIN_SNAPSHOT
+    tmp.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["GIT_INDEX_FILE"] = str(tmp / "plugin.index")
+    run([*GIT, "read-tree", "HEAD"], REPO, env)
+    run([*GIT, "checkout-index", "--all", f"--prefix={target.as_posix()}/"], REPO, env)
+    (tmp / "plugin.index").unlink(missing_ok=True)
+    if hooks == "off":
+        (target / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {}}), encoding="utf-8")
+    return target
+
+
+def host_watched_files(env: dict, tmp: Path) -> list[Path]:
+    """The machine-wide files the tripwire watches that this run could not make its own (see tripwire.watched_files):
+    ``~/.codex`` is watched whatever CODEX_HOME says, and the Claude Code settings when the folder is the person's."""
+    config = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    codex = Path(env.get("CODEX_HOME") or Path.home() / ".codex")
+    candidates = [home / name for home in (Path.home() / ".codex", codex) for name in ("hooks.json", "config.toml")]
+    candidates.append(config / "settings.json")
+    private = tmp.resolve()
+    return sorted({p for p in candidates if private not in p.resolve().parents})
+
+
+def digests(paths: list[Path]) -> dict[str, str | None]:
+    """The SHA-256 of each file, None for one that does not exist or cannot be read."""
+    found: dict[str, str | None] = {}
+    for path in paths:
+        try:
+            found[path.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            found[path.as_posix()] = None
+    return found
+
+
+def changed_between(before: dict, after: dict) -> list[str]:
+    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
 
 
 def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
@@ -129,7 +210,9 @@ def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
 
 
 def bdd(project: Path, env: dict, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return run(["sh", str(REPO / "tools" / "bdd" / "bdd"), *args], project, env, check=check)
+    """A bdd command in the project, from the run's plugin snapshot (the checkout's when the run has none)."""
+    root = Path(env.get(PLUGIN_ROOT_KEY) or REPO)
+    return run(["sh", str(root / "tools" / "bdd" / "bdd"), *args], project, env, check=check)
 
 
 def reader(project: Path, env: dict):
@@ -189,16 +272,6 @@ def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> 
     if kind["adapter"] == "generic-junit":
         swap_run_line(project, kind)
     commit_all(project, env, "greenlight set up")
-
-
-def plugin_directory(tmp: Path, hooks: str) -> Path:
-    """The plugin as it is, or (hooks off) a copy whose hooks file is empty, for a soft-enforcement arm."""
-    if hooks == "on":
-        return REPO
-    copy = tmp / "plugin-without-hooks"
-    shutil.copytree(REPO, copy, ignore=shutil.ignore_patterns(".git", "evals", "bdd-forge-plan", "__pycache__", ".claude", "node_modules"))
-    (copy / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {}}), encoding="utf-8")
-    return copy
 
 
 def parse_output(text: str) -> dict:
@@ -272,12 +345,12 @@ def tokens_reported(output: dict) -> int:
     return sum(int(usage.get(k) or 0) for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
 
 
-def transcript_of(output: dict, project: Path) -> Path | None:
-    """Where Claude Code kept this session's transcript, if it can be found."""
+def transcript_of(output: dict, env: dict) -> Path | None:
+    """Where Claude Code kept this session's transcript (in the run's configuration folder when it has one), if found."""
     session = output.get("session_id")
     if not session:
         return None
-    base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+    base = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
     found = sorted(base.glob(f"*/{session}.jsonl")) if base.is_dir() else []
     return found[0] if found else None
 
@@ -328,15 +401,22 @@ def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
 
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
     kind = REQUEST_KINDS[args.request]
+    plugin = plugin_snapshot(tmp, args.hooks)
     project, env, python = build_project(tmp, kind)
     set_up(project, env, level, python, kind)
-    output = drive(project, env, request, kind["skill"], MODELS[args.model], level, args.minutes, plugin_directory(tmp, args.hooks))
-    row = collect.collect_row(reader(project, env), project, answers, transcript_of(output, project))
+    watched = host_watched_files(env, tmp)
+    before = digests(watched)
+    output = drive(project, env, request, kind["skill"], MODELS[args.model], level, args.minutes, plugin)
+    row = collect.collect_row(reader(project, env), project, answers, transcript_of(output, env))
+    row["host_changes"] = changed_between(before, digests(watched))
+    row["foreign_violations"] = collect.foreign_violations(project, [tmp])
+    row["contaminated"] = bool(row["foreign_violations"])
     marker = project / ".bdd" / ".enforcement" / "_seen"
     row.update(git_changes(project, env))
     if kind["skill"] == "adopt" and row.get("feature"):
         row["adoption"] = adoption_invariants(project, env, row["feature"])
     row.update({"hooks_active": marker.is_file(), "claude": claude_summary(output)})
+    row["claude_cost_usd"] = row["claude"].get("total_cost_usd")      # next to the cost the orchestrator recorded (`tokens`)
     if args.hooks == "on" and not row["hooks_active"]:
         row["warning"] = "hooks were requested but did not run; this row is not a hard-enforcement result"
     if row.get("phase") not in (None, "discover") and not row.get("cost_recorded"):
@@ -398,6 +478,11 @@ def main() -> int:
     answers_file = REQUESTS / f"{args.request}.answers.json"
     answers = json.loads(answers_file.read_text(encoding="utf-8")) if answers_file.is_file() else []
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{args.request}-{args.model}.jsonl"
+    dirty = checkout_changes()
+    if dirty:
+        print(f"note: {len(dirty)} uncommitted change(s) in the checkout are not in the plugin the runs load (a snapshot of "
+              f"the last commit): {', '.join(dirty[:5])}{' ...' if len(dirty) > 5 else ''}")
+    commit = run([*GIT, "rev-parse", "HEAD"], REPO, os.environ.copy()).stdout.strip()
     rows: list[dict] = []
     plan = [("plugin", level) for level in args.autonomy if "plugin" in args.arms] + [("baseline", None)] * ("baseline" in args.arms)
     for number in range(1, args.runs + 1):
@@ -411,7 +496,8 @@ def main() -> int:
                 else:
                     shutil.rmtree(tmp, ignore_errors=True)
             row.update({"request": args.request, "model": args.model, "arm": arm, "autonomy_requested": level,
-                        "hooks": args.hooks if arm == "plugin" else "n/a", "run": number})
+                        "hooks": args.hooks if arm == "plugin" else "n/a", "run": number, "plugin_commit": commit,
+                        "checkout_changes": len(dirty)})
             append_row(out, row)
             rows.append(row)
     print(collect.summary_table(rows))

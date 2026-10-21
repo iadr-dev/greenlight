@@ -3,7 +3,7 @@
 Every subagent that finishes fires the ``SubagentStop`` hook. ``bdd subagent-stop`` writes one line per agent to
 ``.bdd/.runs/agents.jsonl`` (which agent, in which session, how long it ran, and the one feature in progress with the phase it
 was in). ``bdd cost FEAT-n --collect`` turns the lines of that feature into the feature's cost per phase: the time from the
-hook and the tokens from the agent's own transcript (input, output and cache writes, each model reply counted once). The
+hook (or, when the hook did not say, from the first and last time stamp in the agent's own transcript) and the tokens from the agent's own transcript (input, output and cache writes, each model reply counted once). The
 completion notice of an agent states its own token figure, which can differ by a few percent from this count; the count here
 can be repeated by anyone from the transcript, which is why it is the one that is recorded.
 
@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from . import claudepaths, state, store
@@ -77,6 +78,24 @@ def transcript_tokens(path: Path | None) -> int | None:
         if found:
             counted.setdefault(*found)
     return sum(counted.values())
+
+
+def transcript_seconds(path: Path | None) -> float | None:
+    """How long the agent ran: from the first to the last time stamp in its transcript; None when there are none."""
+    if path is None:
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    stamps = []
+    for line in text.splitlines():
+        try:
+            value = (json.loads(line) or {}).get("timestamp")
+            stamps.append(datetime.fromisoformat(value.replace("Z", "+00:00")))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return round((max(stamps) - min(stamps)).total_seconds(), 3) if stamps else None
 
 
 def active_feature(root: Path) -> tuple[str, str] | tuple[None, None]:
@@ -161,8 +180,10 @@ def collect(root: Path, feature_id: str, phase: str | None = None) -> list[str]:
         if where not in state.PHASES:
             lines.append(f"{label}: no phase known; run `bdd cost {feature_id} --collect --phase PHASE`")
             continue
-        tokens = transcript_tokens(find_subagent_transcript(entry.get("session"), agent_id))
-        seconds = round(int(entry.get("duration_ms") or 0) / 1000, 3)
+        transcript = find_subagent_transcript(entry.get("session"), agent_id)
+        tokens = transcript_tokens(transcript)
+        reported = int(entry.get("duration_ms") or 0)             # the hook's own figure, when it gives one
+        seconds = round(reported / 1000, 3) if reported > 0 else (transcript_seconds(transcript) or 0.0)
         taken[agent_id] = (where, tokens or 0, seconds)
         lines.append(f"{label} {where}: {tokens} tokens, {seconds:g} s" if tokens is not None
                      else f"{label} {where}: its transcript could not be found, so only the time is recorded ({seconds:g} s)")

@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The end-to-end harness isolates a run from other work on the machine. Three real runs had stopped at the implement gate on integrity violations that other work caused while they ran (the plugin's checkout, the person's Claude Code settings and Codex configuration were edited elsewhere): greenlight refused correctly, but the measurement was wrong. A run now loads a snapshot of the last commit of the plugin (uncommitted changes in the checkout are reported, not loaded) and runs the harness's own `bdd` commands from it, gets a private Codex home and, when Claude Code authenticates through the environment, a private Claude Code folder. Machine-wide files the tripwire watches regardless are hashed before and after (`host_changes`), and a row whose open violations name a file outside the run is marked `contaminated` and left out of the targets (listed under the table). Rows also carry `claude_cost_usd`, `plugin_commit` and `checkout_changes`.
+- `bdd cost FEAT-n --collect` takes an agent's time from the first and last time stamp in its own transcript when the `SubagentStop` payload gives no duration, which it did not in real runs (every phase had 0 seconds).
+
+### Changed
+- The engineering standards template (`templates/standards.md`) now has rules for clean code, duplicated code, architecture and interfaces, folder layout, error handling and logging, performance, concurrency, observability and user interfaces, each marked `[tool]` or `[review]`. A `[tool]` rule with no tool configured is checked by the auditor. Version examples say how to choose a current release instead of naming numbers that go stale. `bdd doctor` warns when an approved standards file still has an unfilled `<placeholder>`.
+
 ### Added
 - The Rust, Swift and Kotlin language cards are checked for real: `evals/language-cards/{rust,swift,kotlin}.sh` run every command of the card on a small project in CI (Rust and Kotlin on Ubuntu, Swift on macOS) and check that each fails on its finding and passes once it is fixed; a test keeps the cards and the checks together. The runs corrected the cards: `swiftlint` from a package root also lints SwiftPM's generated `.build` files; with Xcode, swift-format is `xcrun swift-format`; `./gradlew build` includes ktlint and detekt once their plugins are applied; ktlint's official style allows 140 characters and detekt 120, so the two need one limit in `.editorconfig`; a plain `cargo build` only warns about a deprecated item.
 
@@ -13,6 +20,8 @@ versions follow [SemVer](https://semver.org/).
 
 
 ### Added
+
+- The kotlin-android scenarios can run on a phone or an emulator: an opt-in second adapter block, `kotlin-android-device`, runs the same feature files and steps as instrumented tests through Cucumber-Android, and `bdd run` records the JVM cases and the device cases side by side. Two bound files make it work: `greenlight-device.gradle.kts` (a fresh report per run, copied to the file `bdd run` reads) and `src/device/kotlin/greenlight/RunCucumberOnDevice.kt` (the `@CucumberOptions` class; not compiled until the build file opts in). A new placeholder, `{scenario:device}`, writes the single-scenario filter for the device's shell. Tested on a Samsung phone on Android 15: the sample is green, a missing seam is an expected failure, an unmapped name and an undefined step are test defects, accented and Chinese titles map, and one scenario runs alone. The device contract test runs only with `GREENLIGHT_ANDROID_DEVICE=1` and a device connected; CI has no device.
 - A manual workflow, `stress-kotlin.yml`, that repeats the Kotlin adapter's first contract test on fresh scaffolds (warm and cold Gradle home, Ubuntu and Windows) and prints everything a failing iteration said. A run of 100 iterations found no failure, so the intermittent "no test cases" of the CI job was not reproduced and its cause is still unknown. The contract tests now fetch the Gradle distribution while setting up (a failed download stops the set-up with Gradle's own message instead of surfacing as a first test run without test cases); a full local run of `KotlinContractTest` and of the Android library test passes.
 - `adapters/kotlin-android/guide.md`: running on a device or emulator with Google's `android` command-line tool (SDK install, emulator creation and start, `android run`, `connectedDebugAndroidTest`), with what was run and what was not.
 
