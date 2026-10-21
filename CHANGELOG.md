@@ -6,6 +6,13 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- The Rust, Swift and Kotlin language cards are checked for real: `evals/language-cards/{rust,swift,kotlin}.sh` run every command of the card on a small project in CI (Rust and Kotlin on Ubuntu, Swift on macOS) and check that each fails on its finding and passes once it is fixed; a test keeps the cards and the checks together. The runs corrected the cards: `swiftlint` from a package root also lints SwiftPM's generated `.build` files; with Xcode, swift-format is `xcrun swift-format`; `./gradlew build` includes ktlint and detekt once their plugins are applied; ktlint's official style allows 140 characters and detekt 120, so the two need one limit in `.editorconfig`; a plain `cargo build` only warns about a deprecated item.
+
+### Fixed
+- The project's interpreter is found only in this platform's virtual-environment layout (`Scripts/python.exe` on Windows, `bin/python` elsewhere), so a checkout shared by Windows and WSL no longer starts the Windows interpreter from WSL. The mutmut wrapper's message on Windows now gives the WSL steps.
+
+
+### Added
 - A manual workflow, `stress-kotlin.yml`, that repeats the Kotlin adapter's first contract test on fresh scaffolds (warm and cold Gradle home, Ubuntu and Windows) and prints everything a failing iteration said. A run of 100 iterations found no failure, so the intermittent "no test cases" of the CI job was not reproduced and its cause is still unknown. The contract tests now fetch the Gradle distribution while setting up (a failed download stops the set-up with Gradle's own message instead of surfacing as a first test run without test cases); a full local run of `KotlinContractTest` and of the Android library test passes.
 - `adapters/kotlin-android/guide.md`: running on a device or emulator with Google's `android` command-line tool (SDK install, emulator creation and start, `android run`, `connectedDebugAndroidTest`), with what was run and what was not.
 

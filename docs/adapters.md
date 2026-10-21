@@ -171,7 +171,7 @@ written the report beforehand. `killed` and `survived` are required whole number
 are shown, not counted. The tool must exit 0 once it has finished and state survivors in the report; a non-zero exit
 fails the check whatever the report says (a tool that exits non-zero on survivors needs a wrapper that turns that into
 exit 0 plus counts; the adapters ship them: `tests/tools/mutate_python.py` for mutmut in `python-pytest-bdd`,
-`tests/tools/mutate-ts.mjs` for Stryker in `ts-playwright-bdd`, each described in the adapter's guide). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
+`tests/tools/mutate-ts.mjs` for Stryker in `ts-playwright-bdd`, each described in the adapter's guide; mutmut does not run natively on Windows, so on Windows the Python check runs from WSL in the same checkout, with a Linux `venv` beside the Windows `.venv`, as the guide shows). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
 If production files changed but none ends in `extensions`, the check fails too: it covered nothing. Only a feature
 that changed no production file at all passes with "nothing to mutate". The result is recorded in
 `.bdd/.runs/FEAT-n/mutation.json` (command, exit status, hash of the report, the changed and the mutated files), which
