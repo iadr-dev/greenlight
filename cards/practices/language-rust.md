@@ -41,3 +41,4 @@ with their current standard library and crate APIs; raising the edition, the too
 - `unsafe` without a safety comment that states the invariant.
 - Adding a crate or enabling a feature flag for a small convenience; dependencies are the person's decision.
 - Editing `Cargo.lock` by hand.
+- The commands in this card come from the tools' documentation and were not run against a real project: no Rust toolchain (`cargo`, `rustfmt`, `clippy`) was available when the cards were checked on 2026-10-21.
