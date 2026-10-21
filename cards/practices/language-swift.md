@@ -42,3 +42,4 @@ standard. Write for them with their current APIs; raising the toolchain or the d
 - `// swiftlint:disable` without a reason, and warnings left in the build.
 - Editing the Xcode project file or build settings by hand to make a build pass; those are the person's decisions.
 - Code that needs a newer OS than the deployment target without an `#available` check.
+- The commands in this card come from the tools' documentation and were not run against a real project: Swift needs macOS or a Swift toolchain, and none was available when the cards were checked on 2026-10-21.

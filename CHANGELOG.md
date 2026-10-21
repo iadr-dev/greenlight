@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Fixtures and cards now come from real runs where a toolchain was available: the godog, Cucumber-JVM and Reqnroll JUnit reports (every runner fixture is now a real run), the SQLAlchemy and Django query-counter hooks (contract tests against the real libraries, with both in the pinned hashed dev requirements), and the Go, Python, TypeScript, Next.js and Expo language cards. The runs corrected the cards: `go mod tidy -diff` for the tidy check, `go test -race` needs cgo, `next lint` no longer exists in Next.js 16, `npx expo lint` installs ESLint into a project without one, the TypeScript deprecation rule needs type-aware linting, and the ruff UP rules miss `datetime.utcnow()`. The Kotlin, Swift and Rust cards say plainly that they were not run.
+
 ### Fixed
 - In a project that takes approvals typed in Codex (`[approvals] accept_codex = true`), the nested-session check counts every `codex` word again, whatever quotes surround it: a nested session is how such an approval could be forged, and the relaxed reading of quoted text added with the false-positive fix could be fooled by quoting tricks. Without the opt-in the relaxed rule stays, because Codex approvals are refused there anyway.
 

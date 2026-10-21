@@ -1,11 +1,145 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="Sample.dll" tests="2" skipped="0" failures="2" errors="0" time="0.1">
-    <testsuite name="Sample.Features.SampleFeature" tests="2" failures="2">
-      <testcase classname="Sample.Features.SampleFeature" name="TwoNumbersAreAdded" time="0.012"><failure message="Assert.Equal() Failure&#xA;Expected: 5&#xA;Actual:   0" type="Xunit.Sdk.EqualException">Xunit.Sdk.EqualException : Assert.Equal() Failure
-Expected: 5
-Actual:   0</failure></testcase>
-      <testcase classname="Sample.Features.SampleFeature" name="ANegativeNumberIsRefused" time="0.012"><failure message="Assert.NotNull() Failure" type="Xunit.Sdk.NotNullException">Xunit.Sdk.NotNullException : Assert.NotNull() Failure</failure></testcase>
-    </testsuite>
+  <testsuite name="GreenlightTests.dll" tests="2" skipped="0" failures="2" errors="0" time="0.2002964" timestamp="2026-10-21T03:41:30" hostname="host" id="0" package="GreenlightTests.dll">
+    <properties />
+    <testcase classname="Greenlight.Tests.Features.SampleDeleteMeFeature" name="ANegativeNumberIsRefused" time="0.1854211">
+      <failure type="failure" message="Greenlight.Tests.Drivers.AssertionError : AssertionError: the call should fail but returned 0">at Greenlight.Tests.Drivers.Lib.AssertFails(World world, String error) in C:\project\tests\drivers\Lib.cs:line 46
+   at Greenlight.Tests.Steps.CoreSteps.CallFails(String error) in C:\project\tests\steps\CoreSteps.cs:line 171
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+--- End of stack trace from previous location ---
+   at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;b__7&gt;d.MoveNext()
+--- End of stack trace from previous location ---
+   at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;g__HandleStepExecutionExceptions|0&gt;d.MoveNext()
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at Greenlight.Tests.Features.SampleDeleteMeFeature.ScenarioCleanupAsync()
+   at Greenlight.Tests.Features.SampleDeleteMeFeature.ANegativeNumberIsRefused() in C:\project\tests\features\sample.feature:line 23
+--- End of stack trace from previous location ---</failure>
+      <system-out>When add is called with:
+  --- table step argument ---
+  | a  | b |
+  | -1 | 3 |
+-&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+Then the call fails with negative input
+-&gt; error: AssertionError: the call should fail but returned 0 (0.0s)
+
+</system-out>
+      <properties>
+        <property name="FeatureTitle" value="Sample (delete me)" />
+        <property name="Description" value="A negative number is refused" />
+        <property name="Category" value="R-000.1" />
+        <property name="Category" value="EX-000.1.2" />
+        <property name="Category" value="FEAT-000" />
+      </properties>
+    </testcase>
+    <testcase classname="Greenlight.Tests.Features.SampleDeleteMeFeature" name="TwoNumbersAreAdded" time="0.0148753">
+      <failure type="failure" message="Greenlight.Tests.Drivers.AssertionError : AssertionError: the result: expected 5 but got 0">at Greenlight.Tests.Drivers.Compare.AssertEqual(Object actual, Object expected, String what) in C:\project\tests\drivers\Compare.cs:line 94
+   at Greenlight.Tests.Drivers.Lib.AssertResult(World world, JsonNode expected, Boolean exact) in C:\project\tests\drivers\Lib.cs:line 33
+   at Greenlight.Tests.Steps.CoreSteps.ResultIs(String text) in C:\project\tests\steps\CoreSteps.cs:line 162
+   at InvokeStub_Action`2.Invoke(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+--- End of stack trace from previous location ---
+   at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;b__7&gt;d.MoveNext()
+--- End of stack trace from previous location ---
+   at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;g__HandleStepExecutionExceptions|0&gt;d.MoveNext()
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at Greenlight.Tests.Features.SampleDeleteMeFeature.ScenarioCleanupAsync()
+   at Greenlight.Tests.Features.SampleDeleteMeFeature.TwoNumbersAreAdded() in C:\project\tests\features\sample.feature:line 13
+--- End of stack trace from previous location ---</failure>
+      <system-out>When add is called with:
+  --- table step argument ---
+  | a | b |
+  | 2 | 3 |
+-&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+Then the result is:
+  --- multiline step argument ---
+  5
+-&gt; error: AssertionError: the result: expected 5 but got 0 (0.0s)
+
+</system-out>
+      <properties>
+        <property name="FeatureTitle" value="Sample (delete me)" />
+        <property name="Description" value="Two numbers are added" />
+        <property name="Category" value="R-000.1" />
+        <property name="Category" value="EX-000.1.1" />
+        <property name="Category" value="FEAT-000" />
+      </properties>
+    </testcase>
+    <system-out>
+Test Framework Informational Messages:
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.17]   Discovering: GreenlightTests
+[xUnit.net 00:00:00.25]   Discovered:  GreenlightTests
+[xUnit.net 00:00:00.29]   Starting:    GreenlightTests
+-&gt; Loading plugin C:\project\tests\bin\Debug\net10.0\GreenlightTests.dll
+-&gt; Loading plugin C:\project\tests\bin\Debug\net10.0\Reqnroll.xUnit.ReqnrollPlugin.dll
+-&gt; Using default config
+[xUnit.net 00:00:00.74]       Greenlight.Tests.Drivers.AssertionError : AssertionError: the call should fail but returned 0
+[xUnit.net 00:00:00.74]       Stack Trace:
+[xUnit.net 00:00:00.75]         C:\project\tests\drivers\Lib.cs(46,0): at Greenlight.Tests.Drivers.Lib.AssertFails(World world, String error)
+[xUnit.net 00:00:00.75]         C:\project\tests\steps\CoreSteps.cs(171,0): at Greenlight.Tests.Steps.CoreSteps.CallFails(String error)
+[xUnit.net 00:00:00.75]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[xUnit.net 00:00:00.75]            at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.75]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.75]            at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+[xUnit.net 00:00:00.75]            at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+[xUnit.net 00:00:00.75]            at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+[xUnit.net 00:00:00.75]            at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;b__7&gt;d.MoveNext()
+[xUnit.net 00:00:00.75]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.75]            at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;g__HandleStepExecutionExceptions|0&gt;d.MoveNext()
+[xUnit.net 00:00:00.75]            at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+[xUnit.net 00:00:00.75]            at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+[xUnit.net 00:00:00.75]            at Greenlight.Tests.Features.SampleDeleteMeFeature.ScenarioCleanupAsync()
+[xUnit.net 00:00:00.75]         C:\project\tests\features\sample.feature(23,0): at Greenlight.Tests.Features.SampleDeleteMeFeature.ANegativeNumberIsRefused()
+[xUnit.net 00:00:00.75]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.75]       Output:
+[xUnit.net 00:00:00.75]         When add is called with:
+[xUnit.net 00:00:00.75]           --- table step argument ---
+[xUnit.net 00:00:00.75]           | a  | b |
+[xUnit.net 00:00:00.75]           | -1 | 3 |
+[xUnit.net 00:00:00.75]         -&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+[xUnit.net 00:00:00.75]         Then the call fails with negative input
+[xUnit.net 00:00:00.75]         -&gt; error: AssertionError: the call should fail but returned 0 (0.0s)
+[xUnit.net 00:00:00.78]       Greenlight.Tests.Drivers.AssertionError : AssertionError: the result: expected 5 but got 0
+[xUnit.net 00:00:00.78]       Stack Trace:
+[xUnit.net 00:00:00.78]         C:\project\tests\drivers\Compare.cs(94,0): at Greenlight.Tests.Drivers.Compare.AssertEqual(Object actual, Object expected, String what)
+[xUnit.net 00:00:00.78]         C:\project\tests\drivers\Lib.cs(33,0): at Greenlight.Tests.Drivers.Lib.AssertResult(World world, JsonNode expected, Boolean exact)
+[xUnit.net 00:00:00.78]         C:\project\tests\steps\CoreSteps.cs(162,0): at Greenlight.Tests.Steps.CoreSteps.ResultIs(String text)
+[xUnit.net 00:00:00.78]            at InvokeStub_Action`2.Invoke(Object, Span`1)
+[xUnit.net 00:00:00.78]            at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[xUnit.net 00:00:00.78]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.78]            at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+[xUnit.net 00:00:00.78]            at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+[xUnit.net 00:00:00.78]            at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+[xUnit.net 00:00:00.78]            at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;b__7&gt;d.MoveNext()
+[xUnit.net 00:00:00.78]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.78]            at Reqnroll.Infrastructure.TestExecutionEngine.&lt;&gt;c__DisplayClass57_0.&lt;&lt;ExecuteStepAsync&gt;g__HandleStepExecutionExceptions|0&gt;d.MoveNext()
+[xUnit.net 00:00:00.78]            at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+[xUnit.net 00:00:00.78]            at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+[xUnit.net 00:00:00.78]            at Greenlight.Tests.Features.SampleDeleteMeFeature.ScenarioCleanupAsync()
+[xUnit.net 00:00:00.78]         C:\project\tests\features\sample.feature(13,0): at Greenlight.Tests.Features.SampleDeleteMeFeature.TwoNumbersAreAdded()
+[xUnit.net 00:00:00.78]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.78]       Output:
+[xUnit.net 00:00:00.78]         When add is called with:
+[xUnit.net 00:00:00.78]           --- table step argument ---
+[xUnit.net 00:00:00.78]           | a | b |
+[xUnit.net 00:00:00.78]           | 2 | 3 |
+[xUnit.net 00:00:00.78]         -&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+[xUnit.net 00:00:00.78]         Then the result is:
+[xUnit.net 00:00:00.78]           --- multiline step argument ---
+[xUnit.net 00:00:00.78]           5
+[xUnit.net 00:00:00.78]         -&gt; error: AssertionError: the result: expected 5 but got 0 (0.0s)
+[xUnit.net 00:00:00.80]   Finished:    GreenlightTests
+</system-out>
+    <system-err>Error - [xUnit.net 00:00:00.74]     A negative number is refused [FAIL]
+Error - [xUnit.net 00:00:00.78]     Two numbers are added [FAIL]
+</system-err>
   </testsuite>
 </testsuites>
