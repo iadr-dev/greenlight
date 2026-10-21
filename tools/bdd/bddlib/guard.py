@@ -111,7 +111,7 @@ _HOME = re.compile(r"(?<![\w$])~(?=/|\\|\s|$)")
 MAX_READINGS = 256
 _NOISE = re.compile(r"\d?>\s*/dev/null|\d>&\d|&>\s*/dev/null|2>\s*nul\b", re.IGNORECASE)
 _SHELL_WRITES = re.compile(
-    r"(?:^|[\s;&|(])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
+    r"(?:^|[\s;&|(\"'`{=])(?:sed\s+(?:-\w*i|--in-place)|perl\s+-\w*i|tee|cp|mv|rm|truncate|dd|install|ln|chmod|touch|"
     r"git\s+(?:checkout|restore|reset|stash|apply|rm|mv|clean)|Set-Content|Add-Content|Out-File|"
     r"Remove-Item|Move-Item|Copy-Item|New-Item|del|erase|move|copy)\b|>>?|write_text|write_bytes|"
     r"open\([^)]*[\"'][wa+]|\.write\(|\.writelines\(|os\.(?:remove|rename|replace|unlink)|shutil\.",

@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
+
+### Fixed
 - Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
 
 - `bdd run` now fails a run whose test report holds no test cases and prints the runner's exit status and its own output, as it already did for a missing report; every run record carries the number of cases it found. This makes an intermittent first-run failure of the Kotlin contract job in CI diagnosable (it ended with only "no test cases").
