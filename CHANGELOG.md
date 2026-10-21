@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
+
 ### Changed
 - CI: a newer push to the same pull request cancels the run still in progress for it; runs on `main` are never cancelled.
 
