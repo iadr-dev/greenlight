@@ -108,6 +108,10 @@ honnef.co/go/tools/cmd/staticcheck@<version>`).
 
 ## Known pitfalls
 
+- A scenario title in another script or with accents works: godog writes it into the report as it is typed, and
+  `bdd classify` compares letters and digits of any script (checked with godog 0.16 and a Traditional Chinese, an accented
+  and a mixed title, shuffled and one scenario per process). Give a title at least one word; one made only of symbols
+  has nothing to compare.
 - Two scenarios whose names are a substring of each other (`Add` and `Add twice`) after dropping punctuation: name them
   apart (see the generic-junit contract).
 - A scenario outline repeats its name once per example row: godog numbers them `#1`, `#2`; give each row a distinct

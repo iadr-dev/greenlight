@@ -136,6 +136,9 @@ enforce; the `kotlin` practice card lists the usual commands.
 
 ## Known pitfalls
 
+- A scenario title in another script or with accents works, also when one scenario runs alone: the name filter is sent to
+  Gradle as plain ASCII (every character outside ASCII as `\x{HEX}`), because Windows converts a command line that reaches
+  a `.bat` launcher to the active code page and a letter that page lacks arrives as `?`.
 - `./gradlew -q` hides Gradle's own progress; a failing scenario still shows its message. Drop `-q` when debugging.
 - The first Gradle run downloads the Android SDK components and dependencies; cache `~/.gradle` in CI.
 - State that lives in objects the code under test keeps (singletons, in-memory stores) must be reset in

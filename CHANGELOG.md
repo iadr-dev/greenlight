@@ -6,6 +6,13 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Scenario titles that are not plain ASCII. `bdd classify` mapped a test to its scenario by comparing only the letters a-z and the digits, so a title in Chinese had nothing to compare and an accented one (`Café`) no longer matched the name a runner writes (Reqnroll turns it into `Cafe`): both ended up unmapped and blocked a gate. It now compares the letters and digits of any script, again without accents, and falls back to the example id when a test name carries exactly one. The name filter that `{scenario:regex}` hands to Maven and Gradle for a single-scenario run is now plain ASCII (every character outside ASCII as `\x{HEX}`): Windows converts a command line that reaches `mvn.cmd` or a `.bat` launcher to the active code page, so an accent on a Chinese system (or Chinese on a Western one) arrived as `?` and the filter matched nothing. Found by running an accented, a Chinese and a mixed title on real Reqnroll, Cucumber-JVM and godog; the contract tests of the Go, .NET, Spring and Kotlin adapters now do the same, in the usual order, shuffled and one scenario per process.
+- The intermittent `kotlin-android` failure with "no test cases" (about one run in thirty, on every operating system): the Kotlin template compiled a `compareBy { }` comparator into an inlined anonymous class whose `InnerClasses` entry disagrees with its outer class, and Cucumber's glue scan failed with `IncompatibleClassChangeError` whenever it examined that class first; the test report then held no cases. The comparator is now a plain lambda for the interface.
+
+### Added
+- macOS runners for the contract jobs of the Go, .NET, Spring and Kotlin adapters.
+
+### Fixed
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 
 ### Fixed
