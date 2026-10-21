@@ -36,6 +36,8 @@ def main(argv):
     if "--only" in options:
         cases = [c for c in cases if squash(options["--only"]) in squash(c["name"])]
     time.sleep(float(os.environ.get("FAKE_SLEEP", "0")))
+    if os.environ.get("FAKE_NOTE"):
+        print(os.environ["FAKE_NOTE"])                                      # what a real runner says on its way
     call = call_number(os.environ)
     cases = [dict(c, outcome=c["outcomes"][call % len(c["outcomes"])]) if "outcomes" in c else c for c in cases]
     rows = []

@@ -209,9 +209,10 @@ def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str,
     words = build_command(rules, root, tag, report, **options)
     started = time.perf_counter()
     status, output = execute(words, root, rules.timeout, rules.scrub_env, root / rules.base if rules.base else None)
+    found = junit.parse_file(report) if report.is_file() else []
     entry = {"adapter": rules.adapter, "command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2),
-             "scenario": options.get("scenario"), "report": report.is_file(), "tail": output[-TAIL_CHARS:]}
-    return entry, junit.parse_file(report) if report.is_file() else []
+             "scenario": options.get("scenario"), "report": report.is_file(), "cases": len(found), "tail": output[-TAIL_CHARS:]}
+    return entry, found
 
 
 def scenarios_of(rules: cfg.RunRules, scenarios: list[dict], several: bool) -> list[str]:
