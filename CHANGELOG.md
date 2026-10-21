@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- A manual workflow, `stress-kotlin.yml`, that repeats the Kotlin adapter's first contract test on fresh scaffolds (warm and cold Gradle home, Ubuntu and Windows) and prints everything a failing iteration said. A run of 100 iterations found no failure, so the intermittent "no test cases" of the CI job was not reproduced and its cause is still unknown. The contract tests now fetch the Gradle distribution while setting up (a failed download stops the set-up with Gradle's own message instead of surfacing as a first test run without test cases); a full local run of `KotlinContractTest` and of the Android library test passes.
+- `adapters/kotlin-android/guide.md`: running on a device or emulator with Google's `android` command-line tool (SDK install, emulator creation and start, `android run`, `connectedDebugAndroidTest`), with what was run and what was not.
+
 ### Changed
 - Fixtures and cards now come from real runs where a toolchain was available: the godog, Cucumber-JVM and Reqnroll JUnit reports (every runner fixture is now a real run), the SQLAlchemy and Django query-counter hooks (contract tests against the real libraries, with both in the pinned hashed dev requirements), and the Go, Python, TypeScript, Next.js and Expo language cards. The runs corrected the cards: `go mod tidy -diff` for the tidy check, `go test -race` needs cgo, `next lint` no longer exists in Next.js 16, `npx expo lint` installs ESLint into a project without one, the TypeScript deprecation rule needs type-aware linting, and the ruff UP rules miss `datetime.utcnow()`. The Kotlin, Swift and Rust cards say plainly that they were not run.
 

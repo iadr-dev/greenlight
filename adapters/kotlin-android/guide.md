@@ -107,6 +107,34 @@ case or view model first, then the repository, then the raw database.
 On Windows `gradlew` is a `.bat` file, so `bdd run` refuses an argument with characters that `cmd.exe` would read as syntax
 (`" & | < > ^ % !`), for example a scenario name containing `&` in `--isolated` mode.
 
+## Running on a device or emulator
+
+The scenarios themselves are local JVM unit tests and need neither. A device or an emulator is for what they cannot reach:
+the Android framework, screens, and a smoke test that the module really installs and starts. Google's `android` command-line
+tool (separate from `bdd`) sets that up without Android Studio. These commands were run on Windows with `android` 1.0.16 and
+the emulator 37.2 (Hyper-V present), and are the only ones this guide vouches for:
+
+```sh
+android info                                      # where the SDK is
+android sdk install emulator system-images/android-36/google_apis/x86_64
+android emulator create medium_phone              # also fetches the system image its profile needs
+android emulator start medium_phone               # returns when the emulator has booted (about 5 minutes the first time)
+adb devices                                       # the emulator shows as "device"
+./gradlew assembleDebug
+android run --apks=app/build/outputs/apk/debug/app-debug.apk    # installs and launches; it does not build
+./gradlew connectedDebugAndroidTest               # the module's instrumented tests, on the emulator
+```
+
+Two things to know. `android emulator start` is the emulator's parent: wrapping it in `timeout` or closing its shell stops
+the emulator, so start it once and leave it. And `connectedDebugAndroidTest` writes a JUnit report of its own under
+`app/build/outputs/androidTest-results/connected/debug/` (the file name contains spaces and parentheses); `bdd run` does not
+read it, because the adapter's run line selects the Cucumber suite as a local unit test.
+
+What this does not do: run the Cucumber scenarios on the device. That needs a Cucumber-Android runner and an instrumented
+test class, which this adapter does not ship; an instrumented smoke test is an ordinary Android test next to the scenarios.
+The same sample module under the Android Gradle Plugin (`AndroidContractTest`) passes locally against this SDK
+(platform 36, build-tools 36, AGP 9.4.1) with `ANDROID_HOME` set.
+
 ## Quality checks (optional)
 
 Name your own tools in `[adapters.quality.NAME]` tables; none is forced:
