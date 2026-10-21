@@ -449,6 +449,83 @@ class GuardTest(CodexCase):
                 self.assertIn("another Codex session", self.blocked("Bash", call))
         self.assertIsNone(self.blocked("Bash", {"command": "codex --version"}))
 
+    def test_a_glob_does_not_hide_codexs_state(self):
+        moved = self.home.as_posix()
+        hidden = moved[:-2] + "*"                                       # the configured home, its last letters a glob
+        for command in ("echo '{}' > .co*/hooks.json", "cp forged ~/.c?dex/config.toml", "tee rollout-*.jsonl < forged",
+                        f"echo x > {hidden}/sessions/a.jsonl", "cd .codex && echo x > hooks.json"):
+            with self.subTest(command=command):
+                self.assertIn("keep greenlight's hooks running", self.blocked("Bash", {"command": command}))
+        for command in ("echo x > .cache*/a", "rm build/*.jsonl", f"cd {moved} && cat config.toml"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.blocked("Bash", {"command": command}))
+
+    def test_a_relative_glob_with_dot_dot_is_normalised_before_it_is_matched(self):
+        name = self.home.name
+        work = self.root / "src" / "deep"
+        work.mkdir(parents=True)
+        command = f"echo x > ../../{name[:-2]}*/config.toml"
+        self.assertIn("keep greenlight's hooks running",
+                      codexguard.evaluate(tool_call(self.root, "Bash", {"command": command, "workdir": str(work)})))
+
+    def test_a_command_that_changes_folder_and_writes_is_refused(self):
+        moved = self.home.as_posix()
+        for command in ("cd a; cd b; echo x > x", "pushd .codex && echo x > hooks.json; popd",
+                        "if cd .codex; then echo x > hooks.json; fi", "env X=1 cd .codex && tee hooks.json",
+                        "(cd .codex && echo x > hooks.json)", "cd foo && echo x > ../.codex/hooks.json",
+                        f"cd {moved} && echo x > config.toml", f"pushd {moved}; Set-Content hooks.json x",
+                        "cd src && echo x > a.txt", "builtin cd .codex && touch hooks.json", "cd src && python -c \"open('a','w')\"",
+                        "x=$(pwd) && echo x > a.txt", "popd; echo x > hooks.json"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.blocked("Bash", {"command": command}))
+        for command in ("cd src && ls", "echo x > notes.txt", "cp a.txt b.txt", "pushd src; cat a.txt; popd"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.blocked("Bash", {"command": command}))
+
+    def test_folder_options_and_interpreter_moves_count_as_a_change_of_folder(self):
+        for command in ("git -C .codex apply x", "make --directory=.codex", "make -C .codex install",
+                        "python -c \"import os; os.chdir('.codex'); open('hooks.json','w')\"",
+                        "tool --chdir=sub && echo x > out.txt", "cd x && cp -t ../.codex a",
+                        "Copy-Item -Destination:..\\.codex\\hooks.json a", "cd x && Copy-Item a -Destination:b",
+                        "cd x && cp --target-directory=y a", "cd x && Set-Content -Path:a.txt x"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.blocked("Bash", {"command": command}))
+        self.assertIsNone(self.blocked("Bash", {"command": "make -C build"}))
+
+    def test_every_spelling_of_a_folder_option_is_read(self):
+        for command in ("git -qC .codex apply x", "make --dir=.codex", "make --direct .codex", "git -C.codex apply x",
+                        "cd x && cp -vt ../.codex a", "cd x && cp --target=../.codex a", "cd x && make -C build",
+                        "make -C", "git --work-tree"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.blocked("Bash", {"command": command}))
+        self.assertEqual(codexguard.option_folders("git -qC repo log; make --dir=b; x -C/z; ls -c; Remove-Item -Confirm a"),
+                         ["repo", "b", "/z"])
+
+    def test_after_a_change_of_folder_only_absolute_writes_outside_codexs_folders_go(self):
+        target = (self.root / "build" / "out.txt").as_posix()
+        self.assertIsNone(self.blocked("Bash", {"command": f"cd src && echo x > {target}"}))
+        self.assertIn("changes folder and writes", self.blocked("Bash", {"command": "cd src && echo x > out.txt"}))
+        self.assertIsNotNone(self.blocked("Bash", {"command": f"cd src && echo x > {self.home.as_posix()}/config.toml"}))
+
+    def test_a_folder_a_command_moves_into_is_one_of_the_places_it_reaches(self):
+        other = self.root / "other"
+        (other / ".bdd").mkdir(parents=True)
+        (other / ".bdd" / "config.toml").write_text('autonomy = "guided"\n', encoding="utf-8")
+        calls = codexpayload.guard_calls(tool_call(self.root / "src", "Bash", {"command": "cd ../other && ls"}))
+        projects, unresolved = codexguard.reached_projects({"cwd": str(self.root / "src")}, calls)
+        self.assertIn(other.resolve(), [p.resolve() for p in projects])
+        self.assertFalse(unresolved)
+        self.assertEqual(codexguard.directory_operands("make -C repo; make --directory=build; Set-Location -Path 'x'"),
+                         ["repo", "build", "x"])
+        self.assertEqual(codexguard.directory_operands("cd -P -- dir; cd -; bash -c 'echo hi'"), ["dir"])   # `-c` is not `-C`
+
+    def test_a_negated_class_in_a_glob_is_read_as_a_shell_reads_it(self):
+        moved = self.home.as_posix()
+        negated = moved[:-1] + "[^x]"                                   # the last letter as a negated class
+        for command in (f"echo x > {negated}/config.toml", "echo x > .co[^x]ex/hooks.json", "tee ro[^x]lout-*.jsonl < f"):
+            with self.subTest(command=command):
+                self.assertIn("keep greenlight's hooks running", self.blocked("Bash", {"command": command}))
+
     def test_codexs_own_hook_and_settings_files_cannot_be_written_by_an_agent(self):
         for path in (".codex/hooks.json", "./.codex/config.toml", ".CODEX/Hooks.JSON", "sub/../.codex/config.toml"):
             with self.subTest(path=path):
@@ -916,6 +993,26 @@ class ClaudeCodeGuardTest(ProjectCase):
                 self.assertIn("Codex's home folder", self.evaluate("Write", file_path=str(self.root / path)))
         self.assertIsNone(self.evaluate("Bash", command="cat ~/.codex/config.toml"))
         self.assertIsNone(self.evaluate("Write", file_path=str(self.root / "src" / "app.py")))
+
+    def test_a_glob_that_reaches_codex_state_is_refused_like_the_name(self):
+        for command in ("echo x > ~/.co*/config.toml", "cp forged ~/.c?dex/hooks.json", "rm ~/.[c]odex/hooks.json",
+                        "tee ~/x/sessions/rollout-*.jsonl < forged", "cp forged ro?lout-*.jsonl"):
+            with self.subTest(command=command):
+                self.assertIn("Codex's home folder", self.evaluate("Bash", command=command))
+        for command in ("echo x > ~/.cache*/a", "rm build/*.jsonl", "cp a ~/.config/*.toml"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.evaluate("Bash", command=command))
+
+    def test_a_link_into_codex_state_is_refused_for_a_write(self):
+        home = self.root / "home" / ".codex"
+        home.mkdir(parents=True)
+        (home / "hooks.json").write_text("{}", encoding="utf-8")
+        link = self.root / "innocent.json"
+        try:
+            link.symlink_to(home / "hooks.json")
+        except (OSError, NotImplementedError):
+            self.skipTest("this account cannot create symbolic links")
+        self.assertIn("Codex's home folder", self.evaluate("Write", file_path=str(link)))
 
 
 class InstallTest(unittest.TestCase):
