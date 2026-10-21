@@ -14,7 +14,8 @@ optional = ["a Room (or other) database whose statements are reported to QueryCo
 features = "src/test/resources/features"
 steps = "src/test/kotlin/greenlight/steps"
 drivers = "src/test/kotlin/greenlight/drivers"
-support = ["greenlight.gradle.kts", "src/test/resources/junit-platform.properties", "src/test/kotlin/greenlight/RunCucumberTest.kt"]
+support = ["greenlight.gradle.kts", "src/test/resources/junit-platform.properties", "src/test/kotlin/greenlight/RunCucumberTest.kt",
+           "greenlight-device.gradle.kts", "src/device/kotlin/greenlight/RunCucumberOnDevice.kt"]   # the last two: for a device, see the guide
 
 [run]
 # Gradle runs the one suite class, RunCucumberTest, as a local JVM unit test (no emulator or device). Cucumber's own

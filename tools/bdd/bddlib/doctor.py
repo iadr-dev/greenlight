@@ -6,6 +6,7 @@ touching the machine. `run_checks` wires them to the real environment.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import statistics
 import subprocess
@@ -184,9 +185,23 @@ def check_standards(root: Path) -> Check:
     if not path.is_file():
         return Check(STANDARDS, "warn", ".bdd/standards.md does not exist: no language, style or deprecation rules are stated", fix)
     text = path.read_text(encoding="utf-8-sig", errors="replace")
-    if any(line.strip().casefold() == "status: approved" for line in text.splitlines()):
-        return Check(STANDARDS, "ok", ".bdd/standards.md is approved")
-    return Check(STANDARDS, "warn", ".bdd/standards.md is still a draft", fix)
+    if not any(line.strip().casefold() == "status: approved" for line in text.splitlines()):
+        return Check(STANDARDS, "warn", ".bdd/standards.md is still a draft", fix)
+    left = unfilled_placeholders(text)
+    if left:
+        return Check(STANDARDS, "warn", f".bdd/standards.md is approved but {len(left)} placeholder(s) are not filled in, "
+                     f"for example {left[0]}", "Fill each one in or delete its line; the agents treat a placeholder as no rule.")
+    return Check(STANDARDS, "ok", ".bdd/standards.md is approved")
+
+
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_FENCE = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
+_PLACEHOLDER = re.compile(r"<[A-Za-z][^<>\n]*\s[^<>\n]*>")     # `<tool and threshold>`; not `List<T>` or `<br>`
+
+
+def unfilled_placeholders(text: str) -> list[str]:
+    """The template's `<placeholder>` texts still in the file, outside comments and code blocks."""
+    return _PLACEHOLDER.findall(_FENCE.sub("", _COMMENT.sub("", text)))
 
 
 def run_checks() -> list[Check]:

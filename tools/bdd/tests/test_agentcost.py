@@ -113,6 +113,24 @@ class CollectTest(AgentCostCase):
         self.assertEqual(agentcost.collect(self.root, "FEAT-007"), [])
         self.assertEqual(self.data()["cost"]["discover"]["runs"], 1)
 
+    def test_without_a_duration_from_the_hook_the_time_comes_from_the_transcript(self):
+        """Claude Code's SubagentStop payload carried no duration in real runs; the transcript's time stamps still do."""
+        self.stop(duration_ms=None)
+        agentcost.collect(self.root, "FEAT-007")
+        self.assertEqual(self.data()["cost"]["discover"]["seconds"], 34.302)       # 02:02:45.698 to 02:03:20.000
+
+    def test_the_duration_of_a_real_subagent_transcript(self):
+        """An anonymised excerpt of a real one: user, attachment and assistant lines, every one with a time stamp."""
+        excerpt = FIXTURES / "real-subagent-excerpt.jsonl"
+        self.assertEqual(agentcost.transcript_seconds(excerpt), 60.816)            # 05:28:41.156 to 05:29:41.972
+        self.assertEqual(agentcost.transcript_tokens(excerpt), 6351 * 2 + 2 * 2 + 16 + 294)
+
+    def test_a_transcript_without_time_stamps_has_no_duration(self):
+        empty = self.root / "no-stamps.jsonl"
+        empty.write_text('{"type": "user"}\nnot json\n', encoding="utf-8")
+        self.assertIsNone(agentcost.transcript_seconds(empty))
+        self.assertIsNone(agentcost.transcript_seconds(None))
+
     def test_an_unreadable_transcript_records_the_time_and_says_so(self):
         self.subagent_file.unlink()
         self.stop()
