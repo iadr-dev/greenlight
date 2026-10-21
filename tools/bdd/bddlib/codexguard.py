@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import posixpath
 import re
 from pathlib import Path
 
@@ -161,46 +162,59 @@ def check_path(path: str, cwd: Path, root: Path | None) -> str | None:
 
 
 def check_where(command: str, cwd: Path, root: Path) -> str | None:
-    """A command that writes, run from inside Codex's own folders or moving into one first (`cd`, `pushd`, `-C`, followed
-    in order, each from the one before), writes there whatever file name it uses; a relative glob is matched from every
-    folder it may run in. A write after a move that cannot be followed is refused: where it lands is unknown."""
+    """A command that writes, run from inside Codex's own folders, writes there whatever file name it uses. A command that
+    both changes folder (in any form) and writes is refused unless every place it writes is an absolute path outside
+    Codex's folders: which folder a shell is in after `cd`, `pushd`, `popd`, a subshell or a conditional is not modelled.
+    A relative glob is joined to the working folder, normalised (`..` taken out) and matched against Codex's folders."""
     if not guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)):
         return None
-    folders, unresolved = visited_folders(command, cwd)
-    if unresolved:
-        return MOVE_MESSAGE
-    if any(touches_codex_state(".", folder, root) for folder in folders):
+    if touches_codex_state(".", cwd, root):
         return CONFIG_MESSAGE
-    relative_globs = [word for text in [command, *guard.shell_readings(command)] for word in guard._TOKEN_BREAKS.split(text)
+    readings = [command, *guard.shell_readings(command)]
+    relative_globs = [word for text in readings for word in guard._TOKEN_BREAKS.split(text)
                       if guard._GLOB.search(word) and not path_like_absolute(word)]
-    if any(glob_reaches_home(_key(folder) + "/" + word, root) for folder in folders for word in relative_globs):
+    if any(glob_reaches_home(posixpath.normpath(_key(cwd) + "/" + word.replace("\\", "/")), root) for word in relative_globs):
         return CONFIG_MESSAGE
+    if any(changes_directory(text) for text in readings):
+        targets = [target for text in readings for target in (write_targets(text) or [None])]
+        if any(target is None or not path_like_absolute(target) or touches_codex_state(target, cwd, root) for target in targets):
+            return MOVE_MESSAGE
     return None
 
 
-MOVE_MESSAGE = ("greenlight: this command changes to a folder that cannot be worked out (`cd -`, an option without its folder, "
-                "or a path that does not resolve) and then writes, so where the write lands cannot be checked.")
+MOVE_MESSAGE = ("greenlight: this command changes folder and writes, so where the write lands cannot be checked. Run the write "
+                "as its own command, without changing folder, or give it an absolute path.")
+_MOVE_WORD = re.compile(r"(?<![\w.-])(?:cd|pushd|popd|chdir|set-location|push-location|pop-location|sl)(?![\w.-])",
+                        re.IGNORECASE)
+_SUBSHELL = re.compile(r"(?:^|[\s;&|(])\(")
+_REDIRECT_TARGET = re.compile(r"\d?>>?\|?\s*([^\s;&|()<>]+)")
+_FILE_VERBS = {"tee", "cp", "mv", "rm", "touch", "truncate", "ln", "install", "chmod", "set-content", "add-content",
+               "out-file", "remove-item", "move-item", "copy-item", "new-item", "del", "erase", "move", "copy"}
+_OPAQUE_WRITES = re.compile(r"write_text|write_bytes|open\(|\.write\(|\.writelines\(|os\.|shutil\.|\bsed\s|\bperl\s|\bdd\s|"
+                            r"\bgit\s", re.IGNORECASE)
+
+
+def changes_directory(text: str) -> bool:
+    """Does the command change folder anywhere: a `cd`-like word wherever it sits, or a subshell?"""
+    return bool(_MOVE_WORD.search(text) or _SUBSHELL.search(text) or "$(" in text)
+
+
+def write_targets(text: str) -> list[str] | None:
+    """The places a command writes, when they can be read off it: redirection targets and the arguments of the plain file
+    commands. None when it also writes in a way whose target cannot be read off (an interpreter, `sed -i`, a version-control
+    command)."""
+    if _OPAQUE_WRITES.search(text):
+        return None
+    targets = [_unquote(word) for word in _REDIRECT_TARGET.findall(guard._NOISE.sub(" ", text)) if not word.startswith("&")]
+    for simple in _SIMPLE.split(text):
+        words = [_unquote(word) for word in _WORD.findall(simple)]
+        if words and Path(words[0].replace("\\", "/")).name.casefold() in _FILE_VERBS:
+            targets += [word for word in words[1:] if not word.startswith("-") and word not in (">", ">>")]
+    return targets
 
 
 def path_like_absolute(word: str) -> bool:
     return word.startswith(("/", "\\", "~")) or bool(re.match(r"[A-Za-z]:[/\\]", word))
-
-
-def visited_folders(command: str, cwd: Path) -> tuple[list[Path], bool]:
-    """Every folder the command may write from: where it starts, and each folder a move goes to, in order, resolved from the
-    folder before it (and from the start again for each way a shell could read the command). Whether a move could not be
-    followed comes with them."""
-    folders, unresolved = [cwd], False
-    for text in [command, *guard.shell_readings(command)]:
-        here = cwd
-        for operand in directory_changes(text):
-            place = resolve_word(operand, here) if operand is not None else None
-            if place is None:
-                unresolved = True
-                continue
-            here = place
-            folders.append(place)
-    return folders, unresolved
 
 
 def codex_reason(call: dict, cwd: Path, root: Path) -> str | None:
