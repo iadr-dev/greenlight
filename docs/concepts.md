@@ -144,7 +144,9 @@ under a hook, and whatever an agent could have written (a session file, a log) p
 - **Locks: hooks active, best effort.** `bdd install-hooks codex` shows the three entries it would add (before a tool runs,
   after it, and when you submit a prompt); `--apply` writes them into `~/.codex/hooks.json` (or `--project` for the repo's
   `.codex/hooks.json`) without touching your own entries, and `--uninstall` removes exactly those. Codex asks you to trust new
-  hooks. Then shell commands and patches are checked against the locks, and text sent to a running command is allowed only as polling or as a very small set of answers (`y`, `n`, `yes`, `no`, `q`, a number of one to three digits, a single Enter): interactive input into long-running sessions is restricted inside projects, which is the price of failing closed, so run anything else as a normal tool call; the rest of the checks apply (every project a call
+  hooks, once, in an interactive `codex` session (`codex exec` cannot ask, and until you have trusted them the hooks do not run).
+  A refusal is a deny decision the hook prints for Codex, which a live session obeyed; exit status 2, as the documentation
+  describes, did not stop a call there. Then shell commands and patches are checked against the locks, and text sent to a running command is allowed only as polling or as a very small set of answers (`y`, `n`, `yes`, `no`, `q`, a number of one to three digits, a single Enter): interactive input into long-running sessions is restricted inside projects, which is the price of failing closed, so run anything else as a normal tool call; the rest of the checks apply (every project a call
   touches, every reading of the command), Codex's own hook and settings files are watched by the tripwire, tools greenlight
   has not looked at are refused (list one you have checked in `[approvals] codex_allowed_tools`), and agents may not run
   greenlight's hook commands, start a nested `codex`, set `CODEX_HOME`, type `$greenlight-approve` through a tool, or write
