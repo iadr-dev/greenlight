@@ -433,6 +433,22 @@ class GuardTest(CodexCase):
             with self.subTest(command=command):
                 self.assertIsNone(self.blocked("Bash", {"command": command}))
 
+    def test_a_project_that_takes_codex_approvals_refuses_every_codex_word_but_others_only_where_a_program_starts(self):
+        """A nested session is the way to forge a Codex approval, so where those are accepted the check does not trust quoting."""
+        text = {"command": "powershell -Command \"Add-Content -LiteralPath notes.txt -Value '# by codex'\""}
+        launcher = {"command": "powershell -Command \"codex exec hello\""}
+        quote_tricks = ({"command": "bash -c 'x=1; codex exec hello'"}, {"command": "sh -c \"echo ok\" \"; codex exec hi\""},
+                        {"command": "echo \"it's\"; echo 'codex' exec hi"})
+        self.assertIsNone(self.blocked("Bash", text))                       # not opted in: text that mentions it is fine
+        self.assertIn("another Codex session", self.blocked("Bash", launcher))
+        opt_in(self)
+        self.assertIn("another Codex session", self.blocked("Bash", text))  # opted in: any `codex` word counts
+        self.assertIn("another Codex session", self.blocked("Bash", launcher))
+        for call in quote_tricks:
+            with self.subTest(command=call["command"]):
+                self.assertIn("another Codex session", self.blocked("Bash", call))
+        self.assertIsNone(self.blocked("Bash", {"command": "codex --version"}))
+
     def test_codexs_own_hook_and_settings_files_cannot_be_written_by_an_agent(self):
         for path in (".codex/hooks.json", "./.codex/config.toml", ".CODEX/Hooks.JSON", "sub/../.codex/config.toml"):
             with self.subTest(path=path):
