@@ -1,0 +1,63 @@
+name: Stress the Kotlin adapter contract
+
+# Run by hand (Actions > Stress the Kotlin adapter contract > Run workflow). It repeats the first contract test of the
+# kotlin-android adapter many times, each time on a fresh scaffold, and prints everything a failing iteration said, so an
+# intermittent failure can be read instead of guessed at.
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: Fresh scaffolds per job
+        default: "25"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    name: stress (${{ matrix.os }}, ${{ matrix.gradle-home }} Gradle home)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        gradle-home: [warm, cold]
+    env:
+      GREENLIGHT_JVM_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
+        with:
+          gradle-version: "9.8.2"
+      - name: Repeat the first contract test
+        shell: bash
+        env:
+          ITERATIONS: ${{ inputs.iterations }}
+          GRADLE_HOME_MODE: ${{ matrix.gradle-home }}
+        run: |
+          failures=0
+          for i in $(seq 1 "$ITERATIONS"); do
+            if [ "$GRADLE_HOME_MODE" = cold ]; then
+              gradle --stop >/dev/null 2>&1 || true
+              export GRADLE_USER_HOME="$RUNNER_TEMP/gradle-home-$i"
+            fi
+            log="$RUNNER_TEMP/iteration-$i.log"
+            if python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k KotlinContractTest.test_1 -v >"$log" 2>&1; then
+              echo "iteration $i: ok"
+            else
+              failures=$((failures + 1))
+              echo "::group::iteration $i: FAILED"
+              cat "$log"
+              echo "::endgroup::"
+            fi
+          done
+          echo "$failures of $ITERATIONS iterations failed"
+          [ "$failures" -eq 0 ]
