@@ -85,6 +85,10 @@ expect_fail "detekt finds the magic numbers" ./gradlew detekt --quiet
 expect_fail "build runs detekt and ktlint too, once their plugins are applied" ./gradlew build -x test --quiet
 
 mv Pricing.kt.clean src/main/kotlin/pricing/Pricing.kt
+cp src/main/kotlin/pricing/Pricing.kt Pricing.kt.before
+expect_pass "ktlintFormat rewrites the code into the project's style" ./gradlew ktlintFormat --quiet
+echo "      what ktlintFormat changed:"
+diff Pricing.kt.before src/main/kotlin/pricing/Pricing.kt | sed 's/^/        /' || true
 expect_pass "compile with warnings as errors once the deprecated call is replaced" ./gradlew compileKotlin --quiet
 expect_pass "ktlintCheck on formatted code" ./gradlew ktlintCheck --quiet
 expect_pass "detekt with named constants" ./gradlew detekt --quiet
