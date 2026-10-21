@@ -348,6 +348,17 @@ class ProjectPythonTest(ProjectCase):
         python = self.make_env(".venv")
         self.assertEqual(runner.project_python(self.root), str(python))
 
+    def test_only_this_platforms_environment_layout_counts(self):
+        """A checkout shared by Windows and WSL: each side finds its own environment, never the other platform's."""
+        windows = self.root / ".venv" / "Scripts" / "python.exe"
+        linux = self.root / "venv" / "bin" / "python"
+        for path in (windows, linux):
+            path.parent.mkdir(parents=True)
+            path.write_text("", encoding="utf-8")
+        for layout, expected in (("Scripts/python.exe", windows), ("bin/python", linux)):
+            with self.subTest(layout=layout), mock.patch.object(runner, "VENV_INTERPRETER", layout):
+                self.assertEqual(runner.project_python(self.root), str(expected))
+
     def test_the_configured_interpreter_beats_the_one_in_the_project(self):
         self.make_env(".venv")
         chosen = self.make_env("elsewhere")

@@ -78,10 +78,15 @@ def project_python(root: Path) -> str:
             raise UsageError(f"python = {chosen!r} in .bdd/config.toml is not a file")
         return str(path)
     for environment in (root / ".venv", root / "venv"):
-        for relative in ("Scripts/python.exe", "bin/python"):
-            if (environment / relative).is_file():
-                return str(environment / relative)
+        if (environment / VENV_INTERPRETER).is_file():
+            return str(environment / VENV_INTERPRETER)
     return sys.executable
+
+
+# Where a virtual environment made on this platform keeps its interpreter. Only this platform's layout counts, so a
+# checkout shared between Windows and WSL can hold a Windows `.venv` and a Linux `venv` side by side, each side finding
+# its own instead of starting the other platform's program.
+VENV_INTERPRETER = "Scripts/python.exe" if os.name == "nt" else "bin/python"
 
 
 def interpreter_identity(root: Path) -> dict:
