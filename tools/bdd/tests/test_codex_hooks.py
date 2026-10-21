@@ -174,6 +174,16 @@ class GuardTest(CodexCase):
         self.assertIsNotNone(self.blocked("shell", {"command": ["bash", "-lc", "echo x > steps/steps.py"]}))
         self.assertIsNone(self.blocked("Bash", {"command": "ls steps"}))
 
+    def test_a_powershell_command_that_writes_a_locked_file_is_refused(self):
+        """The exact shape a live Codex session produced on Windows: PowerShell started with a quoted script naming the file."""
+        lock_steps(self)
+        absolute = str(self.root / "steps" / "steps.py")
+        shell = '"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '
+        for script in (f"Add-Content -LiteralPath '{absolute}' -Value 'x'", "Add-Content -LiteralPath 'steps/steps.py' -Value 'x'"):
+            with self.subTest(script=script):
+                self.assertIsNotNone(self.blocked("Bash", {"command": shell + '"' + script + '"'}))
+        self.assertIsNone(self.blocked("Bash", {"command": shell + '"Get-Content -LiteralPath \'steps/steps.py\'"'}))
+
     def test_a_patch_given_to_the_shell_is_checked_like_one_given_to_the_patch_tool(self):
         lock_steps(self)
         self.assertIsNotNone(self.blocked("Bash", {"command": ["apply_patch", patch("steps/steps.py")]}))

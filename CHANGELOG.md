@@ -8,6 +8,8 @@ versions follow [SemVer](https://semver.org/).
 ### Fixed
 - Found by the first live Codex run (codex-cli 0.142.3 on Windows): the Codex PreToolUse hook refused a call with exit status 2 and the reason on stderr, which Codex did not act on, so a locked spec could be edited (the tripwire noticed afterwards). A refusal is now the `permissionDecision: deny` decision on stdout with exit 0, which stopped the same edit, and the tripwire's finding after a call is a `decision: block` with a reason. The nested-session check also no longer refuses a command that merely has the word `codex` inside a quoted argument (`-Value '# edited by codex'`); a `codex` program word outside quotes, or at the start of a command inside a quoted script, is still refused. An opt-in live test (`tests/test_codex_live.py`) and platform note P31 record the procedure.
 
+- The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
+
 ### Fixed
 - Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
 
