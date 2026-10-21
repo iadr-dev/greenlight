@@ -57,6 +57,10 @@ The person decides what changes. Never reopen the specification because an agent
 6. **Run the checks again.** The red gate again after a rebind (`bdd run`, `bdd classify --expect red`, lock the
    bound files, `bdd gate FEAT-n bind --result pass --record-red`), and `bdd run` and the green check after the
    code. The auditor's report will list the change and the unlocks it finds in the lock history.
+   If the production code was already written when the feature was reopened, a plain `bdd run` passes and is no red.
+   Use `bdd run FEAT-n --against-red` instead: it runs today's tests in a temporary worktree of the production source
+   the first red was proven on, and the bind gate accepts that run. Never stash, revert or hide the code to get a red,
+   and never tag a scenario `@existing` that the feature's code made pass.
 
 Never edit a locked file by any other route, never unlock with `bdd unlock` directly, and never remove an old
 approval or a gate result by hand: this command is the one sanctioned way.
