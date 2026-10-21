@@ -67,14 +67,17 @@ expect_pass "a plain build only warns about the deprecated call" swift build
 expect_fail "warnings as errors refuses the deprecated call" swift build -Xswiftc -warnings-as-errors
 expect_pass "the tests" swift test
 expect_fail "swift-format in strict mode finds the indentation" $swift_format lint --recursive --strict Sources Tests
-expect_fail "swiftlint --strict finds the force cast" swiftlint --strict
+expect_fail "swiftlint --strict finds the force cast" swiftlint lint --strict Sources Tests
 
 sed 's/  oldTotal((5 as Any) as! Int)/  totalAfterDiscount(5)/' Sources/Pricing/Pricing.swift > Pricing.swift.new
 mv Pricing.swift.new Sources/Pricing/Pricing.swift
 $swift_format format --in-place --recursive Sources Tests
 expect_pass "warnings as errors once the deprecated call is replaced" swift build -Xswiftc -warnings-as-errors
 expect_pass "swift-format in strict mode after formatting" $swift_format lint --recursive --strict Sources Tests
-expect_pass "swiftlint --strict on clean, formatted code" swiftlint --strict
+expect_pass "swiftlint --strict on clean, formatted code" swiftlint lint --strict Sources Tests
 expect_pass "the tests" swift test
+expect_fail "from the package root, swiftlint also lints the generated files in .build" swiftlint --strict
+printf 'excluded:\n  - .build\n' > .swiftlint.yml
+expect_pass "from the package root, once .swiftlint.yml excludes .build" swiftlint --strict
 
 report_and_exit

@@ -47,6 +47,23 @@ fun oldTotal(amount: Long): Long = amount
 
 fun totalOfSmallOrder(): Long =    oldTotal(5)
 EOF
+# The same code, cleaned up: named constants instead of magic numbers, no deprecated call, formatted.
+cat > Pricing.kt.clean <<'EOF'
+package pricing
+
+private const val DISCOUNT_THRESHOLD = 1000L
+private const val DISCOUNT_DIVISOR = 10L
+private const val SMALL_ORDER = 5L
+
+/** The total after a 10% discount on orders of [DISCOUNT_THRESHOLD] or more. */
+fun totalAfterDiscount(amount: Long): Long =
+    if (amount >= DISCOUNT_THRESHOLD) amount - amount / DISCOUNT_DIVISOR else amount
+
+@Deprecated("use totalAfterDiscount", ReplaceWith("totalAfterDiscount(amount)"))
+fun oldTotal(amount: Long): Long = amount
+
+fun totalOfSmallOrder(): Long = totalAfterDiscount(SMALL_ORDER)
+EOF
 cat > src/test/kotlin/pricing/PricingTest.kt <<'EOF'
 package pricing
 
@@ -62,15 +79,16 @@ class PricingTest {
 EOF
 
 gradle wrapper --quiet
-expect_fail "allWarningsAsErrors refuses the deprecated call" ./gradlew build -x test --quiet
+expect_fail "allWarningsAsErrors refuses the deprecated call" ./gradlew compileKotlin --quiet
 expect_fail "ktlintCheck finds the extra spaces" ./gradlew ktlintCheck --quiet
+expect_fail "detekt finds the magic numbers" ./gradlew detekt --quiet
+expect_fail "build runs detekt and ktlint too, once their plugins are applied" ./gradlew build -x test --quiet
 
-sed 's/fun totalOfSmallOrder(): Long =    oldTotal(5)/fun totalOfSmallOrder(): Long = totalAfterDiscount(5)/' \
-    src/main/kotlin/pricing/Pricing.kt > Pricing.kt.new
-mv Pricing.kt.new src/main/kotlin/pricing/Pricing.kt
-expect_pass "build with warnings as errors once the deprecated call is replaced" ./gradlew build -x test --quiet
+mv Pricing.kt.clean src/main/kotlin/pricing/Pricing.kt
+expect_pass "compile with warnings as errors once the deprecated call is replaced" ./gradlew compileKotlin --quiet
 expect_pass "ktlintCheck on formatted code" ./gradlew ktlintCheck --quiet
-expect_pass "detekt" ./gradlew detekt --quiet
+expect_pass "detekt with named constants" ./gradlew detekt --quiet
+expect_pass "build, linters included, on clean code" ./gradlew build -x test --quiet
 expect_pass "the tests" ./gradlew test --quiet
 
 report_and_exit
