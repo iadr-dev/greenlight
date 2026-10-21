@@ -201,3 +201,24 @@ result that is current and at or above the threshold. The format and the placeho
 
 Verified: a weak test (`assert discount(5000) is not None`) scored 0% killed (5 survived) and failed a 70% threshold; the
 boundary tests scored 80% (4 killed, 1 survived) and passed, on Linux and macOS with mutmut 3.8.0.
+
+### On Windows: through WSL
+
+mutmut does not run natively on Windows, and the wrapper stops with the steps below. Run the check from WSL 2 in the
+same checkout:
+
+```sh
+wsl
+cd /mnt/c/<path to the project>
+uv venv venv     # a Linux environment beside the Windows .venv
+uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.0"
+sh /mnt/c/<path to greenlight>/tools/bdd/bdd mutate FEAT-n
+```
+
+Each platform finds only its own environment layout (`Scripts/python.exe` on Windows, `bin/python` elsewhere), so the
+Windows `.venv` and the Linux `venv` live side by side and neither side starts the other's interpreter. bdd needs Python
+3.11 or newer inside WSL; a `python =` line in `.bdd/config.toml` that names a Windows path does not work there. Files
+under `/mnt/c` are slower to read from WSL than from Windows, and mutmut copies the project once per run, so a large
+project is faster cloned inside the WSL file system. Not yet run end to end: the record written from WSL is expected to
+satisfy the verify gate on Windows, because it depends on the content of the source and the tests, not on the
+interpreter, but this has not been tried.

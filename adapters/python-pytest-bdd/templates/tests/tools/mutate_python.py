@@ -31,6 +31,13 @@ from pathlib import Path
 
 EXIT_REFUSED = 2
 EXIT_TOOL_FAILED = 3
+WINDOWS_MESSAGE = """mutate_python: mutmut does not run natively on Windows. Run the check from WSL, in the same checkout:
+  wsl
+  cd /mnt/c/<path to the project>
+  uv venv venv          # a Linux environment beside the Windows .venv; each side finds its own
+  uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.0"
+  sh /mnt/c/<path to greenlight>/tools/bdd/bdd mutate FEAT-n
+WSL needs Python 3.11 or newer for bdd; a `python =` line in .bdd/config.toml that names a Windows path does not work there."""
 SKIPPED_FOLDERS = (".git", ".bdd", ".venv", "venv", "node_modules", "__pycache__", "mutants", ".mypy_cache",
                    ".pytest_cache", ".ruff_cache")
 PYTEST_ARGUMENTS = ("-c", "tests/pytest.ini", "--rootdir", ".", "--confcutdir", "tests", "-p", "no:cacheprovider",
@@ -140,7 +147,7 @@ def main(argv: list[str]) -> int:
         print(f"mutate_python: {exc}", file=sys.stderr)
         return EXIT_REFUSED
     if os.name == "nt":
-        print("mutate_python: mutmut does not run natively on Windows; use WSL", file=sys.stderr)
+        print(WINDOWS_MESSAGE, file=sys.stderr)
         return EXIT_TOOL_FAILED
     try:
         counts = measure(root, files)
