@@ -108,14 +108,47 @@ def assumption_agreement(assumptions: list[dict], answers: list[dict]) -> dict |
             "agreement_pct": pct(agreed, len(answers))}
 
 
+CARD_PATH = re.compile(r"cards[\\/]+((?:techniques|practices|instructions|runners)[\\/]+[\w.\-]+\.md)")
+READING_TOOLS = ("Read", "Bash", "Grep", "Glob")          # a card is read when one of these names it; Write and Edit only produce files
+
+
+def transcript_files(transcript: Path) -> list[Path]:
+    """The session's transcript and those of the subagents it started: the agents, not the orchestrator, read the cards."""
+    return [transcript, *sorted((transcript.with_suffix("") / "subagents").glob("agent-*.jsonl"))]
+
+
+def strings_of(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in strings_of(item)]
+    if isinstance(value, list):
+        return [text for item in value for text in strings_of(item)]
+    return []
+
+
+def cards_in(line: str) -> set[str]:
+    """Cards named by the reading tool uses (Read, Bash, Grep, Glob) of one transcript line."""
+    try:
+        content = (json.loads(line).get("message") or {}).get("content")
+    except (ValueError, AttributeError):
+        return set()
+    found: set[str] = set()
+    for block in content if isinstance(content, list) else []:
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") in READING_TOOLS:
+            for text in strings_of(block.get("input")):
+                found.update(re.sub(r"[\\/]+", "/", m.group(1)) for m in CARD_PATH.finditer(text))
+    return found
+
+
 def cards_read(transcript: Path | None) -> list[str] | None:
-    """Card files the session read, from its transcript (JSON lines); None when there is no transcript."""
+    """Card files the session and its subagents read, from their transcripts (JSON lines); None when there is no transcript."""
     if transcript is None or not transcript.is_file():
         return None
     found: set[str] = set()
-    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
-        for match in re.finditer(r"cards[\\/]+((?:techniques|practices|instructions|runners)[\\/]+[\w.\-]+\.md)", line):
-            found.add(re.sub(r"[\\/]+", "/", match.group(1)))
+    for path in transcript_files(transcript):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            found |= cards_in(line)
     return sorted(found)
 
 

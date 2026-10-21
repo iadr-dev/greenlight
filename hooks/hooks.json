@@ -36,6 +36,16 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd\" subagent-stop"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
