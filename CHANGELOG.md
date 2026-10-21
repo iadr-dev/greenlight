@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- A manual workflow, `stress-kotlin.yml`, that repeats the Kotlin adapter's first contract test on fresh scaffolds (warm and cold Gradle home, Ubuntu and Windows) and prints everything a failing iteration said. A run of 100 iterations found no failure, so the intermittent "no test cases" of the CI job was not reproduced and its cause is still unknown. The contract tests now fetch the Gradle distribution while setting up (a failed download stops the set-up with Gradle's own message instead of surfacing as a first test run without test cases); a full local run of `KotlinContractTest` and of the Android library test passes.
+- `adapters/kotlin-android/guide.md`: running on a device or emulator with Google's `android` command-line tool (SDK install, emulator creation and start, `android run`, `connectedDebugAndroidTest`), with what was run and what was not.
+
 ### Fixed
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 

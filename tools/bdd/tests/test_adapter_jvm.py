@@ -182,6 +182,16 @@ class ClassifyDefaultsTest(unittest.TestCase):
             self.assertEqual(self.kind(name, "java.lang.NullPointerException"), classify.UNKNOWN)
 
 
+def make_gradle_wrapper(root: Path) -> None:
+    """Create the module's Gradle wrapper and fetch its distribution now, so that a failed download stops the set-up with
+    Gradle's own message instead of surfacing later as a first test run that found no test cases."""
+    for words in ([shutil.which("gradle"), "wrapper", "-q"], [str(root / ("gradlew.bat" if os.name == "nt" else "gradlew")), "--version"]):
+        done = subprocess.run(words, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+        if done.returncode:
+            raise RuntimeError(f"{Path(words[0]).name} {' '.join(words[1:])} failed with exit {done.returncode}:\n"
+                               f"{done.stdout[-2000:]}\n{done.stderr[-2000:]}")
+
+
 class ScaffoldCase(unittest.TestCase):
     """A fresh scaffold in a temporary project; the real build tool runs it."""
 
@@ -279,7 +289,7 @@ class KotlinContractTest(ScaffoldCase):
         # a plain Kotlin/JVM module has the test task `test`; an Android module has testDebugUnitTest
         config = cls.root / ".bdd" / "config.toml"
         config.write_text(config.read_text(encoding="utf-8").replace("testDebugUnitTest", "test"), encoding="utf-8", newline="\n")
-        subprocess.run([shutil.which("gradle"), "wrapper", "-q"], cwd=cls.root, check=True, capture_output=True, timeout=600)
+        make_gradle_wrapper(cls.root)
 
     def test_1_the_sample_feature_is_green(self):
         code, out, err = self.bdd("run", "FEAT-000")
@@ -313,7 +323,7 @@ class AndroidContractTest(ScaffoldCase):
 
     @classmethod
     def prepare(cls) -> None:
-        subprocess.run([shutil.which("gradle"), "wrapper", "-q"], cwd=cls.root, check=True, capture_output=True, timeout=600)
+        make_gradle_wrapper(cls.root)
 
     def test_1_the_sample_feature_is_green_as_an_android_unit_test(self):
         code, out, err = self.bdd("run", "FEAT-000")
