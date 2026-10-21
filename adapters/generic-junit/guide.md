@@ -26,7 +26,9 @@ greenlight needs five things from your runner. If they hold, `bdd run`, `bdd cla
 
 1. **One command runs one feature.** The `by_tag` command in `[adapters.run]` of `.bdd/config.toml` is split into words
    (no shell) and the placeholders are filled: `{tag}` is `FEAT-007`, `{marker}` is the same as a word, `FEAT_007`;
-   `{out}` is the report file to write; `{seed}` and `{scenario}` fill the optional `shuffle` and `isolated` words.
+   `{out}` is the report file to write; `{seed}` and `{scenario}` fill the optional `shuffle` and `isolated` words (`{scenario}`
+   is the name as it is; `{scenario:regex}` and `{scenario:js}` write it as a pattern for a Java/Go or a JavaScript engine,
+   and `{scenario:alnum}` keeps only its letters and digits, for test names written without spaces).
    `{python}` is the interpreter running `bdd`; `{project_python}` is the project's own (see the Python adapter's guide).
    The command must run only the tests of that feature: carry the marker in a tag, a category, a trait or the test name.
 2. **One JUnit file.** The command writes JUnit XML to `{out}`. If your runner writes one file per class or to a fixed
@@ -78,8 +80,16 @@ report goes, and what a red looks like there.
 - A runner that writes elsewhere uses the wrapper:
   `by_tag = '{python} -I tests/run_junit.py --reports "build/test-results/test/*.xml" --command "gradle test --tests *{marker}*"'`
   with `report = '--out {out}'`.
-- Shuffle is optional. With the wrapper: `shuffle = '--add=-shuffle={seed}'` appends a word to your command; without
-  shuffle words `bdd run --shuffle` says so and stops. `isolated` (one process per scenario) is optional the same way.
+- Shuffle and `isolated` (one process per scenario) are optional. The sample runner's lines (`--seed {seed}`, `--only
+  "{scenario}"`) fit no other runner: replace them or delete them, or the first shuffled run fails. The wrapper takes
+  words for your command only as `--add=WORD` (it says so, and runs nothing, when it is given anything else):
+  - Go: `shuffle = '--add=-shuffle={seed}'`, and `isolated = '--add=-run=(?i)^Test{marker}_{scenario:alnum}$'` (`go test` takes
+    the last `-run`, so it narrows the feature's pattern to the one test function named for the scenario).
+  - cucumber-js, run directly: `shuffle = '--order random:{seed}'`, `isolated = '--name "^{scenario:js}$"'`.
+  - Node's own test runner before version 24: no random order, and a second name pattern widens the first instead of
+    narrowing it, so delete both lines.
+  Without the words `bdd run --shuffle` (or `--isolated`) says "has no shuffle words" and stops; with words the runner
+  refuses, the run fails and shows the runner's own message. A run that finds no test case is never a success.
 - If you replace `tests/run_tests.py`, update `support` in the same file so the bound plumbing still lists every file
   that decides how scenarios run (your runner's config files, the wrapper).
 - Commands run with the project's directory as the working directory and with `PYTHON*`, `LD_*`, `DYLD_*`, `BASH_ENV`,

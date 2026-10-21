@@ -91,7 +91,13 @@ def parse_arguments(argv):
     ap.add_argument("--reports", action="append", required=True, help="glob of the JUnit files the command writes")
     ap.add_argument("--out", required=True, help="the single JUnit file to write")
     ap.add_argument("--add", action="append", default=[], help="a word to append to the command (repeatable)")
-    return ap.parse_args(argv)
+    args, extra = ap.parse_known_args(argv)
+    if extra:
+        # the shuffle and isolated words of the run table land here; they reach the test command only as --add=WORD
+        ap.error(f"unrecognized arguments: {' '.join(extra)}. Words for the test command, such as the shuffle and "
+                 "isolated words in [adapters.run], must be written --add=WORD (use --add=-flag for a word that starts "
+                 "with a dash), or removed from the run table when the runner cannot do it")
+    return args
 
 
 def main(argv):

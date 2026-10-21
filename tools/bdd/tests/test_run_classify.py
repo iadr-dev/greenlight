@@ -134,6 +134,36 @@ class RunTest(RunCase):
         record = runner.load_latest(self.root, "FEAT-007")
         self.assertEqual((record["runs"][0]["report"], record["runs"][0]["cases"]), (True, 0))
 
+    def test_an_empty_result_is_never_a_success_in_any_mode(self):
+        """Plain, shuffled and one-process-per-scenario runs: no test case anywhere, or none in one of the runs, exits 1."""
+        for mode in ((), ("--shuffle",), ("--shuffle", "--seed", "5"), ("--isolated",)):
+            with self.subTest(mode=mode, cases="none"):
+                code, out, err = self.run_feature(*mode, cases=[], env={"FAKE_NOTE": "nothing matched"})
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("no test cases", out)
+                self.assertIn("nothing matched", err)
+        two_of_three = [ALL_GREEN[0], ALL_GREEN[1]]                  # the third scenario's own run finds no test
+        code, out, err = self.run_feature("--isolated", cases=two_of_three)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("2 passed", out)                                # what did run is still counted and shown
+        self.assertIn("the test report holds no test cases", err)
+
+    def test_a_feature_with_no_scenario_cannot_be_isolated_into_success(self):
+        self.write("features/discounts.feature", "@FEAT-007\nFeature: Discounts\n")
+        code, out, err = self.run_feature("--isolated")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("0 run(s) (isolated): no test cases", out)
+
+    def test_shuffle_or_isolated_words_the_runner_refuses_are_a_failure_with_its_message(self):
+        self.write("refuse.py", "import sys\nprint('error: unrecognized arguments', file=sys.stderr)\nsys.exit(2)\n")
+        for flag, words in (("--shuffle", "shuffle = '--seed {seed}'"), ("--isolated", "isolated = '--only {scenario}'")):
+            with self.subTest(flag=flag):
+                self.config(tail=f"[adapters.run]\nby_tag = '{{python}} refuse.py'\nreport = '--out {{out}}'\n{words}\n")
+                code, out, err = self.run_feature(flag)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("no test report was written", err)
+                self.assertIn("unrecognized arguments", err)
+
     def test_every_run_records_how_many_test_cases_it_found(self):
         self.run_feature()
         self.assertEqual([r["cases"] for r in runner.load_latest(self.root, "FEAT-007")["runs"]], [3])
@@ -159,6 +189,26 @@ class RunTest(RunCase):
         words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario="a b; rm -rf /")
         self.assertEqual(words[-2:], ["-k", "a b; rm -rf /"])             # one word, whatever it contains
         self.assertEqual(len(words), 9)
+
+    def test_the_alnum_placeholder_keeps_only_letters_and_digits_of_any_script(self):
+        rules = cfg.RunRules("x", "run", "", isolated="-run={marker}_{scenario:alnum}")
+        for name, expected in {"Counts the rows of a file": "Countstherowsofafile",
+                               "Order of 999 (rounded), 2.5%": "Orderof999rounded25", "café 訂單 #1": "café訂單1",
+                               "(?i).*|^$ [x]": "ix", "": ""}.items():
+            with self.subTest(name=name):
+                words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario=name)
+                self.assertEqual(words, ["run", f"-run=FEAT_007_{expected}"])
+
+    def test_the_js_placeholder_writes_the_name_for_javascripts_engine_in_plain_ascii(self):
+        """Checked against cucumber-js 11.2.0 (`--name "^...$"` selected exactly one scenario for each of these names)."""
+        rules = cfg.RunRules("x", "run", "", isolated='--name "^{scenario:js}$"')
+        for name in ("Counts the rows (really)", "Café menu", "Third one [a|b] $5 ^x", "訂單 😀 ok", "a\\b"):
+            with self.subTest(name=name):
+                # JSON writes a character beyond ASCII as \uXXXX (and one beyond the first plane as two halves), as JavaScript reads it
+                expected = "^" + "".join(re.escape(c) if c.isascii() else json.dumps(c)[1:-1] for c in name) + "$"
+                words = runner.build_command(rules, self.root, "FEAT-007", Path("o.xml"), scenario=name)
+                self.assertEqual([word.lower() for word in words], ["run", "--name", expected.lower()])    # hex digits: any case
+                self.assertTrue(words[2].isascii())
 
     def test_the_regex_placeholder_makes_a_name_match_only_itself(self):
         names = ["Order \\E of (999)", "a\\Qb", 'say "hi" [now] {x} $1 ^ | ? * + . # & ~', "café 訂單", "{tag} {out} {scenario}",

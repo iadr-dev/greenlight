@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Shuffled and isolated runs of the generic-junit reference apps never ran: the run table kept the sample runner's `--seed` and `--only` words, which `tests/run_junit.py` refuses. csv-tool (Go) now shuffles and isolates for real (`--add=-shuffle={seed}`, `--add=-run=...{scenario:alnum}`), money-lib (Node's test runner) has no such words and `bdd run --shuffle` says so, and the wrapper explains that words for the test command are written `--add=WORD`. New name-filter placeholders `{scenario:alnum}` and `{scenario:js}`. The harness uses gotestsum v1.13.0, because v1.12.1 does not build on Go 1.25 or newer. Tests pin that an empty result exits 1 in every run mode.
+
 ### Added
 - Style warnings in `bdd lint` (`L015` to `L025`, decision D45): steps out of Given, When, Then order, scenarios of more than 10 steps, placeholder data (`foo`, `bar`, `test`, ...), a Background used by one scenario, a Scenario Outline with one row or duplicate rows, empty or carried-over scenario titles, indentation, lines over 120 characters, blank lines between steps and between scenarios, and file names that are not kebab-case. They are warnings only, so nothing that passed before fails; a project can silence a code with `[lint] ignore = ["L022"]` in `.bdd/config.toml` (style codes only, never an error). A new `gherkin-style` practice card, read by the qa-designer, covers what a check cannot judge. The ideas come from the public Gherkin guidelines for AI by Andrew Knight (AutomationPanda); the wording is ours, and the rules that would conflict with the closed step vocabulary were left out.
 
