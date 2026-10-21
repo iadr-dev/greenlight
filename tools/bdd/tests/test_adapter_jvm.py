@@ -93,6 +93,75 @@ def tool_free_config(name: str) -> cfg.Config:
         return cfg.load(root)
 
 
+SPRING_UNICODE = """@FEAT-004
+Feature: Titles that are not plain ASCII
+
+  @R-004.1
+  Rule: A scenario keeps its title whatever the language
+
+    @EX-004.1.1
+    Scenario: Café: a product is stored and read back
+      Given the following product exist:
+        | id | name |
+        | 1  | tea  |
+      Then the product records are:
+        | id | name |
+        | 1  | tea  |
+
+    @EX-004.1.2
+    Scenario: 商品可以儲存並讀回
+      Given the following product exist:
+        | id | name |
+        | 2  | milk |
+      Then the product records are:
+        | id | name |
+        | 2  | milk |
+
+    @EX-004.1.3
+    Scenario: 茶 and 咖啡 (tea and coffee) are both stored
+      Given the following product exist:
+        | id | name   |
+        | 3  | coffee |
+      Then the product records are:
+        | id | name   |
+        | 3  | coffee |
+"""
+
+KOTLIN_UNICODE = """@FEAT-004
+Feature: Titles that are not plain ASCII
+
+  @R-004.1
+  Rule: A scenario keeps its title whatever the language
+
+    @EX-004.1.1
+    Scenario: Café: two numbers are added
+      When add is called with:
+        | a | b |
+        | 2 | 3 |
+      Then the result is:
+        \"\"\"
+        5
+        \"\"\"
+
+    @EX-004.1.2
+    Scenario: 兩個數字相加
+      When add is called with:
+        | a | b |
+        | 4 | 5 |
+      Then the result is:
+        \"\"\"
+        9
+        \"\"\"
+
+    @EX-004.1.3
+    Scenario: 負數會被拒絕 (a negative number is refused)
+      When add is called with:
+        | a  | b |
+        | -1 | 3 |
+      Then the call fails with negative input
+"""
+
+
 class PackageTest(unittest.TestCase):
     def test_the_profiles_and_run_tables_say_what_the_guides_say(self):
         spring, kotlin = adapter.load(SPRING), adapter.load(KOTLIN)
@@ -231,6 +300,17 @@ class ScaffoldCase(unittest.TestCase):
         state.create(self.root, feature, "Orders", "standard")
         (self.root / rel).write_text(text, encoding="utf-8", newline="\n")
 
+    def titles_that_are_not_plain_ascii_map_to_their_scenarios(self, text: str, result: str, run_code: int) -> None:
+        """An accented, a Chinese and a mixed title: each report entry must still be found (a scenario nobody found would be
+        ``not-run``), in the usual order, shuffled and one scenario per process (the scenario name goes to the runner as a
+        filter)."""
+        self.add_feature("src/test/resources/features/unicode.feature", text, "FEAT-004")
+        for flags in ((), ("--shuffle", "--seed", "3"), ("--isolated",)):
+            with self.subTest(flags=flags):
+                code, out, err = self.bdd("run", "FEAT-004", *flags)
+                self.assertEqual(code, run_code, out + err)
+                self.assertEqual(self.results("FEAT-004"), {f"EX-004.1.{n}": result for n in (1, 2, 3)})
+
 
 @unittest.skipUnless(HAVE_MAVEN, "set GREENLIGHT_JVM_ADAPTER_TESTS=1 with a JDK and Maven on PATH")
 class SpringContractTest(ScaffoldCase):
@@ -268,6 +348,9 @@ class SpringContractTest(ScaffoldCase):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.bdd("classify", "FEAT-000", "--expect", "green")[0], 0)
 
+    def test_5_titles_that_are_not_plain_ascii_map_to_their_scenarios(self):
+        self.titles_that_are_not_plain_ascii_map_to_their_scenarios(SPRING_UNICODE, "expected-fail", 0)   # no seam outside the sample
+
 
 @unittest.skipUnless(HAVE_GRADLE, "set GREENLIGHT_JVM_ADAPTER_TESTS=1 with a JDK and Gradle on PATH")
 class KotlinContractTest(ScaffoldCase):
@@ -302,6 +385,9 @@ class KotlinContractTest(ScaffoldCase):
         self.assertEqual(code, 0, out + err)
         record = json.loads((self.root / ".bdd/.runs/FEAT-001/latest.json").read_text(encoding="utf-8"))
         self.assertEqual(len(record["cases"]), 2)
+
+    def test_4_titles_that_are_not_plain_ascii_map_to_their_scenarios(self):
+        self.titles_that_are_not_plain_ascii_map_to_their_scenarios(KOTLIN_UNICODE, "pass", 0)
 
 
 @unittest.skipUnless(HAVE_ANDROID, "set GREENLIGHT_JVM_ADAPTER_TESTS=1 with a JDK, Gradle and the Android SDK (ANDROID_HOME)")

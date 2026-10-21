@@ -170,11 +170,16 @@ class RunTest(RunCase):
                 prefix = "-Dname=\\A"
                 self.assertTrue(words[-1].startswith(prefix) and words[-1].endswith("\\z"), words[-1])
                 pattern = words[-1][len(prefix):-2]
-                self.assertTrue(re.fullmatch(pattern, name), "the escaped name must match the name")
-                self.assertFalse(re.fullmatch(pattern, name + "x"), "and nothing longer")
+                self.assertTrue(pattern.isascii(), "plain ASCII, so a Windows code page cannot change it")
+                # Java's and Go's engines read \x{HEX} as a code point; Python's does not, so stand it in for the check
+                code_point = re.compile(r"\\x\{([0-9A-F]+)\}")
+                python_pattern = code_point.sub(lambda found: re.escape(chr(int(found.group(1), 16))), pattern)
+                self.assertTrue(re.fullmatch(python_pattern, name), "the escaped name must match the name")
+                self.assertFalse(re.fullmatch(python_pattern, name + "x"), "and nothing longer")
                 # the same text is also a valid literal in Java's regular expressions: a backslash is only ever put in
-                # front of punctuation, never in front of a letter or a digit, where it would mean something else
-                self.assertTrue(all(not escaped.isalnum() for escaped in re.findall(r"\\(.)", pattern, re.DOTALL)), pattern)
+                # front of punctuation or as \x{HEX}, never in front of a letter or a digit that would mean something else
+                bare = code_point.sub("", pattern)
+                self.assertTrue(all(not escaped.isalnum() for escaped in re.findall(r"\\(.)", bare, re.DOTALL)), pattern)
 
     def test_a_placeholder_in_a_value_is_not_filled_in_again(self):
         rules = cfg.RunRules("x", "{python} run", "--out {out}", isolated="-k {scenario}")

@@ -114,6 +114,15 @@ def pick_all(config: cfg.Config, adapter: str | None) -> list[cfg.RunRules]:
     return [pick_rules(config, adapter)] if adapter else list(config.runs)
 
 
+def regex_escape(text: str) -> str:
+    """A name for a runner that takes a name filter as a regular expression (Java's and Go's engines), so that it matches
+    only itself: every metacharacter is escaped, and every character outside ASCII is written as ``\\x{HEX}``. The second
+    part matters on Windows, where a command line reaching a ``.cmd`` or ``.bat`` launcher (``mvn``, ``gradlew``) is
+    converted to the active code page: a letter that page lacks (an accent on a Chinese system, Chinese on a Western
+    one) arrives as ``?`` and the filter matches nothing. The escaped form is plain ASCII, so it arrives unchanged."""
+    return "".join(f"\\x{{{ord(char):X}}}" if ord(char) > 127 else re.escape(char) for char in text)
+
+
 _PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex)?)\}")
 
 
@@ -130,9 +139,7 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
               "python": sys.executable, "project_python": project_python(root), "tag": tag,
               "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
               "scenario": scenario or "",
-              # for a runner that takes a name filter as a regular expression: every metacharacter escaped, so the name
-              # matches only itself (re.escape leaves letters alone and puts a backslash only before punctuation)
-              "scenario:regex": re.escape(scenario or "")}
+              "scenario:regex": regex_escape(scenario or "")}
     # one pass over each word: a value that contains something that looks like a placeholder is not filled in again
     return [_PLACEHOLDER.sub(lambda found: values[found.group(1)], word) for word in shlex.split(template)]
 
