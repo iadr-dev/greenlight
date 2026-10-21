@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The skills that `bdd install-skills codex` writes now say how to run the command line from Codex (`bdd` is not on the PATH there: `sh "<path>/tools/bdd/bdd" <arguments>`), and the approve skill says that the approval hook has already answered in the model's context, so it repeats that line and stops instead of searching for files. Seen in the first live Codex runs, where the model ran about five exploratory commands before answering.
+
 ### Fixed
 - The end-to-end harness isolates a run from other work on the machine. Three real runs had stopped at the implement gate on integrity violations that other work caused while they ran (the plugin's checkout, the person's Claude Code settings and Codex configuration were edited elsewhere): greenlight refused correctly, but the measurement was wrong. A run now loads a snapshot of the last commit of the plugin (uncommitted changes in the checkout are reported, not loaded) and runs the harness's own `bdd` commands from it, gets a private Codex home and, when Claude Code authenticates through the environment, a private Claude Code folder. Machine-wide files the tripwire watches regardless are hashed before and after (`host_changes`), and a row whose open violations name a file outside the run is marked `contaminated` and left out of the targets (listed under the table). Rows also carry `claude_cost_usd`, `plugin_commit` and `checkout_changes`.
 - `bdd cost FEAT-n --collect` takes an agent's time from the first and last time stamp in its own transcript when the `SubagentStop` payload gives no duration, which it did not in real runs (every phase had 0 seconds).

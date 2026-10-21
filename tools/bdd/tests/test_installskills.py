@@ -49,6 +49,17 @@ class CodexTest(InstallCase):
         self.assertIn(installskills.plugin_root_text() + "/tools/bdd/bdd", text)
         self.assertNotIn("\r", text)
 
+    def test_every_stub_says_how_to_run_the_wrapper_and_only_the_approve_stub_says_to_stop(self):
+        self.assertEqual(self.bdd("codex")[0], 0)
+        wrapper = installskills.plugin_root_text() + "/tools/bdd/bdd"
+        for name in SKILLS:
+            with self.subTest(skill=name):
+                text = self.skill(name).read_text(encoding="utf-8")
+                self.assertIn(f'sh "{wrapper}" <arguments>', text)
+                self.assertIn("`bdd` is not on the PATH in Codex", text)
+                self.assertEqual("Repeat that line and what has to happen first, then stop." in text, name == "approve")
+        self.assertIn("greenlight approval:", self.skill("approve").read_text(encoding="utf-8"))
+
     def test_dry_run_changes_nothing(self):
         code, out, _ = self.bdd("codex", "--dry-run")
         self.assertEqual(code, 0)
