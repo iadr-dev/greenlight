@@ -127,15 +127,18 @@ _PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|se
 
 
 def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed: int | None = None,
-                 scenario: str | None = None) -> list[str]:
-    """The words to run: the by-tag command, the report words, and the shuffle or isolation words if asked."""
+                 scenario: str | None = None, workdir: Path | None = None) -> list[str]:
+    """The words to run: the by-tag command, the report words, and the shuffle or isolation words if asked.
+    ``workdir`` is where the tests run when it is not the project (a temporary worktree): ``{root}`` and ``{base}``
+    name it, while the interpreter is still the project's own."""
     template = " ".join(part for part in (rules.by_tag, rules.report, rules.shuffle if seed is not None else "",
                                           rules.isolated if scenario is not None else "") if part)
     if seed is not None and not rules.shuffle:
         raise UsageError(f"adapter {rules.adapter} has no shuffle words in [adapters.run]")
     if scenario is not None and not rules.isolated:
         raise UsageError(f"adapter {rules.adapter} has no isolated words in [adapters.run]")
-    values = {"root": str(root), "base": str(root / rules.base) if rules.base else str(root),
+    place = workdir or root
+    values = {"root": str(place), "base": str(place / rules.base) if rules.base else str(place),
               "python": sys.executable, "project_python": project_python(root), "tag": tag,
               "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
               "scenario": scenario or "",
@@ -210,12 +213,14 @@ def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] =
     return done.returncode, (done.stdout or "") + (done.stderr or "")
 
 
-def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str, **options) -> tuple[dict, list[junit.Case]]:
+def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str, workdir: Path | None = None,
+            **options) -> tuple[dict, list[junit.Case]]:
     report = folder / f"report-{index}.xml"
     report.unlink(missing_ok=True)
-    words = build_command(rules, root, tag, report, **options)
+    words = build_command(rules, root, tag, report, workdir=workdir, **options)
+    place = workdir or root
     started = time.perf_counter()
-    status, output = execute(words, root, rules.timeout, rules.scrub_env, root / rules.base if rules.base else None)
+    status, output = execute(words, place, rules.timeout, rules.scrub_env, place / rules.base if rules.base else None)
     found = junit.parse_file(report) if report.is_file() else []
     entry = {"adapter": rules.adapter, "command": words, "exit": status, "seconds": round(time.perf_counter() - started, 2),
              "scenario": options.get("scenario"), "report": report.is_file(), "cases": len(found), "tail": output[-TAIL_CHARS:]}
@@ -235,9 +240,12 @@ def fresh_seed() -> int:
 
 
 def run_feature(root: Path, feature_id: str, scenarios: list[dict], adapters: list[cfg.RunRules], *, shuffle: bool = False,
-                isolated: bool = False, seed: int | None = None) -> dict:
+                isolated: bool = False, seed: int | None = None, workdir: Path | None = None,
+                against_red: dict | None = None) -> dict:
     """Run the feature's tests with every adapter in ``adapters`` (one process per scenario when ``isolated``) and
-    record the outcome as one run: the cases of all of them, side by side."""
+    record the outcome as one run: the cases of all of them, side by side. With ``workdir`` the tests run there (the
+    temporary worktree of ``bdd run --against-red``; ``against_red`` says which red it reproduces) while the record,
+    the inputs digest and the interpreter are the project's."""
     folder = runs_dir(root, feature_id)
     folder.mkdir(parents=True, exist_ok=True)
     seed = (seed if seed is not None else fresh_seed()) if shuffle else None
@@ -248,13 +256,15 @@ def run_feature(root: Path, feature_id: str, scenarios: list[dict], adapters: li
             continue                                          # this adapter has no scenario of the feature
         plan = [{"scenario": name} for name in names] if isolated else [{}]
         for options in plan:
-            entry, found = one_run(rules, root, folder, len(runs) + 1, feature_id, seed=seed, **options)
+            entry, found = one_run(rules, root, folder, len(runs) + 1, feature_id, workdir, seed=seed, **options)
             runs.append(entry)
             cases += found
     record = {"schema": SCHEMA, "feature": feature_id, "adapter": ", ".join(r.adapter for r in adapters), "at": store.utc_now(), "inputs": inputs_digest(root, feature_id),
               "interpreter": interpreter_identity(root),
               "mode": "isolated" if isolated else "shuffle" if shuffle else "all", "seed": seed, "runs": runs,
               "cases": [{"name": c.name, "classname": c.classname, "outcome": c.outcome, "text": c.text} for c in cases]}
+    if against_red is not None:
+        record["against_red"] = against_red
     store.write_json(latest_path(root, feature_id), record)
     return record
 
