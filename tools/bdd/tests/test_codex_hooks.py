@@ -492,6 +492,15 @@ class GuardTest(CodexCase):
                 self.assertIsNotNone(self.blocked("Bash", {"command": command}))
         self.assertIsNone(self.blocked("Bash", {"command": "make -C build"}))
 
+    def test_every_spelling_of_a_folder_option_is_read(self):
+        for command in ("git -qC .codex apply x", "make --dir=.codex", "make --direct .codex", "git -C.codex apply x",
+                        "cd x && cp -vt ../.codex a", "cd x && cp --target=../.codex a", "cd x && make -C build",
+                        "make -C", "git --work-tree"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.blocked("Bash", {"command": command}))
+        self.assertEqual(codexguard.option_folders("git -qC repo log; make --dir=b; x -C/z; ls -c; Remove-Item -Confirm a"),
+                         ["repo", "b", "/z"])
+
     def test_after_a_change_of_folder_only_absolute_writes_outside_codexs_folders_go(self):
         target = (self.root / "build" / "out.txt").as_posix()
         self.assertIsNone(self.blocked("Bash", {"command": f"cd src && echo x > {target}"}))

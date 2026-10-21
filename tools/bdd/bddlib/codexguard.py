@@ -170,6 +170,8 @@ def check_where(command: str, cwd: Path, root: Path) -> str | None:
     pointed = [folder for text in readings for folder in option_folders(text)]
     if any(folder is not None and touches_codex_state(folder, cwd, root) for folder in pointed):
         return CONFIG_MESSAGE                    # `make --directory=.codex`, `git -C ~/.codex ...`: whatever it does, it does there
+    if pointed and (None in pointed or any(_MOVE_WORD.search(text) or _SUBSHELL.search(text) for text in readings)):
+        return MOVE_MESSAGE                      # a folder option whose value cannot be read, or one next to a move
     if not guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)):
         return None
     if touches_codex_state(".", cwd, root):
@@ -189,7 +191,6 @@ MOVE_MESSAGE = ("greenlight: this command changes folder and writes, so where th
                 "as its own command, without changing folder, or give it an absolute path.")
 _MOVE_WORD = re.compile(r"(?<!\w)(?:cd|pushd|popd|chdir|set-location|push-location|pop-location|sl)(?![\w.-])",
                         re.IGNORECASE)                       # also `--chdir`, `os.chdir(`, `process.chdir(`
-_DESTINATION_OPTIONS = {"-t", "--target-directory", "-path", "-literalpath", "-destination", "-filepath"}
 _SUBSHELL = re.compile(r"(?:^|[\s;&|(])\(")
 _REDIRECT_TARGET = re.compile(r"\d?>>?\|?\s*([^\s;&|()<>]+)")
 _FILE_VERBS = {"tee", "cp", "mv", "rm", "touch", "truncate", "ln", "install", "chmod", "set-content", "add-content",
@@ -215,10 +216,9 @@ def write_targets(text: str) -> list[str] | None:
         words = [_unquote(word) for word in _WORD.findall(simple)]
         if not words or Path(words[0].replace("\\", "/")).name.casefold() not in _FILE_VERBS:
             continue
-        options = [word for word in words[1:] if word.startswith("-")]
-        if any("=" in word or ":" in word or word.casefold() in _DESTINATION_OPTIONS for word in options):
-            return None
-        targets += [word for word in words[1:] if not word.startswith("-") and word not in (">", ">>")]
+        if any(word.startswith("-") for word in words[1:]):
+            return None                          # an option may say where the file goes (`-t`, `--target`, `-Destination:`)
+        targets += [word for word in words[1:] if word not in (">", ">>")]
     return targets
 
 
@@ -301,13 +301,27 @@ def directory_changes(text: str) -> list[str | None]:
 
 
 def _option_operands(words: list[str]) -> list[str | None]:
-    """The folders named by folder options (`-C dir`, `--directory=dir`, `--chdir dir`); None for one without its value."""
+    """The folders named by folder options: `-C dir`, a short-flag group holding `C` (`-qC dir`), `-C` glued to a path
+    (`-C.codex`, `-C/x`), and any prefix of the long folder options (`--dir=x`, `--direct x`); None for one whose value
+    cannot be read."""
     found: list[str | None] = []
     for index, word in enumerate(words):
-        flag, _, value = _unquote(word).partition("=")
-        if flag == "-C" or flag.casefold() in _DIRECTORY_FLAGS:
-            found.append(value or (_unquote(words[index + 1]) if index + 1 < len(words) else None))
+        word = _unquote(word)
+        following = _unquote(words[index + 1]) if index + 1 < len(words) else None
+        glued = _GLUED_FOLDER.fullmatch(word)
+        if glued:
+            found.append(glued.group(1))
+        elif _SHORT_GROUP.fullmatch(word):
+            found.append(following)
+        elif word.startswith("--"):
+            flag, equals, value = word.partition("=")
+            if len(flag) >= 5 and any(name.startswith(flag.casefold()) for name in _DIRECTORY_FLAGS):
+                found.append((value or None) if equals else following)
     return found
+
+
+_SHORT_GROUP = re.compile(r"-[A-Za-z]{0,3}C[A-Za-z]{0,3}")              # `-C`, `-qC`, `-vCq`; not `-Confirm`, `-c`
+_GLUED_FOLDER = re.compile(r"-[A-Za-z]{0,3}C([./\\~][^\s]*|[A-Za-z]:[/\\][^\s]*)")   # `-C.codex`, `-qC/abs`, `-CC:\x`
 
 
 def option_folders(text: str) -> list[str | None]:
