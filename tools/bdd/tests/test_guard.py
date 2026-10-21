@@ -197,6 +197,29 @@ class BashTest(GuardCase):
             with self.subTest(command=command):
                 self.assertTrue(self.blocked(command), command)
 
+    def test_a_write_verb_inside_quotes_is_still_a_write(self):
+        """A shell started with a quoted script (powershell -Command "...", cmd /c "...", sh -c '...') hides the verb behind a quote."""
+        for command in [
+            'powershell.exe -Command "Add-Content -LiteralPath features/a.feature -Value x"',
+            '"C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe" -Command "Set-Content features/a.feature x"',
+            "powershell -c 'Out-File features/a.feature'",
+            'cmd /c "del features/a.feature"',
+            "sh -c 'rm features/a.feature'",
+            "bash -lc \"sed -i s/a/b/ features/a.feature\"",
+            "powershell -Command {Remove-Item features/a.feature}",
+        ]:
+            with self.subTest(command=command):
+                self.assertTrue(self.blocked(command), command)
+
+    def test_reading_the_same_file_through_a_quoted_shell_is_allowed(self):
+        for command in [
+            'powershell.exe -Command "Get-Content features/a.feature"',
+            "sh -c 'cat features/a.feature'",
+            'cmd /c "type features/a.feature"',
+        ]:
+            with self.subTest(command=command):
+                self.assertFalse(self.blocked(command), command)
+
     def test_a_command_that_changes_directory_first_is_still_caught_by_file_name(self):
         self.assertTrue(self.blocked("cd features && sed -i s/a/b/ a.feature"))
         self.assertTrue(self.blocked("sed -i s/a/b/ a.feature", cwd=self.root / "features"))
