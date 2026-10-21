@@ -48,7 +48,11 @@ def do_run(args: argparse.Namespace) -> int:
     missing = [r for r in record["runs"] if not r["report"]]
     for r in missing:
         print(f"no test report was written by: {' '.join(r['command'])}\n{r['tail']}", file=sys.stderr)
-    return 1 if missing or not record["cases"] else 0
+    empty = [r for r in record["runs"] if r["report"] and not r.get("cases")]
+    for r in empty:
+        print(f"the test report holds no test cases (the runner exited with status {r['exit']}): {' '.join(r['command'])}\n"
+              f"Nothing matched the feature's tag, or the runner found no tests to run. Its output was:\n{r['tail']}", file=sys.stderr)
+    return 1 if missing or empty or not record["cases"] else 0
 
 
 def run_classify(argv: list[str]) -> int:

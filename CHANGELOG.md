@@ -8,6 +8,8 @@ versions follow [SemVer](https://semver.org/).
 ### Fixed
 - Audit item Q4 blocks only on deprecated APIs the change introduces; a deprecation warning that an unchanged dependency or test tool emits on its own is a should-fix for the person. A real end-to-end run had stopped at FINDINGS because of such a warning, which only a dependency upgrade (the person's decision) could clear.
 
+- `bdd run` now fails a run whose test report holds no test cases and prints the runner's exit status and its own output, as it already did for a missing report; every run record carries the number of cases it found. This makes an intermittent first-run failure of the Kotlin contract job in CI diagnosable (it ended with only "no test cases").
+
 ### Changed
 - CI: a newer push to the same pull request cancels the run still in progress for it; runs on `main` are never cancelled.
 
