@@ -18,7 +18,7 @@ standard. Write for them with their current APIs; the project's own tools say wh
    mix them.
 2. Commands:
    - types: `npx tsc --noEmit` (with `"strict": true` in `tsconfig.json`)
-   - lint: `npx eslint .`, with the `@typescript-eslint/no-deprecated` rule set to `error` so a deprecated API fails the check
+   - lint: `npx eslint .`, with the `@typescript-eslint/no-deprecated` rule set to `error` so a deprecated API fails the check (the rule needs type information: set `languageOptions.parserOptions.projectService: true`; `tsc --noEmit` does not report deprecations by itself)
    - format: `npx prettier --check .`
    - Node deprecations as errors in tests: `NODE_OPTIONS=--throw-deprecation` (set by the test script, not by greenlight)
 3. Agents cannot run `npx` or install packages; the orchestrator runs the checks with `bdd check`, and an agent may run the
@@ -46,3 +46,5 @@ standard. Write for them with their current APIs; the project's own tools say wh
 - Mixing CommonJS and ES modules; follow the `type` field and the project's module setting.
 - Unhandled promises (`floating promises`) and `async` functions passed where a callback is expected.
 - Running `npm install`, `npx` of a package that is not already a dependency, or editing `node_modules`: agents may not.
+- A type-aware ESLint setup (`projectService`) reports `Parsing error: ... was not found by the project service` for a JavaScript config file such as `eslint.config.mjs` that `tsconfig.json` does not include: ignore the config file in the ESLint configuration or list it in `allowDefaultProject`, rather than turning type-aware rules off.
+- Run on 2026-10-21 with Node 26, TypeScript 5.9.3, ESLint 9.39.5, typescript-eslint 8 and Prettier 3.9.10 on a small project with a `@deprecated` function: `tsc --noEmit` exited 0 (it does not report the deprecation), `eslint .` exited 1 with `@typescript-eslint/no-deprecated` on the call, `prettier --check .` exited 1 on unformatted files, and `NODE_OPTIONS=--throw-deprecation` turned `new Buffer()` into a thrown error.

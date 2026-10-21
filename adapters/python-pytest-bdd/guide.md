@@ -155,7 +155,9 @@ class MySystem(System):
 
 `World.act()` notes the count before each action; the step compares the difference with the limit. Without the seam the
 step fails as an expected failure and every other scenario is unaffected. SQLAlchemy and Django are imported only when
-their hook is used; nothing is added to the requirements. Savepoints and transaction control are not counted, and an
+their hook is used; nothing is added to the requirements. Both hooks were run against the real libraries (SQLAlchemy 2.1.5
+and Django 5.2 on SQLite, the pinned versions of the repository's tests): a query per record counts as one statement each, and
+savepoints are not counted. Savepoints and transaction control are not counted, and an
 action that runs in another process (the command line) cannot be counted this way. Seed at least three records in a
 scenario about a collection, or the problem cannot show.
 

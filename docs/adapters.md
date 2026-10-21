@@ -56,8 +56,8 @@ go test, dotnet test, cucumber-js, behave, godog, Cucumber-JVM, Reqnroll) give t
 short: one command runs one feature, it writes one JUnit file, each test name contains its scenario name, an unbuilt seam fails with
 `BDD_EXPECTED_MISSING`, and build errors are loud. See `adapters/generic-junit/guide.md`.
 
-The reports of five runners (cucumber-js and behave from real runs, godog, Cucumber-JVM and Reqnroll from their documented
-format) are kept as fixtures in `tools/bdd/tests/fixtures/junit`, and a test checks that each classifies the same way: a missing
+The reports of five runners (cucumber-js, behave, godog, Cucumber-JVM and Reqnroll, all from real runs, with the versions in the fixtures' README)
+are kept as fixtures in `tools/bdd/tests/fixtures/junit`, and a test checks that each classifies the same way: a missing
 seam or a failed assertion is an expected failure, an undefined step is a test defect, and a pass is a pass. The adapter is also
 exercised on two reference apps (`evals/apps/csv-tool`, Go, and `evals/apps/money-lib`, TypeScript) with their own runners in CI.
 

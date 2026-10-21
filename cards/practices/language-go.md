@@ -18,8 +18,8 @@ standard library; raising the Go version or a module version is a decision of th
    - format: `gofmt -l .` prints the files that are not formatted; a non-empty output is a failure (wrap it in a script the project owns, since `gofmt` exits 0)
    - vet: `go vet ./...`
    - static analysis including deprecated use (check SA1019): `staticcheck ./...`, or `golangci-lint run`
-   - build and tests: `go build ./...`, `go test -race ./...`
-   - modules: `go mod tidy` must leave `go.mod` and `go.sum` unchanged
+   - build and tests: `go build ./...`, `go test ./...`, and `go test -race ./...` where cgo and a C compiler are available (see the pitfalls)
+   - modules: `go mod tidy -diff` exits non-zero and prints the change when `go.mod` or `go.sum` is not tidy (Go 1.23 and later)
 3. To have greenlight run them, add tables to `.bdd/config.toml`:
 
    ```toml
@@ -41,3 +41,5 @@ standard library; raising the Go version or a module version is a decision of th
 - `//nolint` without a reason, and `init()` functions with side effects.
 - Adding a module to `go.mod` to avoid a few lines of code; dependencies are the person's decision.
 - A formatter check wired as `gofmt -l` alone: it exits 0 even when files need formatting.
+- `go test -race` needs cgo; without a C compiler (a plain Windows install, for example) it stops with `-race requires cgo`. Run it in CI on Linux, or tell the person, rather than dropping the tests.
+- Run on 2026-10-21 with Go 1.27.3 and staticcheck (latest at the time) on a small module with a deliberate `io/ioutil` use: `gofmt -l`, `go vet`, `go build`, `go test`, `go mod tidy -diff` and `staticcheck ./...` behaved as written (staticcheck exits 1 and reports `SA1019` for the deprecated import); `golangci-lint` was not run.

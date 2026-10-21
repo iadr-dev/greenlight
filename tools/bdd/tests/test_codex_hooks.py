@@ -47,6 +47,18 @@ def run_hook(payload: dict) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def assert_denied(case: unittest.TestCase, result: tuple[int, str, str]) -> dict:
+    """What Codex acts on (checked in a live session): exit 0 and one JSON object on stdout that denies the call."""
+    code, out, err = result
+    case.assertEqual(code, 0)
+    decision = json.loads(out)                                         # stdout is exactly one JSON object
+    body = decision["hookSpecificOutput"]
+    case.assertEqual((body["hookEventName"], body["permissionDecision"]), ("PreToolUse", "deny"))
+    case.assertTrue(body["permissionDecisionReason"].startswith("greenlight:"))
+    case.assertIn(body["permissionDecisionReason"], err)
+    return decision
+
+
 def opt_in(case: "CodexCase") -> None:
     """The person accepts approvals typed in Codex, knowing they are not provenance-verified."""
     case.approval_lines.append("accept_codex = true")
@@ -238,6 +250,18 @@ class GuardTest(CodexCase):
             with self.subTest(command=command):
                 self.assertIsNone(self.blocked("Bash", {"command": command}))
 
+    def test_the_word_codex_as_text_inside_a_quoted_argument_is_not_a_session(self):
+        """Found by the first live Codex run: appending '# edited by codex' to a file was refused as a nested session."""
+        for command in ("Add-Content -LiteralPath 'notes.md' -Value '# edited by codex'", 'echo "run codex exec later"',
+                        "powershell.exe -Command \"Add-Content -Path notes.md -Value 'ask codex about it'\"",
+                        "git commit -m 'document codex hooks'", "Write-Host 'codex'"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.blocked("Bash", {"command": command}))
+        for command in ("powershell.exe -Command \"codex exec x\"", "bash -c \"echo a; codex exec x\"", "cmd /c codex exec x",
+                        "sudo -u me codex exec x", "env FOO=1 codex exec x", "find . -exec codex exec x ;", "(codex exec x)"):
+            with self.subTest(command=command):
+                self.assertIn("another Codex session", self.blocked("Bash", {"command": command}))
+
     def test_the_rules_of_every_project_a_call_touches_apply(self):
         other = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(lambda: __import__("shutil").rmtree(other, ignore_errors=True))
@@ -313,7 +337,7 @@ class GuardTest(CodexCase):
             with self.subTest(tool=tool, tool_input=tool_input):
                 payload = {**tool_call(Path(outside), tool, tool_input)}
                 self.assertIn("locked", codexguard.evaluate(payload))
-                self.assertEqual(run_hook(payload)[0], 2)
+                assert_denied(self, run_hook(payload))
         harmless = tool_call(Path(outside), "Bash", {"command": "echo x > out.txt"})
         self.assertIsNone(codexguard.evaluate(harmless))
         self.assertEqual(run_hook(harmless)[0], 0)
@@ -328,7 +352,7 @@ class GuardTest(CodexCase):
                 payload = tool_call(outside, "apply_patch", tool_input)
                 self.assertIsNone(codexpayload.guard_calls(payload))
                 self.assertIn("cannot be checked", codexguard.evaluate(payload))
-                self.assertEqual(run_hook(payload)[0], 2)
+                assert_denied(self, run_hook(payload))
         nothing = tool_call(outside, "apply_patch", {"input": "no path here"})
         self.assertIsNone(codexguard.evaluate(nothing))
         self.assertEqual(run_hook(nothing)[0], 0)
@@ -342,7 +366,7 @@ class GuardTest(CodexCase):
                 payload = tool_call(outside, "apply_patch", tool_input)
                 self.assertIsNone(codexpayload.guard_calls(payload))
                 self.assertIn("cannot be checked", codexguard.evaluate(payload))
-                self.assertEqual(run_hook(payload)[0], 2)
+                assert_denied(self, run_hook(payload))
         for workdir in (5, "a\0b"):
             self.assertIn("cannot be resolved", codexguard.evaluate(tool_call(outside, "apply_patch", {"input": "garbage", "workdir": workdir})))
 
@@ -359,7 +383,7 @@ class GuardTest(CodexCase):
         naming = tool_call(outside, "Bash", {"command": f"echo x > {target}"})
         harmless = tool_call(outside, "Bash", {"command": "echo hi"})
         with mock.patch.object(codexguard, "evaluate", side_effect=RuntimeError("boom")):
-            self.assertEqual(run_hook(naming)[0], 2)
+            assert_denied(self, run_hook(naming))
             self.assertEqual(run_hook(harmless)[0], 0)
 
     def test_polling_and_a_few_plain_answers_can_be_sent_to_a_running_command(self):
@@ -385,7 +409,7 @@ class GuardTest(CodexCase):
         self.assertIsNone(codexguard.evaluate(free))                                           # reaches no project
         reaching = tool_call(outside, "write_stdin", {"session_id": 1, "chars": f"tee {(self.root / 'steps' / 'steps.py').as_posix()}"})
         self.assertIn("cannot be checked", codexguard.evaluate(reaching))
-        self.assertEqual(run_hook(reaching)[0], 2)
+        assert_denied(self, run_hook(reaching))
 
     def test_nothing_is_held_back_between_chunks_any_more(self):
         self.blocked("write_stdin", {"session_id": 7, "chars": "echo x > steps/ste"})
@@ -408,6 +432,22 @@ class GuardTest(CodexCase):
         for command in ("codex --version", "codex login status", "codex features list", "ls codex-notes"):
             with self.subTest(command=command):
                 self.assertIsNone(self.blocked("Bash", {"command": command}))
+
+    def test_a_project_that_takes_codex_approvals_refuses_every_codex_word_but_others_only_where_a_program_starts(self):
+        """A nested session is the way to forge a Codex approval, so where those are accepted the check does not trust quoting."""
+        text = {"command": "powershell -Command \"Add-Content -LiteralPath notes.txt -Value '# by codex'\""}
+        launcher = {"command": "powershell -Command \"codex exec hello\""}
+        quote_tricks = ({"command": "bash -c 'x=1; codex exec hello'"}, {"command": "sh -c \"echo ok\" \"; codex exec hi\""},
+                        {"command": "echo \"it's\"; echo 'codex' exec hi"})
+        self.assertIsNone(self.blocked("Bash", text))                       # not opted in: text that mentions it is fine
+        self.assertIn("another Codex session", self.blocked("Bash", launcher))
+        opt_in(self)
+        self.assertIn("another Codex session", self.blocked("Bash", text))  # opted in: any `codex` word counts
+        self.assertIn("another Codex session", self.blocked("Bash", launcher))
+        for call in quote_tricks:
+            with self.subTest(command=call["command"]):
+                self.assertIn("another Codex session", self.blocked("Bash", call))
+        self.assertIsNone(self.blocked("Bash", {"command": "codex --version"}))
 
     def test_codexs_own_hook_and_settings_files_cannot_be_written_by_an_agent(self):
         for path in (".codex/hooks.json", "./.codex/config.toml", ".CODEX/Hooks.JSON", "sub/../.codex/config.toml"):
@@ -457,11 +497,26 @@ class GuardTest(CodexCase):
 
 
 class HookTest(CodexCase):
-    def test_a_blocked_call_exits_2_with_the_reason_on_stderr(self):
+    def test_a_blocked_call_is_a_deny_decision_on_stdout_with_exit_0(self):
+        """Observed in a live Codex session: exit 2 with the reason on stderr let the call through, a deny decision stopped it."""
         lock_steps(self)
-        code, out, err = run_hook(tool_call(self.root, "apply_patch", {"input": patch("steps/steps.py")}))
-        self.assertEqual(code, 2)
-        self.assertIn("locked", err)
+        decision = assert_denied(self, run_hook(tool_call(self.root, "apply_patch", {"input": patch("steps/steps.py")})))
+        self.assertIn("locked", decision["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_hook_that_fails_inside_a_project_denies_the_call_instead_of_letting_it_through(self):
+        payload = tool_call(self.root, "Bash", {"command": "ls"})
+        with mock.patch.object(codexhook.codexguard, "evaluate", side_effect=RuntimeError("boom")):
+            decision = assert_denied(self, run_hook(payload))
+        self.assertIn("RuntimeError", decision["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_every_refusal_prints_exactly_one_json_object(self):
+        lock_steps(self)
+        for tool, tool_input in (("apply_patch", {"input": patch("steps/steps.py")}), ("Bash", {"command": "echo x > steps/steps.py"}),
+                                 ("Bash", {})):
+            with self.subTest(tool=tool):
+                _, out, _ = run_hook(tool_call(self.root, tool, tool_input))
+                self.assertEqual(len(out.strip().splitlines()), 1)
+                self.assertIsInstance(json.loads(out), dict)
 
     def test_an_allowed_call_exits_0_and_leaves_the_evidence_that_hooks_ran(self):
         code, _, _ = run_hook(tool_call(self.root, "Bash", {"command": "ls"}))
@@ -482,8 +537,12 @@ class HookTest(CodexCase):
         self.assertEqual(run_hook(prompt)[0], 0)                                    # takes the baseline
         self.assertEqual(run_hook(tool_call(self.root, "Bash", {"command": "ls"}, "PostToolUse"))[0], 0)
         self.write(".codex/hooks.json", "{}")
-        code, _, err = run_hook(tool_call(self.root, "Bash", {"command": "ls"}, "PostToolUse"))
-        self.assertEqual(code, 2)
+        code, out, err = run_hook(tool_call(self.root, "Bash", {"command": "ls"}, "PostToolUse"))
+        self.assertEqual(code, 0)
+        feedback = json.loads(out)                                      # the documented form for the model: decision block and a reason
+        self.assertEqual(set(feedback), {"decision", "reason"})
+        self.assertEqual(feedback["decision"], "block")
+        self.assertIn(".codex", feedback["reason"])
         self.assertIn(".codex", err)
 
     def test_the_tripwire_watches_the_hook_files_in_the_project_and_the_home(self):

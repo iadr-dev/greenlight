@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Fixtures and cards now come from real runs where a toolchain was available: the godog, Cucumber-JVM and Reqnroll JUnit reports (every runner fixture is now a real run), the SQLAlchemy and Django query-counter hooks (contract tests against the real libraries, with both in the pinned hashed dev requirements), and the Go, Python, TypeScript, Next.js and Expo language cards. The runs corrected the cards: `go mod tidy -diff` for the tidy check, `go test -race` needs cgo, `next lint` no longer exists in Next.js 16, `npx expo lint` installs ESLint into a project without one, the TypeScript deprecation rule needs type-aware linting, and the ruff UP rules miss `datetime.utcnow()`. The Kotlin, Swift and Rust cards say plainly that they were not run.
+
 ### Fixed
 - Scenario titles that are not plain ASCII. `bdd classify` mapped a test to its scenario by comparing only the letters a-z and the digits, so a title in Chinese had nothing to compare and an accented one (`Café`) no longer matched the name a runner writes (Reqnroll turns it into `Cafe`): both ended up unmapped and blocked a gate. It now compares the letters and digits of any script, again without accents, and falls back to the example id when a test name carries exactly one. The name filter that `{scenario:regex}` hands to Maven and Gradle for a single-scenario run is now plain ASCII (every character outside ASCII as `\x{HEX}`): Windows converts a command line that reaches `mvn.cmd` or a `.bat` launcher to the active code page, so an accent on a Chinese system (or Chinese on a Western one) arrived as `?` and the filter matched nothing. Found by running an accented, a Chinese and a mixed title on real Reqnroll, Cucumber-JVM and godog; the contract tests of the Go, .NET, Spring and Kotlin adapters now do the same, in the usual order, shuffled and one scenario per process.
 - The intermittent `kotlin-android` failure with "no test cases" (about one run in thirty, on every operating system): the Kotlin template compiled a `compareBy { }` comparator into an inlined anonymous class whose `InnerClasses` entry disagrees with its outer class, and Cucumber's glue scan failed with `IncompatibleClassChangeError` whenever it examined that class first; the test report then held no cases. The comparator is now a plain lambda for the interface.
@@ -13,6 +16,18 @@ versions follow [SemVer](https://semver.org/).
 - macOS runners for the contract jobs of the Go, .NET, Spring and Kotlin adapters.
 
 ### Fixed
+
+- In a project that takes approvals typed in Codex (`[approvals] accept_codex = true`), the nested-session check counts every `codex` word again, whatever quotes surround it: a nested session is how such an approval could be forged, and the relaxed reading of quoted text added with the false-positive fix could be fooled by quoting tricks. Without the opt-in the relaxed rule stays, because Codex approvals are refused there anyway.
+
+### Fixed
+
+- The cost per phase is recorded by the tools and not estimated by the model. A real end-to-end run had recorded one invented figure for the discover phase and nothing for the others, although every agent's completion notice carried its own. The plugin now registers a `SubagentStop` hook (`bdd subagent-stop`) that notes each finished agent of the plugin, and `bdd cost FEAT-n --collect` records the phase's seconds from the hook and its tokens from the agent's own transcript; `bdd status` names a passed phase with no cost record. The feature skill tells the orchestrator to collect after every agent and never to estimate.
+- The `cards_read` metric of the evaluation was always empty: the agents, not the orchestrator, read the cards, and their transcripts were not read. The collector now reads the subagent transcripts too and counts a card only when a Read, Bash, Grep or Glob call names it.
+
+### Fixed
+
+- Found by the first live Codex run (codex-cli 0.142.3 on Windows): the Codex PreToolUse hook refused a call with exit status 2 and the reason on stderr, which Codex did not act on, so a locked spec could be edited (the tripwire noticed afterwards). A refusal is now the `permissionDecision: deny` decision on stdout with exit 0, which stopped the same edit, and the tripwire's finding after a call is a `decision: block` with a reason. The nested-session check also no longer refuses a command that merely has the word `codex` inside a quoted argument (`-Value '# edited by codex'`); a `codex` program word outside quotes, or at the start of a command inside a quoted script, is still refused. An opt-in live test (`tests/test_codex_live.py`) and platform note P31 record the procedure.
+
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 
 ### Fixed
