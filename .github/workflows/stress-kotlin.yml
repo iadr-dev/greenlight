@@ -1,9 +1,11 @@
 name: Stress the Kotlin adapter contract
 
-# Run by hand (Actions > Stress the Kotlin adapter contract > Run workflow). It repeats the first contract test of the
+# Run by hand (Actions > Stress the Kotlin adapter contract > Run workflow), and by a pull request that changes this file. It repeats the first contract test of the
 # kotlin-android adapter many times, each time on a fresh scaffold, and prints everything a failing iteration said, so an
 # intermittent failure can be read instead of guessed at.
 on:
+  pull_request:
+    paths: [".github/workflows/stress-kotlin.yml"]
   workflow_dispatch:
     inputs:
       iterations:
@@ -40,7 +42,7 @@ jobs:
       - name: Repeat the first contract test
         shell: bash
         env:
-          ITERATIONS: ${{ inputs.iterations }}
+          ITERATIONS: ${{ inputs.iterations || '25' }}
           GRADLE_HOME_MODE: ${{ matrix.gradle-home }}
         run: |
           failures=0
