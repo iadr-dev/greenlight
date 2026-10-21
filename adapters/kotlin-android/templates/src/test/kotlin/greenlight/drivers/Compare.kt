@@ -36,8 +36,13 @@ object Compare {
     fun text(table: List<List<String>>?, docString: String?): String =
         docString ?: table.orEmpty().joinToString("") { it.joinToString(",") + "\n" }
 
-    /** A stable order for comparing record sets where the order does not matter. */
-    val byContent: Comparator<Map<String, Any?>> = compareBy { Json.write(it) }
+    /**
+     * A stable order for comparing record sets where the order does not matter. Written as a lambda for the interface, not
+     * with `compareBy { }`: Kotlin 2.4 compiles that to an inlined anonymous class whose `InnerClasses` entry disagrees
+     * with its outer class, and Cucumber's glue scan trips over it in about one run in thirty (IncompatibleClassChangeError,
+     * a test report with no cases).
+     */
+    val byContent: Comparator<Map<String, Any?>> = Comparator { first, second -> Json.write(first).compareTo(Json.write(second)) }
 
     fun assertEqual(actual: Any?, expected: Any?, what: String) {
         if (!same(actual, expected)) {

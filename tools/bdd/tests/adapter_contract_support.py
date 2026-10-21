@@ -56,6 +56,40 @@ Feature: Orders
       Then the request succeeds
 """
 
+UNICODE_TITLES = """@FEAT-004
+Feature: Titles that are not plain ASCII
+
+  @R-004.1
+  Rule: A scenario keeps its title whatever the language
+
+    @EX-004.1.1
+    Scenario: Café: two numbers are added
+      When add is called with:
+        | a | b |
+        | 2 | 3 |
+      Then the result is:
+        \"\"\"
+        5
+        \"\"\"
+
+    @EX-004.1.2
+    Scenario: 兩個數字相加
+      When add is called with:
+        | a | b |
+        | 4 | 5 |
+      Then the result is:
+        \"\"\"
+        9
+        \"\"\"
+
+    @EX-004.1.3
+    Scenario: 負數會被拒絕 (a negative number is refused)
+      When add is called with:
+        | a  | b |
+        | -1 | 3 |
+      Then the call fails with negative input
+"""
+
 RED = {"EX-003.1.1": "expected-fail", "EX-003.1.2": "expected-fail", "EX-003.1.3": "test-defect",
        "EX-003.1.4": "expected-fail", "EX-003.1.5": "test-defect"}
 
@@ -117,7 +151,7 @@ class ContractSteps:
         cls.root = Path(cls.dir.name).resolve()
         (cls.root / ".bdd").mkdir()
         adapter.apply(cls.root, cls.ADAPTER)
-        for number, title in ((0, "Sample"), (2, "Core"), (3, "Orders")):
+        for number, title in ((0, "Sample"), (2, "Core"), (3, "Orders"), (4, "Unicode")):
             state.create(cls.root, f"FEAT-{number:03d}", title, "standard")
 
     @classmethod
@@ -160,6 +194,18 @@ class ContractSteps:
         results = self.results("FEAT-002")
         self.assertEqual({k: v for k, v in results.items() if k != "EX-002.2.1"}, {f"EX-002.1.{n}": "pass" for n in range(1, 10)})
         self.assertEqual(results["EX-002.2.1"], "expected-fail")
+
+    def test_5_scenario_titles_that_are_not_plain_ascii_still_map_to_their_scenarios(self):
+        """The title is typed with an accent, in Chinese and mixed with ASCII: the report must still say which scenario ran,
+        in the usual order, shuffled and one scenario per process (the scenario name goes to the runner as a filter)."""
+        self.use_system(full=False)
+        (self.root / "tests" / "features" / "unicode.feature").write_text(UNICODE_TITLES, encoding="utf-8", newline="\n")
+        for flags in ((), ("--shuffle", "--seed", "3"), ("--isolated",)):
+            with self.subTest(flags=flags):
+                code, out, err = self.bdd("run", "FEAT-004", *flags)
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(self.results("FEAT-004"), {f"EX-004.1.{n}": "pass" for n in (1, 2, 3)})
+                self.assertEqual(self.bdd("classify", "FEAT-004", "--expect", "green")[0], 0)
 
     def test_4_the_scaffold_passes_the_scan_and_the_lint(self):
         self.use_system(full=False)

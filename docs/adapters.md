@@ -33,11 +33,16 @@ from the first run.
   `adapters/dotnet-reqnroll/guide.md`.
 
 Detection suggests them from `go.mod` and from `*.csproj`/`*.sln`. In CI, each adapter has a job that scaffolds it into a
-temporary project and runs the sample feature, every core step and a red phase for real.
+temporary project and runs the sample feature, every core step and a red phase for real, on Linux, Windows and macOS.
+
+A scenario title in another script or with accents (Chinese, an accented Latin letter, or both mixed with ASCII) maps to its
+scenario on every adapter: `bdd classify` compares the letters and digits of any script, again without accents, and falls
+back to the example id when a test name carries it. Reqnroll, for example, writes `Café: two numbers` as `CafeTwoNumbers`.
+The contract tests run such titles in the usual order, shuffled and one scenario per process.
 
 ## The JVM adapters
 
-`java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters runs alone. Two limits are worth knowing before you choose:
+`java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests on Linux, Windows and macOS: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters, or written in Chinese or with accents, runs alone. The name filter reaches Maven and Gradle as plain ASCII (characters outside ASCII as `\x{HEX}`), because Windows converts a command line that reaches a `.cmd` or `.bat` launcher to the active code page. Two limits are worth knowing before you choose:
 
 - **Android.** The scenarios are local JVM unit tests. Code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine, and screens (Compose, Espresso) need a device or emulator and stay outside this adapter. The guide says exactly what is covered.
 - **Network.** The JVM has no process-wide hook for raw sockets, so the Spring adapter's network guard covers the JDK HTTP client and `HttpURLConnection` only; run the tests without network access in CI for the rest.
