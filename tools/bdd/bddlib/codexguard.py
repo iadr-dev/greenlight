@@ -104,11 +104,18 @@ def reaches_home_by_glob(flattened: str, root: Path | None) -> bool:
     for word in guard._TOKEN_BREAKS.split(flattened):
         if not guard._GLOB.search(word) or not (word.startswith(("/", "~")) or re.match(r"[a-z]:/", word)):
             continue
-        parts = os.path.expanduser(word).replace("\\", "/").casefold().split("/")
-        for base in protected_roots(root):
-            wanted = base.split("/")
-            if len(parts) >= len(wanted) and all(fnmatch.fnmatchcase(name, pattern) for name, pattern in zip(wanted, parts)):
-                return True
+        if glob_reaches_home(os.path.expanduser(word), root):
+            return True
+    return False
+
+
+def glob_reaches_home(path_glob: str, root: Path | None) -> bool:
+    """Could this absolute glob expand into one of Codex's protected folders? Matched part by part against each folder."""
+    parts = [guard.shell_pattern(part) for part in path_glob.replace("\\", "/").split("/")]
+    for base in protected_roots(root):
+        wanted = base.split("/")
+        if len(parts) >= len(wanted) and all(fnmatch.fnmatchcase(name, pattern) for name, pattern in zip(wanted, parts)):
+            return True
     return False
 
 
@@ -154,15 +161,46 @@ def check_path(path: str, cwd: Path, root: Path | None) -> str | None:
 
 
 def check_where(command: str, cwd: Path, root: Path) -> str | None:
-    """A command that writes, run from inside Codex's own folders or moving into one first (`cd`, `pushd`, `-C`), writes
-    there whatever file name it uses."""
+    """A command that writes, run from inside Codex's own folders or moving into one first (`cd`, `pushd`, `-C`, followed
+    in order, each from the one before), writes there whatever file name it uses; a relative glob is matched from every
+    folder it may run in. A write after a move that cannot be followed is refused: where it lands is unknown."""
     if not guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)):
         return None
-    folders = [cwd] + [place for text in [command, *guard.shell_readings(command)]
-                       for place in (resolve_word(word, cwd) for word in directory_operands(text)) if place is not None]
+    folders, unresolved = visited_folders(command, cwd)
+    if unresolved:
+        return MOVE_MESSAGE
     if any(touches_codex_state(".", folder, root) for folder in folders):
         return CONFIG_MESSAGE
+    relative_globs = [word for text in [command, *guard.shell_readings(command)] for word in guard._TOKEN_BREAKS.split(text)
+                      if guard._GLOB.search(word) and not path_like_absolute(word)]
+    if any(glob_reaches_home(_key(folder) + "/" + word, root) for folder in folders for word in relative_globs):
+        return CONFIG_MESSAGE
     return None
+
+
+MOVE_MESSAGE = ("greenlight: this command changes to a folder that cannot be worked out (`cd -`, an option without its folder, "
+                "or a path that does not resolve) and then writes, so where the write lands cannot be checked.")
+
+
+def path_like_absolute(word: str) -> bool:
+    return word.startswith(("/", "\\", "~")) or bool(re.match(r"[A-Za-z]:[/\\]", word))
+
+
+def visited_folders(command: str, cwd: Path) -> tuple[list[Path], bool]:
+    """Every folder the command may write from: where it starts, and each folder a move goes to, in order, resolved from the
+    folder before it (and from the start again for each way a shell could read the command). Whether a move could not be
+    followed comes with them."""
+    folders, unresolved = [cwd], False
+    for text in [command, *guard.shell_readings(command)]:
+        here = cwd
+        for operand in directory_changes(text):
+            place = resolve_word(operand, here) if operand is not None else None
+            if place is None:
+                unresolved = True
+                continue
+            here = place
+            folders.append(place)
+    return folders, unresolved
 
 
 def codex_reason(call: dict, cwd: Path, root: Path) -> str | None:
@@ -191,15 +229,62 @@ UNRESOLVED_MESSAGE = ("greenlight: this command names a path that cannot be reso
                       "against the locks of the projects it might touch.")
 
 
-_CHANGES_DIRECTORY = re.compile(r"(?:^|[\s;&|(`{])(?:cd|pushd|chdir|set-location|sl|push-location)\s+"
-                                r"(?:-(?:literalpath|path|l|p)\s+)?[\"']?([^\s;&|()`\"']+)", re.IGNORECASE)
-_DIRECTORY_OPTION = re.compile(r"(?:^|\s)(?:-C|--directory|--git-dir|--work-tree|--prefix|--cwd|--dir)(?:\s+|=)[\"']?([^\s;&|()`\"']+)")
+MOVES = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
+_VALUE_OPTIONS = {"-path", "-literalpath", "-lp"}                     # PowerShell: the folder follows the option
+_DIRECTORY_FLAGS = {"--directory", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir"}   # and `-C`, exactly
+_SIMPLE = re.compile(r"&&|\|\||[;&|\n()`{}]")
+_WORD = re.compile(r"\"[^\"]*\"|'[^']*'|[^\s\"']+")
+
+
+def _unquote(word: str) -> str:
+    return word[1:-1] if len(word) >= 2 and word[0] == word[-1] and word[0] in "\"'" else word
+
+
+def _move_operand(words: list[str]) -> str | None:
+    """The folder a `cd`-like command goes to: the first argument that is not an option (`-P`, `-L`, `--`); a PowerShell
+    `-Path x` gives `x`; no argument at all means the home folder. None when it cannot be told (`cd -`, a lone option)."""
+    rest = words[1:]
+    if not rest:
+        return "~"
+    index = 0
+    while index < len(rest):
+        word = _unquote(rest[index])
+        if word.casefold() in _VALUE_OPTIONS:
+            return _unquote(rest[index + 1]) if index + 1 < len(rest) else None
+        if word == "--":
+            return _unquote(rest[index + 1]) if index + 1 < len(rest) else None
+        if word.casefold() == "/d":                                  # cmd's `cd /d C:\folder`
+            index += 1
+            continue
+        if not word.startswith("-"):
+            return word
+        index += 1
+    return None
+
+
+def directory_changes(text: str) -> list[str | None]:
+    """In order, the folders a command moves into or points a program at (`cd tests`, `pushd -- ../other`, `Set-Location
+    -Path x`, `git -C repo`, `make --directory=build`), bare names included; None for a move whose folder cannot be told."""
+    found: list[str | None] = []
+    for simple in _SIMPLE.split(text):
+        words = _WORD.findall(simple)
+        if not words:
+            continue
+        if Path(_unquote(words[0]).replace("\\", "/")).name.casefold() in MOVES:
+            found.append(_move_operand(words))
+            continue
+        for index, word in enumerate(words):
+            flag, _, value = _unquote(word).partition("=")
+            if flag == "-C" or flag.casefold() in _DIRECTORY_FLAGS:
+                operand = value or (_unquote(words[index + 1]) if index + 1 < len(words) else None)
+                found.append(operand)
+    return found
 
 
 def directory_operands(text: str) -> list[str]:
-    """The folders a command moves into or points a program at (`cd tests`, `pushd ../other`, `git -C repo`, `make -C dir`),
-    bare names included: a relative write after `cd` lands in that folder, so its project's rules apply."""
-    return [*_CHANGES_DIRECTORY.findall(text), *_DIRECTORY_OPTION.findall(text)]
+    """The folders a command moves into or points a program at, bare names included: a relative write after `cd` lands in
+    that folder, so its project's rules apply."""
+    return [operand for operand in directory_changes(text) if operand is not None]
 
 
 def path_like(word: str) -> bool:

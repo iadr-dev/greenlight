@@ -375,12 +375,17 @@ _TOKEN_BREAKS = re.compile(r"[\s;&|()`<>=\"']+")          # a path starts after 
 _WILDCARDS_ONLY = re.compile(r"[*?\[\]]*")
 
 
+def shell_pattern(segment: str) -> str:
+    """A shell glob as ``fnmatch`` reads it: case-folded, and `[^x]` (a negated class to a shell) written `[!x]`."""
+    return segment.casefold().replace("[^", "[!")
+
+
 def glob_matches(name: str, segment: str) -> bool:
     """Would the shell glob ``segment`` match the file name ``name`` (which starts with a dot)? A glob that starts with a
     dot matches it as it is; one that does not matches it only when the shell's dotglob option is on, so it is tried
     against the name without its dot, but only if it has a literal character (`b*`, `ru?s`): a bare `*` is everywhere.
     `[^x]` means `[!x]` to a shell."""
-    pattern = segment.casefold().replace("[^", "[!")
+    pattern = shell_pattern(segment)
     if pattern.startswith("."):
         return fnmatch.fnmatchcase(name, pattern)
     return not _WILDCARDS_ONLY.fullmatch(pattern) and fnmatch.fnmatchcase(name.lstrip("."), pattern)
@@ -412,7 +417,7 @@ def glob_reaches_rollout(text: str) -> bool:
                 continue
             literal = segment[:match.start()].casefold()
             spells_it = bool(literal) and (_ROLLOUT_PREFIX.startswith(literal) or literal.startswith(_ROLLOUT_PREFIX))
-            if spells_it and fnmatch.fnmatchcase(_ROLLOUT_SAMPLE, segment.casefold().replace("[^", "[!")):
+            if spells_it and fnmatch.fnmatchcase(_ROLLOUT_SAMPLE, shell_pattern(segment)):
                 return True
     return False
 
@@ -560,11 +565,11 @@ def glob_reaches_claude(text: str) -> bool:
     for token in re.split(r"[\s;&|()`]+", text):
         segments = token.split("/")
         for position, segment in enumerate(segments):
-            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(".claude", segment.casefold()):
+            if segment.startswith(".") and _GLOB.search(segment) and fnmatch.fnmatchcase(".claude", shell_pattern(segment)):
                 return True
             following = segments[position + 1] if position + 1 < len(segments) else ""
             if segment.casefold() == ".claude" and _GLOB.search(following) and any(
-                    fnmatch.fnmatchcase(name, following.casefold()) for name in (*SETTINGS_NAMES, *CLAUDE_PROTECTED_DIRS)):
+                    fnmatch.fnmatchcase(name, shell_pattern(following)) for name in (*SETTINGS_NAMES, *CLAUDE_PROTECTED_DIRS)):
                 return True
     return False
 

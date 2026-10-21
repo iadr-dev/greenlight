@@ -470,7 +470,40 @@ class GuardTest(CodexCase):
         self.assertIn(other.resolve(), [p.resolve() for p in projects])
         self.assertFalse(unresolved)
         self.assertEqual(codexguard.directory_operands("git -C repo status; make --directory=build; Set-Location -Path 'x'"),
-                         ["x", "repo", "build"])
+                         ["repo", "build", "x"])
+
+    def test_folder_changes_are_read_like_a_shell_reads_them(self):
+        self.assertEqual(codexguard.directory_changes("cd -P -- dir && echo x > a"), ["dir"])
+        self.assertEqual(codexguard.directory_changes("cd -L -P sub; pushd 'with space'"), ["sub", "with space"])
+        self.assertEqual(codexguard.directory_changes("cd"), ["~"])
+        self.assertEqual(codexguard.directory_changes("cd -"), [None])
+        self.assertEqual(codexguard.directory_changes("Set-Location -LiteralPath"), [None])
+        self.assertEqual(codexguard.directory_changes("bash -c 'echo hi'; python -c x"), [])   # `-c` is not `-C`
+
+    def test_chained_moves_are_followed_in_order_each_from_the_one_before(self):
+        (self.home.parent / "a" / "b").mkdir(parents=True)
+        start = self.home.parent / "a" / "b"
+        name = self.home.name
+        for command in (f"cd ..; cd ../{name}; echo x > config.toml", f"cd .. && cd .. && cd {name} && Set-Content hooks.json x",
+                        f"cd -P -- ../.. && echo x > {name[:-2]}*/config.toml"):
+            with self.subTest(command=command):
+                self.assertIn("keep greenlight's hooks running",
+                              codexguard.evaluate(tool_call(self.root, "Bash", {"command": command, "workdir": str(start)})))
+        self.assertIsNone(codexguard.evaluate(tool_call(self.root, "Bash", {"command": "cd ..; cd ..; cat config.toml",
+                                                                             "workdir": str(start)})))
+
+    def test_a_write_after_a_move_that_cannot_be_followed_is_refused(self):
+        for command in ("cd - && echo x > a.txt", "Set-Location -Path; Add-Content a.txt x"):
+            with self.subTest(command=command):
+                self.assertIn("cannot be worked out", self.blocked("Bash", {"command": command}))
+        self.assertIsNone(self.blocked("Bash", {"command": "cd - && ls"}))
+
+    def test_a_negated_class_in_a_glob_is_read_as_a_shell_reads_it(self):
+        moved = self.home.as_posix()
+        negated = moved[:-1] + "[^x]"                                   # the last letter as a negated class
+        for command in (f"echo x > {negated}/config.toml", "echo x > .co[^x]ex/hooks.json", "tee ro[^x]lout-*.jsonl < f"):
+            with self.subTest(command=command):
+                self.assertIn("keep greenlight's hooks running", self.blocked("Bash", {"command": command}))
 
     def test_codexs_own_hook_and_settings_files_cannot_be_written_by_an_agent(self):
         for path in (".codex/hooks.json", "./.codex/config.toml", ".CODEX/Hooks.JSON", "sub/../.codex/config.toml"):
