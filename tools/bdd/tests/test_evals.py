@@ -1,5 +1,6 @@
 """The evaluation collector and the summary table, on canned run directories (no model, no network)."""
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -115,13 +116,23 @@ class CollectRowTest(unittest.TestCase):
         row = collect.collect_row(canned({("status", "--json"): (0, json.dumps({"features": [], "open_violations": 0}))}), self.project)
         self.assertEqual(row, {"features": 0, "open_violations": 0})
 
-    def test_cards_read_come_from_the_transcript_when_there_is_one(self):
-        transcript = self.project / "session.jsonl"
-        transcript.write_text('{"file_path": "C:\\\\plugin\\\\cards\\\\techniques\\\\decision-table.md"}\n'
-                              '{"file_path": "/p/cards/practices/python.md"}\n', encoding="utf-8")
+    def test_cards_read_are_the_cards_the_agents_opened_with_a_reading_tool(self):
+        """The shapes are those of a real run: the orchestrator's transcript, and one transcript per subagent beside it, where the
+        cards are read (with ``cat`` in a Bash call or with Read). A prompt that names a card, or a Write of a file called like a
+        card, is not a read."""
+        shutil.copytree(Path(__file__).parent / "fixtures" / "transcript", self.project / "claude")
+        transcript = self.project / "claude" / "session.jsonl"
         self.assertEqual(collect.cards_read(transcript), ["practices/python.md", "techniques/decision-table.md"])
+        self.assertEqual(collect.cards_read(transcript.parent / "session" / "subagents" / "agent-aaa111.jsonl"),
+                         ["practices/python.md", "techniques/decision-table.md"])
         self.assertIsNone(collect.cards_read(None))
         self.assertIsNone(collect.cards_read(self.project / "missing.jsonl"))
+
+    def test_a_session_without_subagents_reads_no_cards_instead_of_failing(self):
+        lone = self.project / "lone.jsonl"
+        lone.write_text('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}\n'
+                        "not json\n", encoding="utf-8")
+        self.assertEqual(collect.cards_read(lone), [])
 
 
 class TargetsAndTableTest(unittest.TestCase):
