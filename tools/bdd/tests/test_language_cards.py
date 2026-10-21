@@ -28,7 +28,9 @@ def card_commands(language: str) -> set[str]:
 
 
 def normalised(text: str) -> str:
-    return re.sub(r"\s+", " ", text.replace("$swift_format", "swift-format"))
+    """The check's text with the spellings the card does not use: the resolved swift-format, and `--quiet` (the check
+    keeps the log short, the card gives the command a person types)."""
+    return re.sub(r"\s+", " ", text.replace("$swift_format", "swift-format")).replace(" --quiet", "")
 
 
 class LanguageCardChecksTest(unittest.TestCase):

@@ -91,7 +91,12 @@ echo "      what ktlintFormat changed:"
 diff Pricing.kt.before src/main/kotlin/pricing/Pricing.kt | sed 's/^/        /' || true
 expect_pass "compile with warnings as errors once the deprecated call is replaced" ./gradlew compileKotlin --quiet
 expect_pass "ktlintCheck on formatted code" ./gradlew ktlintCheck --quiet
-expect_pass "detekt with named constants" ./gradlew detekt --quiet
+expect_fail "ktlint allows 140 characters and detekt 120, so the two disagree" ./gradlew detekt --quiet
+
+printf 'root = true\n\n[*.{kt,kts}]\nmax_line_length = 120\n' > .editorconfig
+expect_pass "ktlintFormat with the line length detekt uses, from .editorconfig" ./gradlew ktlintFormat --quiet
+expect_pass "ktlintCheck with the shared line length" ./gradlew ktlintCheck --quiet
+expect_pass "detekt with named constants and the shared line length" ./gradlew detekt --quiet
 expect_pass "build, linters included, on clean code" ./gradlew build -x test --quiet
 expect_pass "the tests" ./gradlew test --quiet
 
