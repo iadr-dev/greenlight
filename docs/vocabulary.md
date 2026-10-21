@@ -9,6 +9,36 @@ A project adds its own phrases in `.bdd/vocabulary.toml`, each composed from the
 The project glossary (`.bdd/glossary.md`) gives the domain words (entities, actors, roles, operations) that fill the
 placeholders.
 
+## Style warnings
+
+Besides errors, `bdd lint` warns about the shape of a feature file. A warning never stops a gate or changes the exit
+code; it is there so that the scenarios stay easy to read and to review.
+
+| Code | Warns about |
+|---|---|
+| `L015` | steps out of order: Given, When, Then, each phase once (a second When/Then is a second scenario) |
+| `L016` | a scenario with more than 10 steps |
+| `L017` | placeholder data (`foo`, `bar`, `baz`, `lorem`, `asdf`, `xxx`, `test`) in steps or tables, unless the scenario is about invalid input (a title with "invalid", "malformed", "nonsense", "garbage" or "gibberish", or an `@invalid-input` tag) |
+| `L018` | a `Background` that only one scenario uses |
+| `L019` | a `Scenario Outline` with one example row, or rows that differ only in case or spacing |
+| `L020` | a scenario with no title, or text under its title |
+| `L021` | indentation that is not two spaces per level (a `Rule` adds a level; tabs are reported as tabs) |
+| `L022` | a line longer than 120 characters (doc strings excepted) |
+| `L023` | a blank line between two steps of one scenario |
+| `L024` | no blank line between two scenarios that follow each other |
+| `L025` | a file name that is not kebab-case |
+
+A second `Feature` in one file and an `Or` step keyword stay parse errors (`L001`). A project can silence a style
+warning it disagrees with, never an error, in `.bdd/config.toml`:
+
+```toml
+[lint]
+ignore = ["L022", "L025"]
+```
+
+The `gherkin-style` card covers what the lint cannot judge: one behaviour per scenario, independent concerns kept apart,
+state over navigation, a minimal `Given`, and `Scenario Outline` only for one behaviour with different inputs.
+
 ## Profiles
 
 An adapter declares the profiles it supports; a project uses the instructions of those profiles.

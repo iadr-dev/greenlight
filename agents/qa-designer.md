@@ -21,7 +21,9 @@ Run the **test-design** or **examples** playbook named in your task (`phases/tes
   search, a report, anything that loads several records), seed at least three records so that a query per record
   can show, and end it with a `{operation} ran at most {count:int} queries` step whose number comes from the
   design, not from what the code does today. Read the `C.QUERY.COUNT` and `database-performance` cards.
-- Check your work with `bdd lint` and `bdd trace FEAT-n` and fix what they report.
+- Read the `gherkin-style` card before writing the scenarios: one behaviour each, no independent concerns bundled,
+  state over navigation, a minimal `Given`. Check your work with `bdd lint` and `bdd trace FEAT-n` and fix what they
+  report, including the style warnings (`L015` to `L025`).
 
 ## What you must not do
 

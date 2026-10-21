@@ -12,6 +12,7 @@ ALL_PROFILES = ("base", "api", "ui", "cli", "lib", "data")
 DEFAULT_SIMILARITY = 0.85
 BDD_DIR = ".bdd"
 ENFORCEMENT_MODES = ("auto", "hard", "soft")
+LINT_STYLE_CODES = tuple(f"L{n:03d}" for n in range(15, 26))      # the style warnings of `bdd lint` a project may silence
 SCHEMA_VERSION = 1                       # of .bdd/ as a whole; `version` in config.toml, absent means 1
 
 
@@ -164,6 +165,7 @@ class Config:
     quality: QualityRules | None = None      # the first adapter that has an [adapters.quality] table
     stability_runs: int = 0                  # [stability] runs: how often the verify gate wants the feature rerun (0: not asked)
     workspace: tuple[Member, ...] = ()       # the other repositories of a feature that spans several
+    lint_ignore: tuple[str, ...] = ()        # [lint] ignore: style warnings (never errors) the project silences
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -340,6 +342,17 @@ def _stability_runs(data: dict, path: Path) -> int:
     return runs
 
 
+def _lint_ignore(data: dict, path: Path) -> tuple[str, ...]:
+    table = data.get("lint", {})
+    codes = table.get("ignore", []) if isinstance(table, dict) else None
+    if not isinstance(codes, list) or not all(isinstance(code, str) for code in codes):
+        raise ConfigError(f"{path}: [lint] ignore must be a list of codes")
+    unknown = [code for code in codes if code not in LINT_STYLE_CODES]
+    if unknown:
+        raise ConfigError(f"{path}: [lint] ignore may only name style warnings ({LINT_STYLE_CODES[0]} to {LINT_STYLE_CODES[-1]}); errors cannot be silenced: {', '.join(unknown)}")
+    return tuple(dict.fromkeys(codes))
+
+
 def _schema_version(data: dict, path: Path) -> int:
     version = data.get("version", 1)
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -434,4 +447,5 @@ def load(root: Path | str | None) -> Config:
         quality=next((r for r in (_quality_rules(a, path) for a in data.get("adapters", [])) if r), None),
         stability_runs=_stability_runs(data, path),
         workspace=_workspace(root, data, path),
+        lint_ignore=_lint_ignore(data, path),
     )

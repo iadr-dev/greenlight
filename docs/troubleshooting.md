@@ -44,6 +44,7 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 
 | Symptom | Cause and fix |
 |---|---|
+| `bdd lint` L015 to L025 | Style warnings, not errors: see [the vocabulary](vocabulary.md#style-warnings). Fix the scenario, or list a code you disagree with under `[lint] ignore` in `.bdd/config.toml`. |
 | `bdd lint` L002 | The step is not in the [vocabulary](vocabulary.md); the message suggests the closest phrase. Add a project step only if the behaviour is real. |
 | `bdd design` D5, D6 | Diagrams must be plain text; list only interfaces that exist in `system.md`. |
 | `bdd trace` shows a gap | A rule without examples or an example without a test; the code names which. |

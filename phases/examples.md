@@ -26,7 +26,7 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    records and end it with `<operation> ran at most N queries` (card `C.QUERY.COUNT`): with fewer rows a query per
    record does not show. Take N from the design (one query for the list plus one per related collection loaded
    together), not from what the code does today.
-5. Run `bdd lint` and fix everything it reports. `bdd trace FEAT-n` must show no gaps between rules, examples
+5. Run `bdd lint` and fix everything it reports, warnings (style) included. `bdd trace FEAT-n` must show no gaps between rules, examples
    and scenarios.
 6. Show the person the scenarios.
 
@@ -43,7 +43,9 @@ rules approved.
 
 ## Pitfalls
 
-- Scenarios that describe how (clicks, requests) instead of what. Declarative style, one behaviour each.
+- Scenarios that describe how (clicks, requests) instead of what. Declarative style, one behaviour each; read the
+  `gherkin-style` card, and fix what `bdd lint` warns about (`L015` to `L025`: order of steps, length, placeholder data,
+  layout) before showing the scenarios to the person.
 - A scenario with several actions. One When per scenario.
 - Missing trace tags, or two examples sharing an id (lint L005 and L006).
 - Near-duplicate steps that mean the same thing. Reuse the existing step.

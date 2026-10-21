@@ -16,6 +16,8 @@ Every finding has a stable code so reports can refer to it:
     L012 error    a domain step does not compose core instructions properly
     L013 error    a shared vocabulary file is not pinned, or changed since it was pinned (`bdd vocabulary pin`)
     L014 error    two project or shared steps define the very same pattern
+    L015 to L025 warning  style of the feature file (order of steps, length, placeholder data, layout, ...):
+                  see stylecheck.py; a project can silence them with `[lint] ignore` in .bdd/config.toml
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config as cfg
-from . import denylist, gherkin, sharedvocab, tagcheck, vocabcheck, vocabulary
+from . import denylist, gherkin, sharedvocab, stylecheck, tagcheck, vocabcheck, vocabulary
 from .errors import UsageError
 from .featurefiles import collect_files
 from .issues import ERROR, WARNING, Issue
@@ -71,8 +73,9 @@ def shape_problem(requires: str, step: gherkin.Step) -> str | None:
 
 class Linter:
     def __init__(self, vocab: vocabulary.Vocabulary, profiles: tuple[str, ...] = cfg.ALL_PROFILES,
-                 trace_tags: bool = True):
+                 trace_tags: bool = True, ignore: tuple[str, ...] = ()):
         self.vocab, self.profiles, self.trace_tags = vocab, set(profiles), trace_tags
+        self.ignore = frozenset(ignore)
 
     def check_step(self, step: gherkin.Step, language: str, path: str) -> list[Issue]:
         details = [Issue(path, step.line, ERROR, "L004",
@@ -146,7 +149,8 @@ class Linter:
             feature = gherkin.parse(text, path)
         except gherkin.ParseError as exc:
             return [Issue(path, exc.line, ERROR, "L001", exc.message)]
-        return sorted(self.check_feature(feature, path), key=lambda i: (i.line, i.code))
+        issues = self.check_feature(feature, path) + stylecheck.check_feature(feature, text, path, self.ignore)
+        return sorted(issues, key=lambda i: (i.line, i.code))
 
     def lint_file(self, path: Path) -> list[Issue]:
         return self.lint_text(path.read_text(encoding="utf-8-sig"), str(path))
@@ -207,7 +211,8 @@ def prepare(args: argparse.Namespace) -> Plan:
     targets = args.paths or list(config.feature_dirs)
     if not targets:
         raise UsageError("no paths given and no feature directories configured")
-    return Plan(Linter(vocab, profiles, trace_tags=not args.no_trace_tags), collect_files(targets),
+    linter = Linter(vocab, profiles, trace_tags=not args.no_trace_tags, ignore=config.lint_ignore)
+    return Plan(linter, collect_files(targets),
                 check_project_vocabulary(vocab, vocab_path, config, profiles))
 
 
