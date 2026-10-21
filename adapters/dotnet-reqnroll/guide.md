@@ -106,8 +106,13 @@ checked more strictly, and `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`
 
 ## Known pitfalls
 
-- A scenario name whose letters are not ASCII: Reqnroll builds the test method name from the title and the JUnit report
-  uses it, so the name the report carries may not contain the scenario name. Keep scenario titles in ASCII, or check the
+- A scenario title that is not plain ASCII is fine (checked with Reqnroll 3 on .NET 10, with a Traditional Chinese, an
+  accented and a mixed title). Reqnroll builds the test name from the title and the JUnit report carries it changed: the
+  accent is dropped (`Café: two` becomes `CafeTwo`), Chinese is kept as written, and the ASCII part of a mixed title is
+  glued on after it. `bdd classify` compares letters and digits of any script, again without accents, and falls back to the
+  example id when a test name carries it, so each of these still maps to its scenario. A title that is only punctuation
+  or symbols has nothing to compare: give it a word, or the test name must contain the example id. If a report ever shows a
+  name you cannot map, check the
   report once (the generic-junit contract explains the mapping).
 - Two scenarios whose names are a substring of each other after dropping punctuation: name them apart.
 - A solution that targets another framework than `net10.0`: change `TargetFramework` in the test project to one the

@@ -30,7 +30,7 @@ detected afterwards: run `bdd lock FEAT-n --check --require` in CI. In Codex `bd
 
 **Which languages and test stacks are supported?**
 Today: Python with pytest and pytest-bdd, Go with godog, .NET with Reqnroll (services, libraries, command-line tools), web UIs
-with Playwright (TypeScript), Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests, and any runner
+with Playwright (TypeScript), Spring Boot services with Cucumber-JVM, Kotlin and Android logic as local unit tests and, opt-in, on a device, and any runner
 that writes a JUnit report (`generic-junit`). See [adapters](adapters.md) for what each covers and what it does not. The `bdd` tool
 itself is language independent and needs only Python 3.11+ on the machine.
 
@@ -79,7 +79,7 @@ code. Afterwards a change to that area goes through `/greenlight:feature` with a
 
 **What does it cost?**
 A feature runs several agents; a small feature with Sonnet-class models is a modest number of turns, a large one is
-not. `bdd cost` records what each phase used and the report shows it. The autonomy level and `--quick` control how much
+not. `bdd cost FEAT-n --collect` records what each phase used, from the plugin's hook and the agents' own transcripts, and the report shows it. The autonomy level and `--quick` control how much
 ceremony you pay for.
 
 **How do I stop or undo a feature?**

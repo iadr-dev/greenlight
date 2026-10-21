@@ -1,7 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite failures="2" name="io.cucumber.core.plugin.JUnitFormatter" skipped="0" tests="2" time="0.02">
-  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.01"><failure message="expected: &lt;5&gt; but was: &lt;0&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: expected: <5> but was: <0>
-	at sample.Steps.result(Steps.java:17)]]></failure></testcase>
-  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.01"><failure message="expected: &lt;negative input&gt; but was: &lt;null&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: expected: <negative input> but was: <null>
-	at sample.Steps.fails(Steps.java:22)]]></failure></testcase>
+<testsuite name="Cucumber" time="0.097" tests="2" skipped="0" failures="2" errors="0" timestamp="2026-10-21T03:22:03.136143100Z">
+<testcase classname="Sample (delete me)" name="Two numbers are added" time="0.012">
+<failure type="java.lang.AssertionError" message="expected 5, got 0">
+<![CDATA[java.lang.AssertionError: expected 5, got 0
+	at sample.steps.Steps.resultIs(Steps.java:31)
+	at ✽.the result is 5(classpath:features/sample.feature:5)
+]]>
+</failure>
+<system-out><![CDATA[
+When I add 2 and 3..........................................................passed
+Then the result is 5........................................................failed
+]]></system-out>
+</testcase>
+<testcase classname="Sample (delete me)" name="A negative number is refused" time="0.001">
+<failure type="java.lang.AssertionError" message="expected an error, got none">
+<![CDATA[java.lang.AssertionError: expected an error, got none
+	at sample.steps.Steps.failsWithNegativeInput(Steps.java:38)
+	at ✽.the call fails with negative input(classpath:features/sample.feature:9)
+]]>
+</failure>
+<system-out><![CDATA[
+When I add -1 and 3.........................................................passed
+Then the call fails with negative input.....................................failed
+]]></system-out>
+</testcase>
 </testsuite>

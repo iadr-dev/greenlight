@@ -6,19 +6,23 @@ What it does, in one step, so nothing is left half-undone:
 
 * releases the locks that guard what is being reopened (the reason is kept in the lock history);
 * revokes the human approvals that no longer stand (they have to be given again by the person);
-* forgets the gate results from the reopened phase onward, and the recorded red if the binding is reopened;
+* forgets the gate results from the reopened phase onward; when the binding is reopened, the recorded red moves to
+  ``red_history`` (with a copy of its kept run) instead of being dropped, because it stays the point the code is
+  measured from;
 * moves the feature back to that phase and writes the change into ``state.json``.
 
 It edits nothing in the feature files, the steps or the code: the phase agents do that, and the gates then
-stand again only when the approvals, the red and the locks have been redone.
+stand again only when the approvals, the red and the locks have been redone. If the production code was already
+written, the rebound tests prove their red with ``bdd run FEAT-n --against-red`` (see ``againstred``).
 """
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
-from . import approvals, lockfile, state, store
+from . import approvals, lockfile, runner, state, store
 from .errors import UsageError
 from .statecmd import guarded, project_root
 
@@ -42,6 +46,17 @@ def approvals_to_revoke(phase: str) -> list[str]:
     if index(phase) <= index("specify"):
         return ["rules", "examples"]
     return ["examples"] if index(phase) <= index(SPEC_FROM) else []
+
+
+def keep_red_copy(root: Path, feature: str, kept: dict | None, change_id: int) -> dict | None:
+    """Copy the kept red run next to itself as ``red-<change>.json`` so the evidence the reopened phases replace stays
+    on record (the bind gate writes a new ``red.json``). Returns where the copy is, or None if no red run was kept."""
+    source = runner.runs_dir(root, feature) / runner.RED
+    if not kept or not source.is_file():
+        return None
+    name = f"red-{change_id}.json"
+    shutil.copy2(source, source.with_name(name))
+    return {**kept, "file": name}
 
 
 def reopen(root: Path, feature_dir: Path, phase: str, reason: str) -> dict:
@@ -69,9 +84,13 @@ def reopen(root: Path, feature_dir: Path, phase: str, reason: str) -> dict:
             if last is not None and not last.get("revoked"):
                 last["revoked"] = reason
                 revoked.append(gate)
-        if index(phase) <= index(BIND_FROM):
+        change_id = len(current.setdefault("changes", [])) + 1
+        if index(phase) <= index(BIND_FROM) and current.get("red"):
+            current.setdefault("red_history", []).append(
+                {"red": current["red"], "red_run": keep_red_copy(root, feature, current.get("red_run"), change_id),
+                 "change": change_id})
             current["red"] = None
-        entry = {"id": len(current.setdefault("changes", [])) + 1, "at": store.utc_now(), "reopened": phase,
+        entry = {"id": change_id, "at": store.utc_now(), "reopened": phase,
                  "from": current["phase"], "reason": reason, "unlocked": released, "revoked": revoked,
                  "gates_removed": removed}
         current["changes"].append(entry)

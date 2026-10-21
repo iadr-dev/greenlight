@@ -133,6 +133,10 @@ deprecation policy these checks enforce.
 
 ## Known pitfalls
 
+- A scenario title in another script or with accents works, also when one scenario runs alone: the name filter is sent to
+  Maven as plain ASCII (every character outside ASCII as `\x{HEX}`), because Windows converts a command line that reaches
+  `mvn.cmd` to the active code page, which turns a letter that page lacks into `?` (an accent on a Chinese system,
+  Chinese on a Western one). Checked with Cucumber-JVM 8 on Windows with a Chinese code page.
 - Two step methods with the same pattern are a duplicate-definition error: use a `Payload` parameter, never one method
   per table or doc string.
 - `@SpringBootTest` finds the application class only by package: that is why `GreenlightSpring` names the classes

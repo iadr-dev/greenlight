@@ -46,9 +46,13 @@ bdd classify FEAT-n --expect red
 bdd gate FEAT-n bind --result pass --record-red
 ```
 
-`--record-red` stores the commit and a digest of the production source, so it can be shown later that the
-tests were red before any production code changed. The gate needs a valid red from a run recorded against the
-files as they are now.
+`--record-red` stores the commit, a digest of the production source and a snapshot of it, so it can be shown later
+that the tests were red before any production code changed. The gate needs a valid red from a run recorded against
+the files as they are now.
+
+After a reopen past the implementation (the code is already there), run `bdd run FEAT-n --against-red` instead of
+`bdd run`: it proves the red of today's tests against the production source of the first red, in a temporary
+worktree, without touching the project's code. The gate then keeps that first red as the feature's red.
 
 ## Pitfalls
 

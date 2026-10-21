@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite failures="2" name="io.cucumber.core.plugin.JUnitFormatter" skipped="0" tests="2" time="0.02">
-  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.01"><failure message="The step &quot;I add 2 and 3&quot; is undefined" type="io.cucumber.core.runner.UndefinedStepException"><![CDATA[io.cucumber.core.runner.UndefinedStepException: The step 'I add 2 and 3' is undefined]]></failure></testcase>
-  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.01"><failure message="The step &quot;I add -1 and 3&quot; is undefined" type="io.cucumber.core.runner.UndefinedStepException"><![CDATA[io.cucumber.core.runner.UndefinedStepException: The step 'I add -1 and 3' is undefined]]></failure></testcase>
+<testsuite name="Cucumber" time="0.103" tests="2" skipped="0" failures="2" errors="0" timestamp="2026-10-21T03:22:32.584093600Z">
+<testcase classname="Sample (delete me)" name="Two numbers are added" time="0.004">
+<failure/>
+<system-out><![CDATA[
+When I add 2 and 3..........................................................undefined
+Then the result is 5........................................................skipped
+]]></system-out>
+</testcase>
+<testcase classname="Sample (delete me)" name="A negative number is refused" time="0.001">
+<failure/>
+<system-out><![CDATA[
+When I add -1 and 3.........................................................undefined
+Then the call fails with negative input.....................................skipped
+]]></system-out>
+</testcase>
 </testsuite>

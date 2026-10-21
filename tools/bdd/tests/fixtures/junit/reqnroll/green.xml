@@ -1,9 +1,54 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="Sample.dll" tests="2" skipped="0" failures="0" errors="0" time="0.1">
-    <testsuite name="Sample.Features.SampleFeature" tests="2" failures="0">
-      <testcase classname="Sample.Features.SampleFeature" name="TwoNumbersAreAdded" time="0.012"></testcase>
-      <testcase classname="Sample.Features.SampleFeature" name="ANegativeNumberIsRefused" time="0.012"></testcase>
-    </testsuite>
+  <testsuite name="GreenlightTests.dll" tests="2" skipped="0" failures="0" errors="0" time="0.10200590000000001" timestamp="2026-10-21T03:40:28" hostname="host" id="0" package="GreenlightTests.dll">
+    <properties />
+    <testcase classname="Greenlight.Tests.Features.SampleDeleteMeFeature" name="ANegativeNumberIsRefused" time="0.0895471">
+      <system-out>When add is called with:
+  --- table step argument ---
+  | a  | b |
+  | -1 | 3 |
+-&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+Then the call fails with negative input
+-&gt; done: CoreSteps.CallFails("negative input") (0.0s)
+
+</system-out>
+      <properties>
+        <property name="FeatureTitle" value="Sample (delete me)" />
+        <property name="Description" value="A negative number is refused" />
+        <property name="Category" value="R-000.1" />
+        <property name="Category" value="EX-000.1.2" />
+        <property name="Category" value="FEAT-000" />
+      </properties>
+    </testcase>
+    <testcase classname="Greenlight.Tests.Features.SampleDeleteMeFeature" name="TwoNumbersAreAdded" time="0.0124588">
+      <system-out>When add is called with:
+  --- table step argument ---
+  | a | b |
+  | 2 | 3 |
+-&gt; done: CoreSteps.LibCall("add", &lt;table&gt;) (0.0s)
+Then the result is:
+  --- multiline step argument ---
+  5
+-&gt; done: CoreSteps.ResultIs("5") (0.0s)
+
+</system-out>
+      <properties>
+        <property name="FeatureTitle" value="Sample (delete me)" />
+        <property name="Description" value="Two numbers are added" />
+        <property name="Category" value="R-000.1" />
+        <property name="Category" value="EX-000.1.1" />
+        <property name="Category" value="FEAT-000" />
+      </properties>
+    </testcase>
+    <system-out>
+Test Framework Informational Messages:
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.16]   Discovering: GreenlightTests
+[xUnit.net 00:00:00.24]   Discovered:  GreenlightTests
+[xUnit.net 00:00:00.28]   Starting:    GreenlightTests
+-&gt; Loading plugin C:\project\tests\bin\Debug\net10.0\GreenlightTests.dll
+-&gt; Loading plugin C:\project\tests\bin\Debug\net10.0\Reqnroll.xUnit.ReqnrollPlugin.dll
+-&gt; Using default config
+[xUnit.net 00:00:00.62]   Finished:    GreenlightTests
+</system-out>
   </testsuite>
 </testsuites>

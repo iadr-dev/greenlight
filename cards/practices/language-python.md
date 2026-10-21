@@ -48,3 +48,5 @@ own tools say whether the code is clean.
 - Mutable default arguments, bare `except:`, and `except Exception: pass` hide defects.
 - Installing a package to make an import work. Packages are the person's decision; return the missing requirement.
 - Running tools with the wrong interpreter. Use the project's own environment, as `bdd run` does.
+- `ruff check` selects only a small default rule set: the `UP` rules are not on unless the project's `[tool.ruff.lint] select` names them. They catch `typing.List` and similar (UP006, UP035) but not every deprecated call: `datetime.utcnow()` passed ruff and was caught only by running the tests with `-W error::DeprecationWarning`.
+- Run on 2026-10-21 with Python 3.14, ruff, mypy and pytest (latest at the time, installed with uv) on a small project with a `typing.List` annotation, a `datetime.utcnow()` call and a wrong return type: `ruff format --check`, `ruff check`, `mypy .` and `pytest -W error::DeprecationWarning` behaved as written (each exits non-zero on its finding). `pyright` was not run.

@@ -13,7 +13,7 @@ broken test.
 | `dotnet-reqnroll` | available | .NET services, libraries and command-line tools with Reqnroll and xUnit; profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
-| `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests (no device); profiles `base`, `lib`, `data` |
+| `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests, and (opt-in) the same scenarios on a device through Cucumber-Android; profiles `base`, `lib`, `data` |
 | `generic-junit` | available | any runner that writes a JUnit report (JUnit 5 with Gradle or Maven, jest, `go test`, `dotnet test`, behave, godog and others); you supply the run command and the step code, the adapter defines and checks the contract |
 
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
@@ -33,13 +33,18 @@ from the first run.
   `adapters/dotnet-reqnroll/guide.md`.
 
 Detection suggests them from `go.mod` and from `*.csproj`/`*.sln`. In CI, each adapter has a job that scaffolds it into a
-temporary project and runs the sample feature, every core step and a red phase for real.
+temporary project and runs the sample feature, every core step and a red phase for real, on Linux, Windows and macOS.
+
+A scenario title in another script or with accents (Chinese, an accented Latin letter, or both mixed with ASCII) maps to its
+scenario on every adapter: `bdd classify` compares the letters and digits of any script, again without accents, and falls
+back to the example id when a test name carries it. Reqnroll, for example, writes `Café: two numbers` as `CafeTwoNumbers`.
+The contract tests run such titles in the usual order, shuffled and one scenario per process.
 
 ## The JVM adapters
 
-`java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters runs alone. Two limits are worth knowing before you choose:
+`java-cucumber-spring` and `kotlin-android` are the first-class form of the `generic-junit` contract for the JVM: the same steps, drivers and red-phase rules as the Python adapter, a ready run command (Maven, or Gradle with a bound script that hands Cucumber its settings to the test JVM), and classification of Cucumber, Spring and Kotlin build failures. `bdd init --detect` suggests them from `pom.xml` (Spring Boot) or the Gradle files (the Android Gradle Plugin). They were run for real with Spring Boot 4.1 on Maven 3.9, Kotlin 2.4 on Gradle 9.8 and Cucumber-JVM 8.0, and the CI jobs run the same contract tests on Linux, Windows and macOS: a fresh scaffold goes green, red looks like red, and a scenario whose name is full of regular-expression characters, or written in Chinese or with accents, runs alone. The name filter reaches Maven and Gradle as plain ASCII (characters outside ASCII as `\x{HEX}`), because Windows converts a command line that reaches a `.cmd` or `.bat` launcher to the active code page. Two limits are worth knowing before you choose:
 
-- **Android.** The scenarios are local JVM unit tests. Code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine, and screens (Compose, Espresso) need a device or emulator and stay outside this adapter. The guide says exactly what is covered.
+- **Android.** The scenarios are local JVM unit tests, and can also run on a phone or an emulator through Cucumber-Android: a second adapter block, `kotlin-android-device`, runs the same feature files and steps as instrumented tests, and `bdd run` records both sets of cases (tested on a Samsung phone on Android 15). On the JVM, code that calls the Android framework needs a seam (an interface your code owns); Robolectric does not work with Cucumber's JUnit Platform engine. No step drives a screen (Compose, Espresso), so the `ui` profile is not declared. The guide says exactly what is covered.
 - **Network.** The JVM has no process-wide hook for raw sockets, so the Spring adapter's network guard covers the JDK HTTP client and `HttpURLConnection` only; run the tests without network access in CI for the rest.
 
 ## The generic-junit adapter
@@ -51,8 +56,8 @@ go test, dotnet test, cucumber-js, behave, godog, Cucumber-JVM, Reqnroll) give t
 short: one command runs one feature, it writes one JUnit file, each test name contains its scenario name, an unbuilt seam fails with
 `BDD_EXPECTED_MISSING`, and build errors are loud. See `adapters/generic-junit/guide.md`.
 
-The reports of five runners (cucumber-js and behave from real runs, godog, Cucumber-JVM and Reqnroll from their documented
-format) are kept as fixtures in `tools/bdd/tests/fixtures/junit`, and a test checks that each classifies the same way: a missing
+The reports of five runners (cucumber-js, behave, godog, Cucumber-JVM and Reqnroll, all from real runs, with the versions in the fixtures' README)
+are kept as fixtures in `tools/bdd/tests/fixtures/junit`, and a test checks that each classifies the same way: a missing
 seam or a failed assertion is an expected failure, an undefined step is a test defect, and a pass is a pass. The adapter is also
 exercised on two reference apps (`evals/apps/csv-tool`, Go, and `evals/apps/money-lib`, TypeScript) with their own runners in CI.
 
@@ -166,7 +171,7 @@ written the report beforehand. `killed` and `survived` are required whole number
 are shown, not counted. The tool must exit 0 once it has finished and state survivors in the report; a non-zero exit
 fails the check whatever the report says (a tool that exits non-zero on survivors needs a wrapper that turns that into
 exit 0 plus counts; the adapters ship them: `tests/tools/mutate_python.py` for mutmut in `python-pytest-bdd`,
-`tests/tools/mutate-ts.mjs` for Stryker in `ts-playwright-bdd`, each described in the adapter's guide). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
+`tests/tools/mutate-ts.mjs` for Stryker in `ts-playwright-bdd`, each described in the adapter's guide; mutmut does not run natively on Windows, so on Windows the Python check runs from WSL in the same checkout, with a Linux `venv` beside the Windows `.venv`, as the guide shows). A missing or malformed report is an error, and so is a report with no mutants, because that proves nothing.
 If production files changed but none ends in `extensions`, the check fails too: it covered nothing. Only a feature
 that changed no production file at all passes with "nothing to mutate". The result is recorded in
 `.bdd/.runs/FEAT-n/mutation.json` (command, exit status, hash of the report, the changed and the mutated files), which

@@ -37,3 +37,5 @@ decision.
 - Mixing app-router and pages-router conventions in one route.
 - APIs removed or deprecated in the declared version (for example older image and export helpers); the build and the ESLint deprecation rule report them.
 - Upgrading Next.js, React or the router inside a feature.
+- `next lint` no longer exists in current versions: in Next.js 16 `npx next lint` reads `lint` as a project directory and fails ("Invalid project directory"). Use the `lint` script of `package.json`, which calls `eslint` directly.
+- Run on 2026-10-21 with Node 26 and Next.js 16.4.2 (React 19.3.0) on a project from `create-next-app` (app router, TypeScript, ESLint): `npx next build` type-checked and built (exit 0), `npm run lint` exited 0.

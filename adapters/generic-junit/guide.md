@@ -33,8 +33,11 @@ greenlight needs five things from your runner. If they hold, `bdd run`, `bdd cla
    folder (Gradle, Maven, jest-junit), wrap it with `tests/run_junit.py`, which deletes the old files, runs the command,
    and merges every `testcase` into `{out}`.
 3. **A test name contains its scenario name.** This is the whole mapping from the report to the feature files:
-   greenlight lower-cases the `name` of each `testcase` and drops every character that is not a letter or a digit, and
-   does the same to each scenario name; the longest scenario name contained in a test name wins. The scenario
+   greenlight lower-cases the `name` of each `testcase` and drops every character that is not a letter or a digit (of any
+   script: Chinese, Cyrillic and accented letters stay), and does the same to each scenario name, a second time with the
+   accents removed (`Café` and `Cafe` meet); the longest scenario name contained in a test name wins. When no scenario name
+   is found, a test name that carries exactly one example id of the feature (`EX-007.1.2`, also written `EX_007_1_2`) maps
+   to that scenario, which covers a runner that rewrites a title beyond recognition. The scenario
    `Two numbers are added` is found in `test_two_numbers_are_added`, `TwoNumbersAreAdded`, `two numbers are added` and
    `Feature › Two numbers are added`. The `classname` is only shown. A test that matches no scenario of the feature is
    counted and ignored; a scenario with no test is `not-run` and blocks both the red and the green. Two scenarios of one

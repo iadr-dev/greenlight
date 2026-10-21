@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import approvals, enforcement, scan, state, store, trace, tripwire
+from . import agentcost, approvals, enforcement, scan, state, store, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -57,7 +57,8 @@ def feature_row(root: Path, feature_dir: Path) -> dict:
     level, _ = enforcement.classify(root, data)
     return {"feature": data["feature"], "title": data["title"], "phase": data["phase"],
             "autonomy": data["autonomy"]["level"], "approvals": approval_text(root, data), "enforcement": level,
-            "waiting_for": waiting_for(data["feature"], data), "dir": feature_dir.name}
+            "waiting_for": waiting_for(data["feature"], data), "dir": feature_dir.name,
+            "missing_cost": agentcost.missing_cost(data)}
 
 
 def open_violation_count(root: Path) -> int | None:
@@ -133,6 +134,10 @@ def do_status(root: Path, as_json: bool) -> int:
         print(json.dumps({"features": rows, "open_violations": violations}, indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
+    for row in rows:
+        if row["missing_cost"]:
+            print(f"cost: {row['feature']} passed {', '.join(row['missing_cost'])} with no cost recorded; "
+                  f"run `bdd cost {row['feature']} --collect`")
     if violations is None:
         print("integrity: the data under .bdd/.integrity cannot be read")
     elif violations:

@@ -84,8 +84,15 @@ Rules for the loop:
   commands in the table are. If a gate refuses, read its message, fix the cause or send the agent back with the
   message, and do not look for another way. Give each phase at most three attempts, then stop and tell the person
   what is stuck.
-- **Record from the report**: costs with `bdd cost FEAT-n --phase P --tokens N --seconds S` (use the usage the
-  agent run reports), assumptions with `bdd assume FEAT-n --text ... --rationale ... --alt ...`.
+- **Record from the report**: assumptions with `bdd assume FEAT-n --text ... --rationale ... --alt ...`.
+- **Record the cost after every agent, and never estimate it.** Each time an agent returns, run
+  `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" cost FEAT-n --collect`: the plugin's `SubagentStop` hook noted how long the
+  agent ran and where its transcript is, and the command turns that into the phase's tokens and seconds. If it says
+  no agent is waiting (hooks are not active), record by hand, with the figures of the agent's completion notice
+  copied exactly (`subagent_tokens`, and `duration_ms` divided by 1000):
+  `bdd cost FEAT-n --phase P --tokens N --seconds S`. A figure you did not read from one of these two places is a
+  guess and does not belong in the record. `bdd status` names a passed phase that has no cost record; fix it before
+  you write the report.
 - **Questions**: an agent returns blocking questions; you ask the person one at a time with the recommended
   answer, then run the agent again with the answers. Under `autopilot` you answer the most conservative way,
   record it as an assumption, and say so in the report.
@@ -114,7 +121,9 @@ the person and let them decide. Under `auto` and `autopilot` fix them through th
 reopens, then run verify again, at most twice; after that report what is left. Should-fix and unverifiable items
 always go in the final report. A must-fix that is an existing test encoding the behaviour the request replaces
 (for example an old amount) is not a question for the person under `auto` and `autopilot`: have the step-engineer
-update that test through the `change` flow, and record the assumption in the report.
+update that test through the `change` flow, and record the assumption in the report. When such a reopen reaches the
+binding after the code was written, prove the rebound red with `bdd run FEAT-n --against-red` (the change skill says
+how), never by putting the code aside.
 
 ## 4. Human gates
 

@@ -18,7 +18,9 @@ with their current standard library and crate APIs; raising the edition, the too
    - format: `cargo fmt --check`
    - lint, with every warning (deprecations included) as an error: `cargo clippy --all-targets -- -D warnings`
    - build and tests: `cargo build`, `cargo test`
-   - `-D warnings` includes the compiler's `deprecated` lint, so a use of a `#[deprecated]` item fails; a project can also state it in the crate with `#![deny(deprecated)]`
+   - known vulnerabilities in the dependencies (needs `cargo install cargo-audit --version 0.22.2 --locked` once; pin the version you checked): `cargo audit`
+   - a plain `cargo build` only warns about a `#[deprecated]` item; `-D warnings` makes clippy refuse it (the compiler's
+     `deprecated` lint is a warning), and a crate that states `#![deny(deprecated)]` makes every build refuse it
 3. To have greenlight run them, add tables to `.bdd/config.toml`:
 
    ```toml
@@ -41,3 +43,7 @@ with their current standard library and crate APIs; raising the edition, the too
 - `unsafe` without a safety comment that states the invariant.
 - Adding a crate or enabling a feature flag for a small convenience; dependencies are the person's decision.
 - Editing `Cargo.lock` by hand.
+- A `cargo audit` installed on a Windows machine with the GNU toolchain fails to build (`dlltool.exe` missing); install it with the MSVC toolchain or run it in CI.
+- Checked for real by `evals/language-cards/rust.sh` in CI (Ubuntu) and locally on Windows (GNU toolchain), 2026-10-21, with
+  Rust 1.99.1, rustfmt 1.10.0, clippy 0.1.99 and cargo-audit 0.22.2 on a small crate (edition 2024, the default of
+  `cargo new`): each command fails on its finding (unformatted code, a deprecated call) and passes once it is fixed.

@@ -1,9 +1,12 @@
 """The evaluation collector and the summary table, on canned run directories (no model, no network)."""
 import json
+import os
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "evals"))
@@ -115,13 +118,23 @@ class CollectRowTest(unittest.TestCase):
         row = collect.collect_row(canned({("status", "--json"): (0, json.dumps({"features": [], "open_violations": 0}))}), self.project)
         self.assertEqual(row, {"features": 0, "open_violations": 0})
 
-    def test_cards_read_come_from_the_transcript_when_there_is_one(self):
-        transcript = self.project / "session.jsonl"
-        transcript.write_text('{"file_path": "C:\\\\plugin\\\\cards\\\\techniques\\\\decision-table.md"}\n'
-                              '{"file_path": "/p/cards/practices/python.md"}\n', encoding="utf-8")
+    def test_cards_read_are_the_cards_the_agents_opened_with_a_reading_tool(self):
+        """The shapes are those of a real run: the orchestrator's transcript, and one transcript per subagent beside it, where the
+        cards are read (with ``cat`` in a Bash call or with Read). A prompt that names a card, or a Write of a file called like a
+        card, is not a read."""
+        shutil.copytree(Path(__file__).parent / "fixtures" / "transcript", self.project / "claude")
+        transcript = self.project / "claude" / "session.jsonl"
         self.assertEqual(collect.cards_read(transcript), ["practices/python.md", "techniques/decision-table.md"])
+        self.assertEqual(collect.cards_read(transcript.parent / "session" / "subagents" / "agent-aaa111.jsonl"),
+                         ["practices/python.md", "techniques/decision-table.md"])
         self.assertIsNone(collect.cards_read(None))
         self.assertIsNone(collect.cards_read(self.project / "missing.jsonl"))
+
+    def test_a_session_without_subagents_reads_no_cards_instead_of_failing(self):
+        lone = self.project / "lone.jsonl"
+        lone.write_text('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}\n'
+                        "not json\n", encoding="utf-8")
+        self.assertEqual(collect.cards_read(lone), [])
 
 
 class TargetsAndTableTest(unittest.TestCase):
@@ -193,12 +206,94 @@ class HarnessHelpersTest(unittest.TestCase):
         self.assertEqual(run_e2e.parse_output("not json")["raw"], "not json")
         self.assertEqual(run_e2e.parse_output('{"a": 1}'), {"a": 1})
 
-    def test_a_soft_arm_loads_a_plugin_whose_hooks_are_empty(self):
+    def test_the_plugin_a_run_loads_is_the_committed_tree_and_a_soft_arm_has_no_hooks(self):
         with tempfile.TemporaryDirectory() as tmp:
-            copy = run_e2e.plugin_directory(Path(tmp), "off")
-            self.assertEqual(json.loads((copy / "hooks" / "hooks.json").read_text(encoding="utf-8")), {"hooks": {}})
-            self.assertTrue((copy / "skills" / "feature" / "SKILL.md").is_file())
-        self.assertEqual(run_e2e.plugin_directory(Path("unused"), "on"), run_e2e.REPO)
+            hard = run_e2e.plugin_snapshot(Path(tmp) / "a", "on")
+            soft = run_e2e.plugin_snapshot(Path(tmp) / "b", "off")
+            committed = run_e2e.run([*run_e2e.GIT, "show", "HEAD:hooks/hooks.json"], run_e2e.REPO, dict(os.environ)).stdout
+            self.assertEqual(json.loads((hard / "hooks" / "hooks.json").read_text(encoding="utf-8")), json.loads(committed))
+            self.assertEqual(json.loads((soft / "hooks" / "hooks.json").read_text(encoding="utf-8")), {"hooks": {}})
+            self.assertTrue((hard / "tools" / "bdd" / "bdd").is_file())
+            self.assertFalse((hard / ".git").exists())
+            self.assertFalse((Path(tmp) / "a" / "plugin.index").exists())          # the private index is gone again
+
+    def test_an_uncommitted_change_in_the_checkout_does_not_reach_the_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            checkout = Path(tmp) / "checkout"
+            checkout.mkdir()
+            run_e2e.run([*run_e2e.GIT, "init", "-q"], checkout, dict(os.environ))
+            (checkout / "hooks").mkdir()
+            (checkout / "hooks" / "hooks.json").write_text('{"hooks": {"a": 1}}', encoding="utf-8")
+            run_e2e.commit_all(checkout, dict(os.environ), "committed")
+            (checkout / "hooks" / "hooks.json").write_text('{"hooks": {"edited": 1}}', encoding="utf-8")
+            with mock.patch.object(run_e2e, "REPO", checkout):
+                snapshot = run_e2e.plugin_snapshot(Path(tmp) / "run", "on")
+                self.assertEqual(run_e2e.checkout_changes(), ["hooks/hooks.json"])
+            self.assertEqual(json.loads((snapshot / "hooks" / "hooks.json").read_text(encoding="utf-8")), {"hooks": {"a": 1}})
+
+    def test_the_run_has_its_own_codex_home_and_its_own_claude_folder_only_when_the_login_allows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_folder = Path(tmp)
+            with mock.patch.dict("os.environ", {"CLAUDE_CODE_USE_BEDROCK": "1"}):
+                env = run_e2e.base_environment(run_folder)
+            self.assertEqual(Path(env["CODEX_HOME"]), run_folder / "codex-home")
+            self.assertEqual(Path(env["CLAUDE_CONFIG_DIR"]), run_folder / "claude-config")
+            login_in_folder = {k: v for k, v in os.environ.items() if k not in run_e2e.ENVIRONMENT_AUTH + ("CLAUDE_CONFIG_DIR",)}
+            with mock.patch.dict("os.environ", login_in_folder, clear=True):
+                env = run_e2e.base_environment(run_folder)
+            self.assertNotIn("CLAUDE_CONFIG_DIR", env)                             # the person's folder, with its login
+        self.assertFalse(run_e2e.authenticates_through_environment({"CLAUDE_CODE_USE_BEDROCK": "0", "ANTHROPIC_API_KEY": ""}))
+
+    def test_host_files_the_run_could_not_make_its_own_are_watched_for_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_folder = Path(tmp) / "run"
+            env = {"CODEX_HOME": str(run_folder / "codex-home"), "CLAUDE_CONFIG_DIR": str(run_folder / "claude-config")}
+            watched = {p.as_posix() for p in run_e2e.host_watched_files(env, run_folder)}
+            self.assertEqual(watched, {(Path.home() / ".codex" / n).as_posix() for n in ("hooks.json", "config.toml")})
+            env.pop("CLAUDE_CONFIG_DIR")
+            self.assertIn((Path.home() / ".claude" / "settings.json").as_posix(),
+                          {p.as_posix() for p in run_e2e.host_watched_files(env, run_folder)})
+            host = Path(tmp) / "settings.json"
+            host.write_text("{}", encoding="utf-8")
+            before = run_e2e.digests([host, Path(tmp) / "absent.toml"])
+            host.write_text('{"env": {}}', encoding="utf-8")
+            self.assertEqual(run_e2e.changed_between(before, run_e2e.digests([host, Path(tmp) / "absent.toml"])), [host.as_posix()])
+
+
+class ContaminationTest(unittest.TestCase):
+    def violations(self, project: Path, items: list[dict]) -> None:
+        folder = project / ".bdd" / ".integrity"
+        folder.mkdir(parents=True)
+        (folder / "violations.json").write_text(json.dumps({"schema": 1, "items": items}), encoding="utf-8")
+
+    def test_a_violation_outside_the_run_is_foreign_and_one_inside_is_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_folder = Path(tmp).resolve()
+            project = run_folder / "project"
+            host = Path.home() / ".codex" / "config.toml"
+            self.violations(project, [
+                {"open": True, "path": host.as_posix(), "what": "enforcement file"},
+                {"open": True, "path": (run_folder / "plugin" / "tools" / "bdd" / "bddlib" / "doctor.py").as_posix()},
+                {"open": True, "path": "tests/features/a.feature", "what": "FEAT-001 spec lock"},
+                {"open": False, "path": (Path.home() / ".claude" / "settings.json").as_posix()},
+            ])
+            self.assertEqual(collect.foreign_violations(project, [run_folder]), [host.as_posix()])
+
+    def test_a_project_without_violations_is_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(collect.foreign_violations(Path(tmp), []), [])
+
+    def test_a_contaminated_run_is_left_out_of_the_targets_and_listed_apart(self):
+        clean = {"arm": "plugin", "autonomy_requested": "autopilot", "hooks": "on", "model": "m", "run": 1,
+                 "valid_red_pct": 100.0, "locked_spec_violations": 0, "tokens": 10, "claude": {"total_cost_usd": 1.0}}
+        dirty = {**clean, "run": 2, "locked_spec_violations": 2, "contaminated": True,
+                 "foreign_violations": ["C:/Users/x/.codex/config.toml"]}
+        table = collect.summary_table([clean, dirty])
+        plugin = next(line for line in table.splitlines() if line.startswith("plugin"))
+        self.assertIn(" 1 ", plugin)                                             # one run counted
+        self.assertIn("0 ok", plugin)
+        self.assertIn("not counted: 1 run(s)", table)
+        self.assertIn("run 2 (plugin, autopilot): C:/Users/x/.codex/config.toml", table)
 
 
 if __name__ == "__main__":

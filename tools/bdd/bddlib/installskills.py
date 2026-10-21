@@ -8,7 +8,8 @@
 ``claude`` writes one ``greenlight-<skill>/SKILL.md`` per skill under ``~/.claude/skills`` (``.claude/skills`` in the
 project with ``--project``), so the skills work in Claude Code without the plugin, as ``/greenlight-<skill>``. ``codex``
 writes the same under ``.agents/skills`` in the project (or ``~/.agents/skills`` with ``--user``), the folders Codex
-scans. ``agents-md`` adds a marked block to ``AGENTS.md`` in the project root, the file most coding agents read. All
+scans; a skill only the person may start (``approve``) also gets ``agents/openai.yaml`` with
+``allow_implicit_invocation: false``, Codex's way of keeping the model from picking it. ``agents-md`` adds a marked block to ``AGENTS.md`` in the project root, the file most coding agents read. All
 are plain text; the skills keep pointing at this installation of greenlight for the playbooks and the ``bdd`` command,
 so they have to be installed again after the plugin moves.
 
@@ -54,7 +55,7 @@ CLAUDE_NOTE = (CLAUDE_MARK + " The plugin's hooks are not active here, so enforc
 @dataclass
 class Action:
     path: Path
-    kind: str               # create | update | append | same | refuse | remove | strip | keep | absent
+    kind: str               # create | update | append | same | refuse | remove | strip | keep | absent | note
     text: str = ""
     why: str = ""
     container: Path | None = None       # uninstall: the folder that is never removed, nor anything above it
@@ -117,6 +118,19 @@ def claude_skill_text(source: Path) -> tuple[str, str]:
     return name, "---\n" + "\n".join(front) + f"\n---\n\n{CLAUDE_NOTE}{body.rstrip()}\n"
 
 
+CODEX_POLICY_FILE = Path("agents") / "openai.yaml"
+CODEX_POLICY = ("# " + CODEX_MARK + " Written by `bdd install-skills codex`.\n"
+                "# Only the person invokes this skill (typed as $greenlight-<skill>); the model may not pick it on its own.\n"
+                "policy:\n  allow_implicit_invocation: false\n")
+AGENTS_LIMIT_BYTES = 32 * 1024          # Codex reads at most this much of the AGENTS.md files together (project_doc_max_bytes)
+
+
+def person_only(source: Path) -> bool:
+    """Is this a skill only the person may start (``disable-model-invocation`` in its Claude Code front matter)?"""
+    meta, _ = frontmatter.parse(source.read_text(encoding="utf-8"))
+    return str(meta.get("disable-model-invocation", "")).casefold() == "true"
+
+
 def is_ours(text: str) -> bool:
     return any(mark in text for mark in MARKS)
 
@@ -177,13 +191,30 @@ def plan_block(path: Path, block: str, force: bool) -> Action:
 
 def plan(scope: Scope, force: bool) -> list[Action]:
     if scope.target == "agents-md":
-        return [plan_block(scope.root / "AGENTS.md", agents_block(), force)]
+        return [plan_block(scope.root / "AGENTS.md", agents_block(), force), *agents_notes(scope.root, agents_block())]
     make = claude_skill_text if scope.target == "claude" else skill_text
     actions = []
     for source in skill_sources():
         name, text = make(source)
         actions.append(plan_file(scope.container, scope.skills / name / "SKILL.md", text, force))
+        if scope.target == "codex" and person_only(source):      # Codex's way of saying "the model may not invoke this"
+            actions.append(plan_file(scope.container, scope.skills / name / CODEX_POLICY_FILE, CODEX_POLICY, force))
     return actions
+
+
+def agents_notes(root: Path, block: str) -> list[Action]:
+    """What would keep Codex from reading the block: an ``AGENTS.override.md`` beside it (Codex reads at most one file per
+    folder and takes the override first) or more text than it reads."""
+    notes = []
+    override = root / "AGENTS.override.md"
+    if override.exists():
+        notes.append(Action(override, "note", why="Codex reads this file instead of AGENTS.md in the same folder, so the "
+                            "greenlight block will not be seen; copy the block into it yourself"))
+    current = (root / "AGENTS.md").read_text(encoding="utf-8") if (root / "AGENTS.md").is_file() else ""
+    if len((current + block).encode("utf-8")) > AGENTS_LIMIT_BYTES:
+        notes.append(Action(root / "AGENTS.md", "note", why="with the block the file is over the 32 KiB Codex reads by default "
+                            "(project_doc_max_bytes), so part of it may be cut off"))
+    return notes
 
 
 # -- uninstall -----------------------------------------------------------------------------
@@ -215,10 +246,23 @@ def plan_unskill(scope: Scope) -> list[Action]:
         if _linked(scope.container, folder) or _linked(scope.container, path):
             actions.append(Action(path, "refuse", why="it is, or sits behind, a link that leaves the folder"))
         elif path.is_file() and is_ours(path.read_text(encoding="utf-8")):
+            actions += policy_removal(scope, folder)
             actions.append(Action(path, "remove", container=scope.container))
         elif path.exists():
             actions.append(Action(path, "keep", why="it was not written by bdd install-skills"))
     return actions
+
+
+def policy_removal(scope: Scope, folder: Path) -> list[Action]:
+    """The Codex policy file next to a skill this command wrote, if this command wrote that too."""
+    policy = folder / CODEX_POLICY_FILE
+    if not policy.exists():
+        return []
+    if _linked(scope.container, policy) or not policy.is_file():
+        return [Action(policy, "refuse", why="it is, or sits behind, a link that leaves the folder")]
+    if is_ours(policy.read_text(encoding="utf-8")):
+        return [Action(policy, "remove", container=scope.container)]
+    return [Action(policy, "keep", why="it was not written by bdd install-skills")]
 
 
 def plan_uninstall(scope: Scope) -> list[Action]:
