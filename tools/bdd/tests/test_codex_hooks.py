@@ -449,6 +449,29 @@ class GuardTest(CodexCase):
                 self.assertIn("another Codex session", self.blocked("Bash", call))
         self.assertIsNone(self.blocked("Bash", {"command": "codex --version"}))
 
+    def test_a_glob_or_a_change_of_folder_does_not_hide_codexs_state(self):
+        moved = self.home.as_posix()
+        hidden = moved[:-2] + "*"                                       # the configured home, its last letters a glob
+        for command in ("echo '{}' > .co*/hooks.json", "cp forged ~/.c?dex/config.toml", "tee rollout-*.jsonl < forged",
+                        f"echo x > {hidden}/sessions/a.jsonl", f"cd {moved} && echo x > config.toml",
+                        f"pushd {moved}; Set-Content hooks.json x", "cd .codex && echo x > hooks.json"):
+            with self.subTest(command=command):
+                self.assertIn("keep greenlight's hooks running", self.blocked("Bash", {"command": command}))
+        for command in ("echo x > .cache*/a", "rm build/*.jsonl", f"cd {moved} && cat config.toml", "cd src && echo x > a.txt"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.blocked("Bash", {"command": command}))
+
+    def test_a_folder_a_command_moves_into_is_one_of_the_places_it_reaches(self):
+        other = self.root / "other"
+        (other / ".bdd").mkdir(parents=True)
+        (other / ".bdd" / "config.toml").write_text('autonomy = "guided"\n', encoding="utf-8")
+        calls = codexpayload.guard_calls(tool_call(self.root / "src", "Bash", {"command": "cd ../other && echo x > a.txt"}))
+        projects, unresolved = codexguard.reached_projects({"cwd": str(self.root / "src")}, calls)
+        self.assertIn(other.resolve(), [p.resolve() for p in projects])
+        self.assertFalse(unresolved)
+        self.assertEqual(codexguard.directory_operands("git -C repo status; make --directory=build; Set-Location -Path 'x'"),
+                         ["x", "repo", "build"])
+
     def test_codexs_own_hook_and_settings_files_cannot_be_written_by_an_agent(self):
         for path in (".codex/hooks.json", "./.codex/config.toml", ".CODEX/Hooks.JSON", "sub/../.codex/config.toml"):
             with self.subTest(path=path):
@@ -916,6 +939,26 @@ class ClaudeCodeGuardTest(ProjectCase):
                 self.assertIn("Codex's home folder", self.evaluate("Write", file_path=str(self.root / path)))
         self.assertIsNone(self.evaluate("Bash", command="cat ~/.codex/config.toml"))
         self.assertIsNone(self.evaluate("Write", file_path=str(self.root / "src" / "app.py")))
+
+    def test_a_glob_that_reaches_codex_state_is_refused_like_the_name(self):
+        for command in ("echo x > ~/.co*/config.toml", "cp forged ~/.c?dex/hooks.json", "rm ~/.[c]odex/hooks.json",
+                        "tee ~/x/sessions/rollout-*.jsonl < forged", "cp forged ro?lout-*.jsonl"):
+            with self.subTest(command=command):
+                self.assertIn("Codex's home folder", self.evaluate("Bash", command=command))
+        for command in ("echo x > ~/.cache*/a", "rm build/*.jsonl", "cp a ~/.config/*.toml"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.evaluate("Bash", command=command))
+
+    def test_a_link_into_codex_state_is_refused_for_a_write(self):
+        home = self.root / "home" / ".codex"
+        home.mkdir(parents=True)
+        (home / "hooks.json").write_text("{}", encoding="utf-8")
+        link = self.root / "innocent.json"
+        try:
+            link.symlink_to(home / "hooks.json")
+        except (OSError, NotImplementedError):
+            self.skipTest("this account cannot create symbolic links")
+        self.assertIn("Codex's home folder", self.evaluate("Write", file_path=str(link)))
 
 
 class InstallTest(unittest.TestCase):

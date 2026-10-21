@@ -23,6 +23,7 @@ with a Codex approval is never graded hard (see ``codexorigin``).
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 from pathlib import Path
@@ -90,10 +91,25 @@ def touches_codex_state(path_text: str, cwd: Path, root: Path | None) -> bool:
 
 
 def mentions_codex_state(text: str, root: Path | None) -> bool:
-    """Does shell text name Codex's folders, its home variable or a rollout file (a write is then refused)?"""
+    """Does shell text name Codex's folders, its home variable or a rollout file, spelled out or reached by a glob (a write
+    is then refused)?"""
     flattened = text.replace("\\", "/").casefold()
-    return bool(_CODEX_FOLDER.search(text) or _HOME_NAME.search(text) or _ROLLOUT.search(text)
-                or any(base in flattened for base in protected_roots(root)))
+    return bool(_CODEX_FOLDER.search(text) or _HOME_NAME.search(text) or _ROLLOUT.search(text) or guard.names_codex_state(text)
+                or any(base in flattened for base in protected_roots(root)) or reaches_home_by_glob(flattened, root))
+
+
+def reaches_home_by_glob(flattened: str, root: Path | None) -> bool:
+    """Could a glob in an absolute path expand into Codex's home under another name (CODEX_HOME moved it)? A glob
+    path is matched against each protected folder, segment by segment, as far as the glob goes."""
+    for word in guard._TOKEN_BREAKS.split(flattened):
+        if not guard._GLOB.search(word) or not (word.startswith(("/", "~")) or re.match(r"[a-z]:/", word)):
+            continue
+        parts = os.path.expanduser(word).replace("\\", "/").casefold().split("/")
+        for base in protected_roots(root):
+            wanted = base.split("/")
+            if len(parts) >= len(wanted) and all(fnmatch.fnmatchcase(name, pattern) for name, pattern in zip(wanted, parts)):
+                return True
+    return False
 
 
 def accepts_codex_approvals(root: Path | None) -> bool:
@@ -138,8 +154,13 @@ def check_path(path: str, cwd: Path, root: Path | None) -> str | None:
 
 
 def check_where(command: str, cwd: Path, root: Path) -> str | None:
-    """A command that writes, run from inside Codex's own folders, writes there whatever file name it uses."""
-    if guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)) and touches_codex_state(".", cwd, root):
+    """A command that writes, run from inside Codex's own folders or moving into one first (`cd`, `pushd`, `-C`), writes
+    there whatever file name it uses."""
+    if not guard._SHELL_WRITES.search(guard._NOISE.sub(" ", command)):
+        return None
+    folders = [cwd] + [place for text in [command, *guard.shell_readings(command)]
+                       for place in (resolve_word(word, cwd) for word in directory_operands(text)) if place is not None]
+    if any(touches_codex_state(".", folder, root) for folder in folders):
         return CONFIG_MESSAGE
     return None
 
@@ -170,6 +191,17 @@ UNRESOLVED_MESSAGE = ("greenlight: this command names a path that cannot be reso
                       "against the locks of the projects it might touch.")
 
 
+_CHANGES_DIRECTORY = re.compile(r"(?:^|[\s;&|(`{])(?:cd|pushd|chdir|set-location|sl|push-location)\s+"
+                                r"(?:-(?:literalpath|path|l|p)\s+)?[\"']?([^\s;&|()`\"']+)", re.IGNORECASE)
+_DIRECTORY_OPTION = re.compile(r"(?:^|\s)(?:-C|--directory|--git-dir|--work-tree|--prefix|--cwd|--dir)(?:\s+|=)[\"']?([^\s;&|()`\"']+)")
+
+
+def directory_operands(text: str) -> list[str]:
+    """The folders a command moves into or points a program at (`cd tests`, `pushd ../other`, `git -C repo`, `make -C dir`),
+    bare names included: a relative write after `cd` lands in that folder, so its project's rules apply."""
+    return [*_CHANGES_DIRECTORY.findall(text), *_DIRECTORY_OPTION.findall(text)]
+
+
 def path_like(word: str) -> bool:
     return "/" in word or "\\" in word or word.startswith((".", "~")) or bool(re.match(r"[A-Za-z]:", word))
 
@@ -194,7 +226,9 @@ def named_places(call: dict) -> list[str]:
         return [str(tool_input["file_path"])]
     if call["tool_name"] == "Bash":
         command = tool_input["command"]
-        return [word for text in [command, *guard.shell_readings(command)] for word in _PATH_WORDS.split(text) if word and path_like(word)]
+        texts = [command, *guard.shell_readings(command)]
+        return ([word for text in texts for word in _PATH_WORDS.split(text) if word and path_like(word)]
+                + [operand for text in texts for operand in directory_operands(text)])
     return [text for text in codexpayload.strings(tool_input) if path_like(text)]
 
 
