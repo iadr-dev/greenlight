@@ -52,7 +52,9 @@ class LintBase(unittest.TestCase):
         cls.vocab = vocabulary.load(vocab_file)
 
     def issues(self, text: str, profiles=config.ALL_PROFILES):
-        return lint.Linter(self.vocab, profiles, trace_tags=False).lint_text(text, "f.feature")
+        """The errors and vocabulary findings of a file; its style warnings have their own tests (test_stylecheck.py)."""
+        linter = lint.Linter(self.vocab, profiles, trace_tags=False, ignore=config.LINT_STYLE_CODES)
+        return linter.lint_text(text, "f.feature")
 
     def codes(self, text: str, **kw) -> list[str]:
         return [f"{i.code}:{i.line}" for i in self.issues(text, **kw)]

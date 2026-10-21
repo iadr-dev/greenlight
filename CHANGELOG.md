@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Style warnings in `bdd lint` (`L015` to `L025`, decision D45): steps out of Given, When, Then order, scenarios of more than 10 steps, placeholder data (`foo`, `bar`, `test`, ...), a Background used by one scenario, a Scenario Outline with one row or duplicate rows, empty or carried-over scenario titles, indentation, lines over 120 characters, blank lines between steps and between scenarios, and file names that are not kebab-case. They are warnings only, so nothing that passed before fails; a project can silence a code with `[lint] ignore = ["L022"]` in `.bdd/config.toml` (style codes only, never an error). A new `gherkin-style` practice card, read by the qa-designer, covers what a check cannot judge. The ideas come from the public Gherkin guidelines for AI by Andrew Knight (AutomationPanda); the wording is ours, and the rules that would conflict with the closed step vocabulary were left out.
+
 ### Changed
 - The skills that `bdd install-skills codex` writes now say how to run the command line from Codex (`bdd` is not on the PATH there: `sh "<path>/tools/bdd/bdd" <arguments>`), and the approve skill says that the approval hook has already answered in the model's context, so it repeats that line and stops instead of searching for files. Seen in the first live Codex runs, where the model ran about five exploratory commands before answering.
 
