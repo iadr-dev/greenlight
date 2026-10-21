@@ -21,6 +21,7 @@ COMMANDS = {
     "cost": ("statecmd", "run_cost"),
     "mode": ("statecmd", "run_mode"),
     "tripwire": ("tripwire", "main"),
+    "subagent-stop": ("agentcost", "subagent_stop"),
     "status": ("reportcmd", "run_status"),
     "trace": ("reportcmd", "run_trace"),
     "scan": ("reportcmd", "run_scan"),

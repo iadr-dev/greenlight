@@ -47,13 +47,16 @@ baseline arm runs the app's own tests (`go test ./...`, `npm test`). No model-dr
 The summary table prints the mean of each metric per arm, autonomy level, hooks setting and model, marked `ok` or `MISS`
 against its target and `-` where nothing was measured (a red or green that never happened is not scored as a failure of
 the run, it is not scored). Also recorded and reported, with no target: tokens and seconds per phase, cost in USD, which
-cards the session read, the auditor's verdict, the number of assumptions and, for autopilot, the agreement of the
+cards the session and its subagents read (a card counts when a Read, Bash, Grep or Glob call names it; the agents, not
+the orchestrator, read them, so the collector also reads `<session>/subagents/*.jsonl`), the auditor's verdict, the number of assumptions and, for autopilot, the agreement of the
 assumptions with the scripted answers (`evals/requests/<request>.answers.json`).
 
 ## What the rows mean
 
-- **Cost.** The orchestrator records tokens and seconds per phase with `bdd cost` from the subagents' completion
-  notices; `tokens` in a row is that sum and `cost_recorded` says whether anything was recorded. A run that stops early
+- **Cost.** The plugin's `SubagentStop` hook notes every finished agent and `bdd cost FEAT-n --collect` turns the notes
+  into tokens (from the agent's own transcript: input, output and cache writes, each model reply once) and seconds (from the
+  hook) per phase; the completion notice's own figure can differ by a few percent. `tokens` in a row is that sum and
+  `cost_recorded` says whether anything was recorded. A run that stops early
   (for example at `auto`, which asks a blocking question nobody can answer headless) has nothing recorded, which is why a
   zero there is not a bug. `claude.total_cost_usd` and `claude.tokens_reported` are Claude Code's own totals for the
   whole session. A row whose feature got past discover without recorded cost carries a `cost_warning`.

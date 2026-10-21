@@ -10,6 +10,13 @@ versions follow [SemVer](https://semver.org/).
 - `adapters/kotlin-android/guide.md`: running on a device or emulator with Google's `android` command-line tool (SDK install, emulator creation and start, `android run`, `connectedDebugAndroidTest`), with what was run and what was not.
 
 ### Fixed
+- The cost per phase is recorded by the tools and not estimated by the model. A real end-to-end run had recorded one invented figure for the discover phase and nothing for the others, although every agent's completion notice carried its own. The plugin now registers a `SubagentStop` hook (`bdd subagent-stop`) that notes each finished agent of the plugin, and `bdd cost FEAT-n --collect` records the phase's seconds from the hook and its tokens from the agent's own transcript; `bdd status` names a passed phase with no cost record. The feature skill tells the orchestrator to collect after every agent and never to estimate.
+- The `cards_read` metric of the evaluation was always empty: the agents, not the orchestrator, read the cards, and their transcripts were not read. The collector now reads the subagent transcripts too and counts a card only when a Read, Bash, Grep or Glob call names it.
+
+### Fixed
+
+- Found by the first live Codex run (codex-cli 0.142.3 on Windows): the Codex PreToolUse hook refused a call with exit status 2 and the reason on stderr, which Codex did not act on, so a locked spec could be edited (the tripwire noticed afterwards). A refusal is now the `permissionDecision: deny` decision on stdout with exit 0, which stopped the same edit, and the tripwire's finding after a call is a `decision: block` with a reason. The nested-session check also no longer refuses a command that merely has the word `codex` inside a quoted argument (`-Value '# edited by codex'`); a `codex` program word outside quotes, or at the start of a command inside a quoted script, is still refused. An opt-in live test (`tests/test_codex_live.py`) and platform note P31 record the procedure.
+
 - The guard missed a write verb behind a quote: `powershell -Command "Add-Content <locked file> ..."` (what a live Codex session ran on Windows), `cmd /c "del ..."` and `sh -c 'rm ...'` were allowed, where the same verb unquoted was refused. The tripwire caught the change afterwards, but nothing prevented it. Found by the first real Codex run.
 
 ### Fixed

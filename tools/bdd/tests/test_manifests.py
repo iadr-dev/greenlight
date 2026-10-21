@@ -91,7 +91,7 @@ class ManifestTest(unittest.TestCase):
         self.assertTrue(used)
         for command in used:
             with self.subTest(command=command):
-                match = re.fullmatch(r'sh "\$\{CLAUDE_PLUGIN_ROOT\}/tools/bdd/bdd" (\w+)(?: .*)?', command)
+                match = re.fullmatch(r'sh "\$\{CLAUDE_PLUGIN_ROOT\}/tools/bdd/bdd" ([\w-]+)(?: .*)?', command)
                 self.assertIsNotNone(match)
                 self.assertIn(match.group(1), COMMANDS)
 
