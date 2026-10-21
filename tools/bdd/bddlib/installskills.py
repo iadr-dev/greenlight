@@ -45,7 +45,11 @@ CLAUDE_MARK = "> Installed without the greenlight plugin by `bdd install-skills 
 MARKS = (CODEX_MARK, CLAUDE_MARK)
 CODEX_NOTE = (CODEX_MARK + " There are no hooks here, so enforcement is soft: locks and\n"
               "> evidence are checked after the fact, not prevented. Skills are invoked by name (`$greenlight-<skill>` in\n"
-              "> Codex). Read the greenlight block in `AGENTS.md` first, and never record an approval for the person.\n\n")
+              "> Codex). Read the greenlight block in `AGENTS.md` first, and never record an approval for the person.\n"
+              "> `bdd` is not on the PATH in Codex. Run the command line as `sh \"{wrapper}\" <arguments>`; the commands\n"
+              "> below name that path, so put `sh` in front of them.\n\n")
+CODEX_APPROVE_NOTE = ("> The approval hook has already answered in your context, in a line that starts with `greenlight approval:`.\n"
+                      "> Repeat that line and what has to happen first, then stop. Do not search for files or run commands to find out more.\n\n")
 CLAUDE_NOTE = (CLAUDE_MARK + " The plugin's hooks are not active here, so enforcement is\n"
                "> soft: locks and evidence are checked after the fact, not prevented. Invoke the skills as\n"
                "> `/greenlight-<skill>`, and never record an approval for the person. With the plugin installed, use the\n"
@@ -102,7 +106,10 @@ def skill_text(source: Path) -> tuple[str, str]:
     description = str(meta["description"]).replace('"', "'")
     body = body.replace(_PLUGIN_ROOT_VARIABLE, plugin_root_text())
     body = _SLASH_COMMAND.sub(lambda m: f"${PREFIX}{m.group(1)}", body)
-    return name, f'---\nname: {name}\ndescription: "{description}"\n---\n\n{CODEX_NOTE}{body.rstrip()}\n'
+    note = CODEX_NOTE.replace("{wrapper}", f"{plugin_root_text()}/tools/bdd/bdd")
+    if name == PREFIX + "approve":
+        note += CODEX_APPROVE_NOTE
+    return name, f'---\nname: {name}\ndescription: "{description}"\n---\n\n{note}{body.rstrip()}\n'
 
 
 def claude_skill_text(source: Path) -> tuple[str, str]:
