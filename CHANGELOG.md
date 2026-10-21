@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The end-to-end harness isolates a run from other work on the machine. Three real runs had stopped at the implement gate on integrity violations that other work caused while they ran (the plugin's checkout, the person's Claude Code settings and Codex configuration were edited elsewhere): greenlight refused correctly, but the measurement was wrong. A run now loads a snapshot of the last commit of the plugin (uncommitted changes in the checkout are reported, not loaded) and runs the harness's own `bdd` commands from it, gets a private Codex home and, when Claude Code authenticates through the environment, a private Claude Code folder. Machine-wide files the tripwire watches regardless are hashed before and after (`host_changes`), and a row whose open violations name a file outside the run is marked `contaminated` and left out of the targets (listed under the table). Rows also carry `claude_cost_usd`, `plugin_commit` and `checkout_changes`.
+- `bdd cost FEAT-n --collect` takes an agent's time from the first and last time stamp in its own transcript when the `SubagentStop` payload gives no duration, which it did not in real runs (every phase had 0 seconds).
+
 ### Changed
 - The engineering standards template (`templates/standards.md`) now has rules for clean code, duplicated code, architecture and interfaces, folder layout, error handling and logging, performance, concurrency, observability and user interfaces, each marked `[tool]` or `[review]`. A `[tool]` rule with no tool configured is checked by the auditor. Version examples say how to choose a current release instead of naming numbers that go stale. `bdd doctor` warns when an approved standards file still has an unfilled `<placeholder>`.
 
