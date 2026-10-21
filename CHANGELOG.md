@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The evaluation harness keeps the orchestrator's last message and the auditor's report (each cut to 6000 characters) in the result row, so a run that stops at findings explains itself after its temporary folders are deleted.
+
 ### Added
 - Style warnings in `bdd lint` (`L015` to `L025`, decision D45): steps out of Given, When, Then order, scenarios of more than 10 steps, placeholder data (`foo`, `bar`, `test`, ...), a Background used by one scenario, a Scenario Outline with one row or duplicate rows, empty or carried-over scenario titles, indentation, lines over 120 characters, blank lines between steps and between scenarios, and file names that are not kebab-case. They are warnings only, so nothing that passed before fails; a project can silence a code with `[lint] ignore = ["L022"]` in `.bdd/config.toml` (style codes only, never an error). A new `gherkin-style` practice card, read by the qa-designer, covers what a check cannot judge. The ideas come from the public Gherkin guidelines for AI by Andrew Knight (AutomationPanda); the wording is ours, and the rules that would conflict with the closed step vocabulary were left out.
 
