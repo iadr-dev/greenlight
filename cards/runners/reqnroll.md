@@ -21,13 +21,16 @@ frameworks the logger writes a file per framework: use `tests/run_junit.py --rep
 
 One `<testcase>` per scenario; `name` is the generated test method (`TwoNumbersAreAdded` for the scenario `Two numbers are added`),
 which contains the scenario name once punctuation is dropped, so the mapping works. This card and the fixtures in
-`tools/bdd/tests/fixtures/junit/reqnroll` were written from the documented format and **not produced by a run**.
+`tools/bdd/tests/fixtures/junit/reqnroll` are a real run (Reqnroll with xUnit and JunitXml.TestLogger, .NET SDK 10.0.402,
+2026-10-21; the project path and host name were replaced by placeholders). Every test case carries its tags as `Category`
+properties and the step log in `system-out`.
 
 ## What red looks like
 
 - A step that throws `new NotImplementedException("BDD_EXPECTED_MISSING: add")` is a `<failure type="System.NotImplementedException">`:
   an expected failure. xUnit assertions (`Xunit.Sdk.EqualException`, `Assert.Equal() Failure`) and NUnit's `AssertionException` are expected too.
-- A step with no definition is reported as pending ("No matching step definition found for one or more steps"): the default patterns call it
+- A step with no definition is a `<failure>` whose message starts `Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching
+  step definition found for one or more steps` (with the suggested step code), and `system-out` says `-> undefined`: the default patterns call it
   a test defect. Check what your Reqnroll version does by default: in `reqnroll.json` set `"runtime": { "missingOrPendingStepsOutcome": "Error" }`,
   because an outcome of `Ignore` or `Inconclusive` appears as skipped and only blocks the red as "did not run".
 - A compile error stops `dotnet test` before any report (`error CS0103`): scenarios `not-run`, and the output matches the defect pattern.

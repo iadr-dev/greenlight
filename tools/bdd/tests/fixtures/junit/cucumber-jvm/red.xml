@@ -1,7 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite failures="2" name="io.cucumber.core.plugin.JUnitFormatter" skipped="0" tests="2" time="0.02">
-  <testcase classname="Sample (delete me)" name="Two numbers are added" time="0.01"><failure message="BDD_EXPECTED_MISSING: add" type="java.lang.UnsupportedOperationException"><![CDATA[java.lang.UnsupportedOperationException: BDD_EXPECTED_MISSING: add
-	at sample.Steps.add(Steps.java:11)]]></failure></testcase>
-  <testcase classname="Sample (delete me)" name="A negative number is refused" time="0.01"><failure message="BDD_EXPECTED_MISSING: add" type="java.lang.UnsupportedOperationException"><![CDATA[java.lang.UnsupportedOperationException: BDD_EXPECTED_MISSING: add
-	at sample.Steps.add(Steps.java:11)]]></failure></testcase>
+<testsuite name="Cucumber" time="0.112" tests="2" skipped="0" failures="2" errors="0" timestamp="2026-10-21T03:21:58.746855300Z">
+<testcase classname="Sample (delete me)" name="Two numbers are added" time="0.012">
+<failure type="java.lang.IllegalStateException" message="BDD_EXPECTED_MISSING: add">
+<![CDATA[java.lang.IllegalStateException: BDD_EXPECTED_MISSING: add
+	at sample.steps.Steps.add(Steps.java:15)
+	at ✽.I add 2 and 3(classpath:features/sample.feature:4)
+]]>
+</failure>
+<system-out><![CDATA[
+When I add 2 and 3..........................................................failed
+Then the result is 5........................................................skipped
+]]></system-out>
+</testcase>
+<testcase classname="Sample (delete me)" name="A negative number is refused" time="0.0">
+<failure type="java.lang.IllegalStateException" message="BDD_EXPECTED_MISSING: add">
+<![CDATA[java.lang.IllegalStateException: BDD_EXPECTED_MISSING: add
+	at sample.steps.Steps.add(Steps.java:15)
+	at ✽.I add -1 and 3(classpath:features/sample.feature:8)
+]]>
+</failure>
+<system-out><![CDATA[
+When I add -1 and 3.........................................................failed
+Then the call fails with negative input.....................................skipped
+]]></system-out>
+</testcase>
 </testsuite>

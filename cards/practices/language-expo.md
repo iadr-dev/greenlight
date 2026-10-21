@@ -38,3 +38,6 @@ valid. An SDK upgrade is a project decision with its own procedure, never a side
 - Code that works on one platform only (web or iOS or Android) without a platform check or a file suffix (`.ios.ts`).
 - Importing a module that needs a development build into an app that runs in Expo Go.
 - Deprecated modules still present in older tutorials; check the SDK's documentation before using a package.
+- `npx expo lint` in a project without an ESLint setup installs `eslint` and `eslint-config-expo` into `package.json` and writes `eslint.config.js`, and fails on that first run. That is a dependency change: run it only where ESLint is already configured, and treat a missing setup as a requirement for the person.
+- `npx expo-doctor` and `npx expo install --check` need the network (they check the registry and the SDK's version list).
+- Run on 2026-10-21 with Node 26, Expo SDK 58 (`expo` 58.0.16, React Native 0.88.0) on a project from `create-expo-app --template blank-typescript`: `npx expo install --check` exited 0 ("Dependencies are up to date"), `npx expo-doctor` (1.21.5) passed 20 of 20 checks, and `npx expo lint` behaved as described above and then exited 0.

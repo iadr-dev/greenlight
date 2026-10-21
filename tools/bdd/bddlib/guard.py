@@ -585,7 +585,9 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     readings = [command, *shell_readings(command)]
     if any(_CODEX_HOOK_ENTRY.search(reading) for reading in readings):
         return CODEX_HOOK_MESSAGE
-    if codexsession.starts_codex_session(command) or any(codexsession.starts_codex_session(reading, True) for reading in readings[1:]):
+    strict = project.config.accept_codex
+    if (codexsession.starts_codex_session(command, strict=strict)
+            or any(codexsession.starts_codex_session(reading, True, strict) for reading in readings[1:])):
         return codexsession.NESTED_MESSAGE
     if starts_claude_session(command):
         return NESTED_SESSION_MESSAGE

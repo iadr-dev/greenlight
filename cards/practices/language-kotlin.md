@@ -46,3 +46,4 @@ standard. Write for them with their current APIs; a toolchain, plugin or library
 - `@Suppress("DEPRECATION")` added to pass the build. Replace the API; a suppression needs a reason beside it.
 - Changing `build.gradle.kts`, the version catalog or the wrapper to make a build pass. Those are the person's decisions; return the question.
 - Android: permissions, lifecycle-unaware work, and APIs available only above the project's `minSdk` without a version check.
+- The commands in this card come from the tools' documentation and were not run against a real project (no ktlint, detekt or Kotlin compiler was available when the cards were checked on 2026-10-21). The Gradle form of the Kotlin and Android adapters was run for real in CI, but not these quality tools.
