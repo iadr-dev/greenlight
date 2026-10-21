@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- CI: a newer push to the same pull request cancels the run still in progress for it; runs on `main` are never cancelled.
+
+### Changed
 - The README opens with an ASCII-art banner of the project name.
 
 ### Fixed
