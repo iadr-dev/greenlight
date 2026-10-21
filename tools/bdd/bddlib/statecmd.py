@@ -193,16 +193,18 @@ def run_cost(argv: list[str]) -> int:
     if not args.collect and not args.phase:
         ap.error("--phase is required unless --collect is given")
 
-    def action() -> int:
-        if args.collect:
-            lines = agentcost.collect(project_root(), args.feature, args.phase)
-            print("\n".join(lines) if lines else f"{args.feature}: no finished agent is waiting to be recorded")
-            return 0
+    def collect_cost() -> int:
+        lines = agentcost.collect(project_root(), args.feature, args.phase)
+        print("\n".join(lines) if lines else f"{args.feature}: no finished agent is waiting to be recorded")
+        return 0
+
+    def add_cost() -> int:
         feature_dir = feature_dir_of(project_root(), args.feature)
         entry = state.add_cost(feature_dir, args.phase, args.tokens, args.seconds)["cost"][args.phase]
         print(f"{args.feature} {args.phase}: {entry['tokens']:,} tokens, {entry['seconds']:.1f} s in {entry['runs']} run(s)")
         return 0
-    return guarded("cost", action)
+
+    return guarded("cost", collect_cost if args.collect else add_cost)
 
 
 def run_mode(argv: list[str]) -> int:
