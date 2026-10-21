@@ -18,7 +18,7 @@ with their current standard library and crate APIs; raising the edition, the too
    - format: `cargo fmt --check`
    - lint, with every warning (deprecations included) as an error: `cargo clippy --all-targets -- -D warnings`
    - build and tests: `cargo build`, `cargo test`
-   - known vulnerabilities in the dependencies (needs `cargo install cargo-audit --locked` once): `cargo audit`
+   - known vulnerabilities in the dependencies (needs `cargo install cargo-audit --version 0.22.2 --locked` once; pin the version you checked): `cargo audit`
    - a plain `cargo build` only warns about a `#[deprecated]` item; `-D warnings` makes clippy refuse it (the compiler's
      `deprecated` lint is a warning), and a crate that states `#![deny(deprecated)]` makes every build refuse it
 3. To have greenlight run them, add tables to `.bdd/config.toml`:
