@@ -11,8 +11,8 @@ The first complete release: the flow from feature request to verified code for s
 hard enforcement and plain skills (Claude Code without the plugin, Codex, `AGENTS.md`) for soft enforcement. The entries below
 are everything added since 0.1.0.
 
-**Measured, and what that does and does not show.** Sixteen end-to-end runs with Claude Sonnet 5.5 at `autopilot` with hooks
-on (`evals/run_e2e.py`; one run is one feature through every phase). All results are marked UNREVIEWED, as every autopilot
+**Measured, and what that does and does not show.** Sixteen end-to-end runs with Claude Sonnet 5.5 at `autopilot`: fifteen
+with the plugin and its hooks on, one without it (`evals/run_e2e.py`; one run is one feature through every phase). All results are marked UNREVIEWED, as every autopilot
 result is, and each used about $3 to $8 of model usage (the Go CSV tool $7.55 and 42 minutes, the others $3.6 to $4.3 and
 17 to 21 minutes).
 
@@ -30,7 +30,7 @@ result is, and each used about $3 to $8 of model usage (the Go CSV tool $7.55 an
 - **The no-plugin baseline** (the same `discounts` request with plain Claude Code, scored by the app's own unit tests) took
   22 seconds and $0.05 and left the existing tests passing. It produced no rules, scenarios, approvals or trace, so it says
   nothing about whether its discount logic is right; it is a cost and speed reference, not a quality comparison.
-- **What this does not show:** a success rate. These are 16 runs of 4 requests with one model, several after fixes made
+- **What this does not show:** a success rate. These are 15 plugin runs of 4 requests with one model, several after fixes made
   because of earlier runs, so the numbers describe what happened, not what will. The standard-autonomy arm (typed approvals
   delivered headlessly), the browser requests (`minimum-order`, `login-return`), other models and repeated runs of the new
   requests have not been run. Assumption agreement with the scripted answers varied between 25% and 100% and is only
