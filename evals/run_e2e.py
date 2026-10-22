@@ -408,6 +408,19 @@ def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
             "holds": check.returncode == 0 and not touched and green is True}
 
 
+NOTE_LIMIT = 6000
+
+
+def run_notes(project: Path, output: dict) -> dict:
+    """What the run said at the end: the orchestrator's last message and the auditor's report, cut to a readable length, so
+    a run that stopped explains itself after its temporary folders are gone."""
+    notes = {"final_message": str(output.get("result") or "")[:NOTE_LIMIT]}
+    reports = sorted((project / ".bdd" / "features").glob("*/report.md"))
+    if reports:
+        notes["report"] = reports[0].read_text(encoding="utf-8", errors="replace")[:NOTE_LIMIT]
+    return notes
+
+
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
     kind = REQUEST_KINDS[args.request]
     plugin = plugin_snapshot(tmp, args.hooks)
@@ -422,6 +435,7 @@ def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, an
     row["contaminated"] = bool(row["foreign_violations"])
     marker = project / ".bdd" / ".enforcement" / "_seen"
     row.update(git_changes(project, env))
+    row.update(run_notes(project, output))
     if kind["skill"] == "adopt" and row.get("feature"):
         row["adoption"] = adoption_invariants(project, env, row["feature"])
     row.update({"hooks_active": marker.is_file(), "claude": claude_summary(output)})

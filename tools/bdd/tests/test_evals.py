@@ -279,6 +279,21 @@ class ContaminationTest(unittest.TestCase):
             ])
             self.assertEqual(collect.foreign_violations(project, [run_folder]), [host.as_posix()])
 
+    def test_the_end_of_a_run_is_kept_in_the_row_cut_to_a_readable_length(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            folder = project / ".bdd" / "features" / "FEAT-001-x"
+            folder.mkdir(parents=True)
+            (folder / "report.md").write_text("Verdict: FINDINGS\n" + "x" * 9000, encoding="utf-8")
+            notes = run_e2e.run_notes(project, {"result": "I stopped at verify. " + "y" * 9000})
+            self.assertTrue(notes["final_message"].startswith("I stopped at verify."))
+            self.assertTrue(notes["report"].startswith("Verdict: FINDINGS"))
+            self.assertEqual((len(notes["final_message"]), len(notes["report"])), (run_e2e.NOTE_LIMIT, run_e2e.NOTE_LIMIT))
+
+    def test_a_run_with_no_report_and_no_final_message_has_empty_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(run_e2e.run_notes(Path(tmp), {}), {"final_message": ""})
+
     def test_a_project_without_violations_is_clean(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(collect.foreign_violations(Path(tmp), []), [])

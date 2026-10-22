@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The evaluation harness keeps the orchestrator's last message and the auditor's report (each cut to 6000 characters) in the result row, so a run that stops at findings explains itself after its temporary folders are deleted.
+
 ### Fixed
 - Shuffled and isolated runs of the generic-junit reference apps never ran: the run table kept the sample runner's `--seed` and `--only` words, which `tests/run_junit.py` refuses. csv-tool (Go) now shuffles and isolates for real (`--add=-shuffle={seed}`, `--add=-run=...{scenario:alnum}`), money-lib (Node's test runner) has no such words and `bdd run --shuffle` says so, and the wrapper explains that words for the test command are written `--add=WORD`. New name-filter placeholders `{scenario:alnum}` and `{scenario:js}`. The harness uses gotestsum v1.13.0, because v1.12.1 does not build on Go 1.25 or newer. Tests pin that an empty result exits 1 in every run mode.
 
