@@ -16,7 +16,10 @@ report = '--format junit:{out}'
 Add the cucumber configuration file (`cucumber.js` or `cucumber.json`), `package.json` and the lockfile to `support`. For
 TypeScript steps add the loader your project uses (`--require-module ts-node/register`, or a compiled `dist/`) in the
 configuration file, not on the command line, so the file is bound. Shuffle: `shuffle = '--order random:{seed}'`. One scenario:
-`isolated = '--name "{scenario}"'`.
+`isolated = '--name "^{scenario:js}$"'`. `--name` takes a JavaScript regular expression: `{scenario:js}` escapes the
+metacharacters and writes a character beyond ASCII as `\uXXXX`, which JavaScript reads, while `{scenario:regex}` writes
+`\x{HEX}`, which it does not (an accented title would select nothing). Both flags were checked on cucumber-js 11.2.0.
+Behind the wrapper `tests/run_junit.py` each word is given as `--add=WORD`.
 
 ## Report
 

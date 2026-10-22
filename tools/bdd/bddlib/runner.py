@@ -128,6 +128,25 @@ def regex_escape(text: str) -> str:
     return "".join(f"\\x{{{ord(char):X}}}" if ord(char) > 127 else re.escape(char) for char in text)
 
 
+def js_regex_escape(text: str) -> str:
+    """The same for a runner whose engine is JavaScript's (cucumber-js ``--name``): that engine does not read ``\\x{HEX}``,
+    so every character outside ASCII is written as ``\\uXXXX`` (a character beyond the first plane as its two UTF-16 halves),
+    which also keeps the filter plain ASCII on a Windows code page."""
+    def one(char: str) -> str:
+        if ord(char) <= 127:
+            return re.escape(char)
+        units = char.encode("utf-16-be")
+        return "".join(f"\\u{int.from_bytes(units[i:i + 2], 'big'):04X}" for i in range(0, len(units), 2))
+    return "".join(one(char) for char in text)
+
+
+def alphanumeric_name(text: str) -> str:
+    """The letters and digits of a scenario name (any script), nothing else: how a runner whose test names are written
+    without spaces or punctuation (a Go test function ``TestFEAT_001_CountsTheRows``) spells the name. Used inside a
+    pattern, so it holds no regular-expression metacharacter."""
+    return "".join(char for char in text if char.isalnum())
+
+
 def device_shell_regex(text: str) -> str:
     r"""A name filter that reaches a regular-expression engine on an Android device. Instrumentation arguments pass
     through the device's shell unquoted (``am instrument -e name <value>``), which splits words on spaces and removes one
@@ -141,7 +160,7 @@ def device_shell_regex(text: str) -> str:
     return "".join(one(char) for char in text)
 
 
-_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex|:device)?)\}")
+_PLACEHOLDER = re.compile(r"\{(root|base|python|project_python|tag|marker|out|seed|scenario(?::regex|:js|:alnum|:device)?)\}")
 
 
 def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed: int | None = None,
@@ -160,7 +179,8 @@ def build_command(rules: cfg.RunRules, root: Path, tag: str, out: Path, *, seed:
               "python": sys.executable, "project_python": project_python(root), "tag": tag,
               "marker": re.sub(r"\W", "_", tag), "out": str(out), "seed": str(seed if seed is not None else ""),
               "scenario": scenario or "",
-              "scenario:regex": regex_escape(scenario or ""), "scenario:device": device_shell_regex(scenario or "")}
+              "scenario:regex": regex_escape(scenario or ""), "scenario:alnum": alphanumeric_name(scenario or ""), "scenario:js": js_regex_escape(scenario or ""),
+              "scenario:device": device_shell_regex(scenario or "")}
     # one pass over each word: a value that contains something that looks like a placeholder is not filled in again
     return [_PLACEHOLDER.sub(lambda found: values[found.group(1)], word) for word in shlex.split(template)]
 

@@ -18,9 +18,12 @@ func TestFEAT_007_TwoNumbersAreAdded(t *testing.T) { ... }
 by_tag = '{python} -I tests/run_junit.py --reports "reports/go.xml" --command "gotestsum --junitfile reports/go.xml -- ./... -run {marker}"'
 report = '--out {out}'
 shuffle = '--add=-shuffle={seed}'
+isolated = '--add=-run=(?i)^Test{marker}_{scenario:alnum}$'
 ```
 
-Add `tests/run_junit.py` and `go.mod` to `support`. `-shuffle` needs Go 1.17 or newer. For godog features use the `go-godog`
+Add `tests/run_junit.py` and `go.mod` to `support`. `-shuffle` needs Go 1.17 or newer. `isolated` relies on the test function being named for the scenario without spaces or
+punctuation (`TestFEAT_007_TwoNumbersAreAdded`): `go test` takes the last `-run`, which narrows the feature's pattern to that one
+test. Both lines were run for real with `gotestsum` v1.13.0 on Go 1.27 (v1.12.1 does not build on Go 1.25 or newer). For godog features use the `go-godog`
 adapter instead of this recipe: it ships the steps, the drivers, godog's own JUnit report and the run command, with the tag
 passed as a test flag (`Tags: "@FEAT-007"` in the test options).
 

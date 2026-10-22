@@ -86,13 +86,18 @@ REQUEST_KINDS = {
     "csv-report": {"app": "csv-tool", "skill": "feature", "adapter": "generic-junit", "tools": ("go",),
                    "baseline": ["go", "test", "./..."],
                    "run": ("{python} -I tests/run_junit.py --reports go-report.xml --command "
-                           "\"go run gotest.tools/gotestsum@v1.12.1 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
-                           ["tests/run_junit.py", "go.mod"])},
+                           "\"go run gotest.tools/gotestsum@v1.13.0 --junitfile go-report.xml -- -count=1 ./tests/... -run {marker}_\"",
+                           ["tests/run_junit.py", "go.mod"],
+                           # go test takes the last -run, so the scenario's own test (named without spaces) narrows it
+                           {"shuffle": "--add=-shuffle={seed}", "isolated": "--add=-run=(?i)^Test{marker}_{scenario:alnum}$"})},
     "money-convert": {"app": "money-lib", "skill": "feature", "adapter": "generic-junit", "tools": ("node", "npm"),
                       "baseline": ["npm", "test", "--silent"],
                       "run": ("{python} -I tests/run_junit.py --reports node-report.xml --command "
                               "\"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
-                              ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"])},
+                              ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"],
+                              # node:test of Node 22 has no random order, and a second name pattern widens the first
+                              # instead of narrowing it, so this stack has neither; `bdd run --shuffle` says so
+                              {})},
     "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
                       "baseline": ["npm", "test"]},
     "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
@@ -231,12 +236,16 @@ def commit_all(project: Path, env: dict, message: str) -> None:
 def swap_run_line(project: Path, kind: dict) -> None:
     """Act as the person: point the generic-junit adapter at the app's own runner, as its guide says to do.
 
-    The sample runner and its feature are removed, and the runner's own files are bound with the steps."""
-    by_tag, support = kind["run"]
+    The sample runner and its feature are removed, the runner's own files are bound with the steps, and the sample
+    runner's shuffle and isolated words (which fit no other runner) are replaced by the stack's own or removed."""
+    by_tag, support, extra = kind["run"]
     config = project / ".bdd" / "config.toml"
     text = config.read_text(encoding="utf-8")
     text = re.sub(r"(?m)^by_tag = .*$", lambda _: "by_tag = " + json.dumps(by_tag), text, count=1)
     text = re.sub(r"(?m)^support = .*$", lambda _: "support = " + json.dumps(support), text, count=1)
+    for name in ("shuffle", "isolated"):
+        line = f"{name} = {json.dumps(extra[name])}\n" if name in extra else ""
+        text = re.sub(rf"(?m)^{name} = .*\n", lambda _, value=line: value, text, count=1)
     config.write_text(text, encoding="utf-8", newline="\n")
     for sample in ("tests/features/sample.feature", "tests/steps/sample_domain.py", "tests/steps/sample_tests.py",
                    "tests/run_tests.py"):
@@ -399,6 +408,19 @@ def adoption_invariants(project: Path, env: dict, feature: str) -> dict:
             "holds": check.returncode == 0 and not touched and green is True}
 
 
+NOTE_LIMIT = 6000
+
+
+def run_notes(project: Path, output: dict) -> dict:
+    """What the run said at the end: the orchestrator's last message and the auditor's report, cut to a readable length, so
+    a run that stopped explains itself after its temporary folders are gone."""
+    notes = {"final_message": str(output.get("result") or "")[:NOTE_LIMIT]}
+    reports = sorted((project / ".bdd" / "features").glob("*/report.md"))
+    if reports:
+        notes["report"] = reports[0].read_text(encoding="utf-8", errors="replace")[:NOTE_LIMIT]
+    return notes
+
+
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
     kind = REQUEST_KINDS[args.request]
     plugin = plugin_snapshot(tmp, args.hooks)
@@ -413,6 +435,7 @@ def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, an
     row["contaminated"] = bool(row["foreign_violations"])
     marker = project / ".bdd" / ".enforcement" / "_seen"
     row.update(git_changes(project, env))
+    row.update(run_notes(project, output))
     if kind["skill"] == "adopt" and row.get("feature"):
         row["adoption"] = adoption_invariants(project, env, row["feature"])
     row.update({"hooks_active": marker.is_file(), "claude": claude_summary(output)})

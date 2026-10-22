@@ -251,6 +251,18 @@
       "phase": "system-map"
     },
     {
+      "apply_when": "writing or reviewing the scenarios of a feature file, before showing them to the person",
+      "id": "gherkin-style",
+      "kind": "practice",
+      "output": "scenarios that one person can read in a minute each, with one behaviour apiece and no wording that the lint cannot judge",
+      "pairs_with": [
+        "test-data",
+        "request-decoder"
+      ],
+      "path": "practices/gherkin-style.md",
+      "phase": "examples"
+    },
+    {
       "apply_when": "the project is an Expo or React Native app and production code is written or judged",
       "id": "language-expo",
       "kind": "practice",

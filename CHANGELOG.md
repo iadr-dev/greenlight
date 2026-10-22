@@ -34,6 +34,18 @@ to audit item Q4 below. The cost of the PASS run was recorded for the discover p
 - The guard is a best-effort text check on shell commands. The tripwire, your deny rules (`bdd doctor` shows them) and CI
   (`docs/ci.md`) are the guarantees. The CI templates clone the release tag `v1.0.0`.
 
+### Changed
+- The evaluation harness keeps the orchestrator's last message and the auditor's report (each cut to 6000 characters) in the result row, so a run that stops at findings explains itself after its temporary folders are deleted.
+
+### Fixed
+- Shuffled and isolated runs of the generic-junit reference apps never ran: the run table kept the sample runner's `--seed` and `--only` words, which `tests/run_junit.py` refuses. csv-tool (Go) now shuffles and isolates for real (`--add=-shuffle={seed}`, `--add=-run=...{scenario:alnum}`), money-lib (Node's test runner) has no such words and `bdd run --shuffle` says so, and the wrapper explains that words for the test command are written `--add=WORD`. New name-filter placeholders `{scenario:alnum}` and `{scenario:js}`. The harness uses gotestsum v1.13.0, because v1.12.1 does not build on Go 1.25 or newer. Tests pin that an empty result exits 1 in every run mode.
+
+### Added
+- Style warnings in `bdd lint` (`L015` to `L025`, decision D45): steps out of Given, When, Then order, scenarios of more than 10 steps, placeholder data (`foo`, `bar`, `test`, ...), a Background used by one scenario, a Scenario Outline with one row or duplicate rows, empty or carried-over scenario titles, indentation, lines over 120 characters, blank lines between steps and between scenarios, and file names that are not kebab-case. They are warnings only, so nothing that passed before fails; a project can silence a code with `[lint] ignore = ["L022"]` in `.bdd/config.toml` (style codes only, never an error). A new `gherkin-style` practice card, read by the qa-designer, covers what a check cannot judge. The ideas come from the public Gherkin guidelines for AI by Andrew Knight (AutomationPanda); the wording is ours, and the rules that would conflict with the closed step vocabulary were left out.
+
+### Changed
+- The skills that `bdd install-skills codex` writes now say how to run the command line from Codex (`bdd` is not on the PATH there: `sh "<path>/tools/bdd/bdd" <arguments>`), and the approve skill says that the approval hook has already answered in the model's context, so it repeats that line and stops instead of searching for files. Seen in the first live Codex runs, where the model ran about five exploratory commands before answering.
+
 ### Fixed
 - The end-to-end harness isolates a run from other work on the machine. Three real runs had stopped at the implement gate on integrity violations that other work caused while they ran (the plugin's checkout, the person's Claude Code settings and Codex configuration were edited elsewhere): greenlight refused correctly, but the measurement was wrong. A run now loads a snapshot of the last commit of the plugin (uncommitted changes in the checkout are reported, not loaded) and runs the harness's own `bdd` commands from it, gets a private Codex home and, when Claude Code authenticates through the environment, a private Claude Code folder. Machine-wide files the tripwire watches regardless are hashed before and after (`host_changes`), and a row whose open violations name a file outside the run is marked `contaminated` and left out of the targets (listed under the table). Rows also carry `claude_cost_usd`, `plugin_commit` and `checkout_changes`.
 - `bdd cost FEAT-n --collect` takes an agent's time from the first and last time stamp in its own transcript when the `SubagentStop` payload gives no duration, which it did not in real runs (every phase had 0 seconds).

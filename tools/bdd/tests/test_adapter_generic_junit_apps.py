@@ -95,11 +95,31 @@ class HarnessTablesTest(unittest.TestCase):
                 self.assertFalse((root / "tests" / "run_tests.py").exists())
                 self.assertIn(root / "tests" / "run_junit.py", cfg.load(root).support_files)
 
+    def test_the_shuffle_and_isolated_words_fit_the_wrapper_or_are_gone(self):
+        """The sample runner's `--seed` and `--only` words are refused by tests/run_junit.py, which takes words for the test
+        command only as --add=WORD: a run table that keeps them can never shuffle or isolate."""
+        from bddlib import config as cfg
+        expected = {"csv-report": (True, True), "money-convert": (False, False)}
+        for request, (shuffles, isolates) in expected.items():
+            kind = self.harness.REQUEST_KINDS[request]
+            with self.subTest(request=request), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                shutil.copytree(REPO / "evals" / "apps" / kind["app"], root, ignore=IGNORED, dirs_exist_ok=True)
+                (root / ".bdd").mkdir()
+                adapter.apply(root, "generic-junit")
+                self.harness.swap_run_line(root, kind)
+                (run,) = cfg.load(root).runs
+                self.assertEqual((bool(run.shuffle), bool(run.isolated)), (shuffles, isolates))
+                for words in (run.shuffle, run.isolated):
+                    for word in words.split():
+                        self.assertTrue(word.startswith("--add="), f"{word!r} would be refused by run_junit.py")
+
 
 class AppCase:
     """The steps of the test; a subclass names the request and brings its steps and its toolchain check."""
 
     request = ""
+    orders_tests = False             # does the stack's run table have shuffle and isolated words?
 
     @classmethod
     def setUpClass(cls):
@@ -155,6 +175,23 @@ class AppCase:
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.results(), ["pass", "pass"])
         self.assertEqual(self.bdd("classify", "FEAT-001", "--expect", "green")[0], 0)
+
+    def test_shuffled_and_isolated_runs_are_green_where_the_stack_can_and_say_so_where_it_cannot(self):
+        self.write_steps(*self.green_steps)
+        if not self.orders_tests:
+            for flag, words in (("--shuffle", "shuffle"), ("--isolated", "isolated")):
+                code, out, err = self.bdd("run", "FEAT-001", flag)
+                self.assertEqual(code, 2, out + err)
+                self.assertIn(f"has no {words} words", err)
+            return
+        code, out, err = self.bdd("run", "FEAT-001", "--shuffle", "--seed", "7")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("(shuffle, seed 7): 2 passed", out)
+        self.assertEqual(self.results(), ["pass", "pass"])
+        code, out, err = self.bdd("run", "FEAT-001", "--isolated")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("2 run(s) (isolated): 2 passed", out)          # one process per scenario, one test each
+        self.assertEqual(self.results(), ["pass", "pass"])
 
 
 NODE_RED = """import { test } from "node:test";
@@ -251,6 +288,7 @@ class MoneyLibTest(AppCase, unittest.TestCase):
 @unittest.skipUnless(ENABLED and shutil.which("go"), "needs go, network and GREENLIGHT_APP_ADAPTER_TESTS=1")
 class CsvToolTest(AppCase, unittest.TestCase):
     request = "csv-report"
+    orders_tests = True
     red_steps = ("tests/steps/counting_test.go", GO_RED)
     green_steps = ("tests/steps/counting_test.go", GO_GREEN)
 
