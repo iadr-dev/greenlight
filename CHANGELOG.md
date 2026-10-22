@@ -7,32 +7,60 @@ versions follow [SemVer](https://semver.org/).
 
 ## [1.0.0] - 2026-10-21
 
-The first complete release: the flow from feature request to verified code for seven test stacks, with Claude Code hooks for hard
-enforcement and plain skills (Claude Code without the plugin, Codex, `AGENTS.md`) for soft enforcement. The entries below are
-everything added since 0.1.0.
+The first complete release: the flow from feature request to verified code for seven test stacks, with Claude Code hooks for
+hard enforcement and plain skills (Claude Code without the plugin, Codex, `AGENTS.md`) for soft enforcement. The entries below
+are everything added since 0.1.0.
 
-**Measured, and what that does not show.** One end-to-end run of the `discounts` request on the Python adapter (Claude Sonnet
-5.5, `autopilot`, hooks on) reached `done` with an auditor verdict of PASS (marked UNREVIEWED, as every autopilot result is)
-and met all six release metrics: every rule had examples, valid red on the first bind 100%, green 100%, no locked-spec
-violations, vocabulary resolution 100%, no forged approvals. That is one run of one request with one model. The standard
-autonomy arm, the no-plugin baseline, the other requests and repeated runs are supported by the harness (`evals/run_e2e.py`,
-`evals/collect.py`) but have not been measured. An earlier run of the same request stopped at FINDINGS; it led to the change
-to audit item Q4 below. The cost of the PASS run was recorded for the discover phase only.
+**Measured, and what that does and does not show.** Sixteen end-to-end runs with Claude Sonnet 5.5 at `autopilot` with hooks
+on (`evals/run_e2e.py`; one run is one feature through every phase). All results are marked UNREVIEWED, as every autopilot
+result is, and each used about $3 to $8 of model usage (the Go CSV tool $7.55 and 42 minutes, the others $3.6 to $4.3 and
+17 to 21 minutes).
+
+- **Eight runs finished with the auditor's PASS and met all six release metrics** (every rule has examples, valid red on the
+  first bind 100%, green 100%, no locked-spec violation, vocabulary resolution 100%, no forged approval, hard enforcement):
+  five of the `discounts` request (Python), and one each of `money-convert` (a TypeScript library, generic-junit),
+  `csv-report` (a Go command, generic-junit) and `adopt-billing` (adopting existing Flask code: 31 scenarios all tagged
+  `@existing`, no production file touched).
+- **Seven runs did not finish, and none of the causes is hidden:** four were invalid because I edited files on the machine
+  while they ran (the tripwire correctly refused the gate; the harness now marks such rows contaminated and keeps them out of
+  the targets); one found a real gap, a feature reopened after its code existed could not prove a new red (fixed:
+  `bdd run --against-red`); one stopped at a legitimate audit finding, a deprecation warning that only a dependency upgrade
+  could clear (checklist item Q4 now blocks only on APIs the change introduces); and one stopped at an audit finding whose
+  text was not kept, so its cause is unknown (the harness now keeps the final message and the report).
+- **The no-plugin baseline** (the same `discounts` request with plain Claude Code, scored by the app's own unit tests) took
+  22 seconds and $0.05 and left the existing tests passing. It produced no rules, scenarios, approvals or trace, so it says
+  nothing about whether its discount logic is right; it is a cost and speed reference, not a quality comparison.
+- **What this does not show:** a success rate. These are 16 runs of 4 requests with one model, several after fixes made
+  because of earlier runs, so the numbers describe what happened, not what will. The standard-autonomy arm (typed approvals
+  delivered headlessly), the browser requests (`minimum-order`, `login-return`), other models and repeated runs of the new
+  requests have not been run. Assumption agreement with the scripted answers varied between 25% and 100% and is only
+  indicative.
+
+**Verified for real, not from documentation.** The Codex hooks in a live Codex session (codex-cli 0.142.3 on Windows with an
+API key): a locked file is protected, the tripwire's after-call message reaches the model, the prompt hook's message reaches
+the model, a headless approval is refused, a typed approval is refused by default and recorded as `codex` (not
+provenance-verified) with `accept_codex = true`, and `bdd approve --check` fails without that opt-in. Found live and fixed: a
+hook exiting 2 does not block in this Codex version (the JSON deny decision does), and a write verb behind a quote
+(`powershell -Command "Add-Content ..."`) slipped past the guard. Also run for real: the godog, Cucumber-JVM, Reqnroll,
+cucumber-js and behave reports; the SQLAlchemy and Django query hooks; the Go, Python, TypeScript, Next.js, Expo, Rust, Swift
+and Kotlin language-card commands; mutmut on Linux and macOS and Stryker; Cucumber-Android on a Samsung phone (Android 15);
+the Go, .NET, Spring and Kotlin adapters on Linux, Windows and macOS; scenario titles in Chinese and with accents; the
+Kotlin first-run flake, whose cause is found and fixed (200 consecutive runs, none failed).
 
 **Known limits.**
-- The `kotlin-android` contract job fails now and then in CI with "no test cases" and passes on rerun; the cause is not
-  found. `bdd run` now prints the runner's output in that case so the next occurrence can be diagnosed.
 - Codex: hooks block edits to locked files on a best-effort basis and the tripwire detects tampering, but the text checks on
-  shell commands have known gaps (glob spellings of the Codex state folder, relative paths in typed input into a shell whose
-  directory was changed, split input), and typed input into long-running shells is restricted to a few short answers inside
-  a project. Approvals typed in Codex are never graded hard and are refused unless `[approvals] accept_codex = true`. The
-  hooks have not run inside a live Codex session: a sign-in was available, but no Codex model could be used with that
-  account. The payload shapes come from the documentation and a local session file.
-- Fixtures and commands from documentation, not from runs: the godog, Cucumber-JVM and Reqnroll reports, the SQLAlchemy and
-  Django query hooks and most language cards. Not covered: Android UI on a device, mutmut on native Windows, non-ASCII
-  scenario titles in .NET, Go and .NET on macOS.
+  shell commands have known gaps (a write the checks do not recognise as one, such as a script that writes through Node;
+  `-C` glued to a value starting with a letter; Codex lets a call through when a hook fails), and typed input into
+  long-running shells is restricted to a few short answers inside a project. Work done in Codex is never graded hard: the
+  agent and the person are the same user there. A full feature run driven by Codex has not been done (the feature skill uses
+  Claude Code subagents).
 - The guard is a best-effort text check on shell commands. The tripwire, your deny rules (`bdd doctor` shows them) and CI
   (`docs/ci.md`) are the guarantees. The CI templates clone the release tag `v1.0.0`.
+- Not run: mutmut inside WSL on Windows (the steps are documented), the `xcodebuild` forms and `spotlessCheck`, Android UI
+  on a device (no step drives a screen), the scheduled-prompt hook (it needs an interactive session), and Node 22 end to end
+  for the TypeScript reference app.
+- Production code runs inside the test process and could in principle detect the tests; the auditor reads the diff and the
+  optional mutation check (`bdd mutate`) is the second line.
 
 ### Changed
 - The evaluation harness keeps the orchestrator's last message and the auditor's report (each cut to 6000 characters) in the result row, so a run that stops at findings explains itself after its temporary folders are deleted.
