@@ -6,6 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Each evaluation reference app has engineering standards filled in from its real stack and approved by the person running the evaluation (`evals/apps/<app>/standards.md`); the harness, acting as that person, puts them in place of the draft before any agent starts. Evaluation runs no longer report a draft standards file, and the auditor judges the change against real rules. The product template stays a draft.
 - The evaluation harness keeps the orchestrator's last message and the auditor's report (each cut to 6000 characters) in the result row, so a run that stops at findings explains itself after its temporary folders are deleted.
 
 ### Fixed
