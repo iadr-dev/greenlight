@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- The evaluation harness runs the main session on Sonnet 5.5 unless `--model` says otherwise (it was the older Haiku, so a
+  run without `--model` behaved differently from the documented examples). The plugin's own agents keep their models: the
+  implementer and the step-engineer on Sonnet; the analysts, the QA designer and the auditor on Opus.
 - Package-manager guidance: the TypeScript card says a new project may choose pnpm (with the reasons, and that the
   adapter's own `tests/` tooling stays on npm and its lock file), and the standards template suggests a fast tool that
   installs from a lock file for each stack. Nothing in the adapters changes, and pnpm and bun have not been run with
