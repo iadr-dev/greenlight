@@ -88,7 +88,7 @@ def run_against_red(root, feature_id: str, data: dict, config: cfg.Config, scena
 def links_note(linked: list[str]) -> str:
     """What an empty result of a run in the temporary worktree can say about the project's installed folders."""
     if linked:
-        return f"The project's folders linked into the temporary worktree: {', '.join(linked)}. "
+        return f"The project's folders linked or copied into the temporary worktree: {', '.join(linked)}. "
     return (f"The project has none of {', '.join(againstred.DEPENDENCY_DIRS)} to link into the temporary worktree, "
             "so tests that load packages from them find nothing there: install the project's dependencies first. ")
 

@@ -326,12 +326,137 @@ class DependencyLinksTest(AgainstRedCase):
         self.assertTrue(self.marker.is_file())
 
     def test_an_empty_result_says_which_folders_were_linked(self):
-        self.assertIn("linked into the temporary worktree: node_modules, .venv", runcmd.links_note(["node_modules", ".venv"]))
+        self.assertIn("linked or copied into the temporary worktree: node_modules, .venv", runcmd.links_note(["node_modules", ".venv"]))
 
     def test_an_empty_result_says_when_the_project_has_nothing_to_link(self):
         note = runcmd.links_note([])
         self.assertIn("none of node_modules", note)
         self.assertIn("install the project's dependencies", note)
+
+
+class NestedDependencyLinksTest(AgainstRedCase):
+    """Installed folders below the project root (an adapter's own tooling in ``tests/``, or in ``web/tests/`` when the
+    adapter was applied ``--into web``) reach the worktree at the same relative path."""
+
+    EXPECTED = ["node_modules", "tests/node_modules", "web/tests/node_modules", "tools/py/.venv"]
+
+    def setUp(self):
+        super().setUp()
+        self.first_red_and_code()
+        self.reopen_and_add_example()
+        self.root_modules = self.write("node_modules/pkg/marker.txt", "root\n")
+        self.nested = self.write("tests/node_modules/playwright-bdd/marker.txt", "tests\n")
+        self.deep = self.write("web/tests/node_modules/playwright-bdd/marker.txt", "web\n")
+        self.venv = self.write("tools/py/.venv/pyvenv.cfg", "home = elsewhere\n")
+        self.markers = (self.root_modules, self.nested, self.deep, self.venv)
+
+    def worktree(self):
+        return againstred.red_worktree(self.root, againstred.baseline(self.data()), cfg.load(self.root))
+
+    def test_nested_folders_are_linked_at_the_same_relative_path(self):
+        with self.worktree() as (place, linked):
+            self.assertEqual(sorted(linked), sorted(self.EXPECTED))
+            for rel, marker in (("node_modules/pkg", self.root_modules),
+                                ("tests/node_modules/playwright-bdd", self.nested),
+                                ("web/tests/node_modules/playwright-bdd", self.deep)):
+                self.assertEqual((place / rel / "marker.txt").read_text(encoding="utf-8"),
+                                 marker.read_text(encoding="utf-8"))
+            for rel in self.EXPECTED:
+                self.assertTrue(folderlinks.is_link(place / rel), rel)
+
+    def test_cleanup_removes_each_link_and_never_the_real_folders(self):
+        with self.worktree() as (place, _linked):
+            holder = place.parent
+        self.assertFalse(holder.exists())
+        for marker in self.markers:
+            self.assertTrue(marker.is_file(), marker)
+
+    def test_nothing_inside_a_linked_folder_or_a_tool_folder_is_walked_into(self):
+        self.write("node_modules/inner/node_modules/x.txt", "inside a dependency folder\n")
+        self.write(".bdd/cache/node_modules/x.txt", "inside .bdd\n")
+        self.write("__pycache__/node_modules/x.txt", "inside __pycache__\n")
+        (self.root / ".git" / "hooks" / "node_modules").mkdir(parents=True)
+        with self.worktree() as (_place, linked):
+            self.assertEqual(sorted(linked), sorted(self.EXPECTED))
+
+    def test_the_search_stops_four_levels_below_the_root(self):
+        self.write("a/b/c/node_modules/x.txt", "three folders, then the dependency folder\n")
+        self.write("a/b/c/d/node_modules/x.txt", "four folders, then the dependency folder\n")
+        with self.worktree() as (_place, linked):
+            self.assertIn("a/b/c/node_modules", linked)
+            self.assertNotIn("a/b/c/d/node_modules", linked)
+
+    def test_a_real_folder_in_the_worktree_is_never_replaced(self):
+        place = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        own = place / "tests" / "node_modules"
+        own.mkdir(parents=True)
+        (own / "own.txt").write_text("the red had its own\n", encoding="utf-8")
+        made = list(againstred.link_dependencies(self.root, place))
+        try:
+            self.assertNotIn(own, made)
+            self.assertFalse(folderlinks.is_link(own))
+            self.assertTrue((own / "own.txt").is_file())
+            self.assertTrue(folderlinks.is_link(place / "web" / "tests" / "node_modules"))
+        finally:
+            for link in made:
+                folderlinks.remove_link(link)
+        self.assertTrue(self.deep.is_file())
+
+    def test_a_nested_folder_that_cannot_be_linked_stops_the_run_naming_it(self):
+        real = folderlinks.link_directory
+
+        def refuse_nested(source, target):
+            if "web" in target.parts:
+                raise UsageError(f"cannot link the installed folder {source.name} ({source}): refused. Nothing was run.")
+            return real(source, target)
+
+        before = self.latest()
+        with mock.patch.object(folderlinks, "link_directory", refuse_nested):
+            code, _out, err = self.bdd_run("--against-red")
+        self.assertEqual(code, 2)
+        self.assertIn("web", err)
+        self.assertIn("Nothing was run", err)
+        self.assertEqual(self.latest(), before)
+        for marker in self.markers:
+            self.assertTrue(marker.is_file(), marker)
+
+
+class NextJsDependencyCopyTest(AgainstRedCase):
+    """Turbopack (the default compiler of Next.js 16) resolves modules only inside its root and cannot read ``next``
+    through a link to a folder outside it, so a dependency folder that holds Next.js is copied, not linked."""
+
+    def setUp(self):
+        super().setUp()
+        self.first_red_and_code()
+        self.reopen_and_add_example()
+        self.next_marker = self.write("node_modules/next/package.json", '{"name": "next"}\n')
+        self.write("node_modules/react/index.js", "module.exports = {};\n")
+        self.playwright = self.write("tests/node_modules/playwright-bdd/package.json", '{"name": "playwright-bdd"}\n')
+
+    def worktree(self):
+        return againstred.red_worktree(self.root, againstred.baseline(self.data()), cfg.load(self.root))
+
+    def test_a_folder_that_holds_next_is_copied_and_the_others_are_still_linked(self):
+        with self.worktree() as (place, linked):
+            self.assertFalse(folderlinks.is_link(place / "node_modules"))
+            self.assertEqual((place / "node_modules" / "next" / "package.json").read_text(encoding="utf-8"),
+                             '{"name": "next"}\n')
+            self.assertTrue((place / "node_modules" / "react" / "index.js").is_file())
+            self.assertTrue(folderlinks.is_link(place / "tests" / "node_modules"))
+            self.assertEqual(sorted(linked), ["node_modules (copied)", "tests/node_modules"])
+            holder = place.parent
+        self.assertFalse(holder.exists())
+        self.assertTrue(self.next_marker.is_file())
+        self.assertTrue(self.playwright.is_file())
+
+    def test_the_copy_is_independent_of_the_project_folder(self):
+        with self.worktree() as (place, _linked):
+            (place / "node_modules" / "next" / "package.json").write_text("changed in the worktree\n", encoding="utf-8")
+        self.assertEqual(self.next_marker.read_text(encoding="utf-8"), '{"name": "next"}\n')
+
+    def test_the_note_names_what_was_copied(self):
+        self.assertIn("node_modules (copied)", runcmd.links_note(["node_modules (copied)"]))
+        self.assertIn("linked or copied", runcmd.links_note(["node_modules (copied)"]))
 
 
 def _patched(*changes):
