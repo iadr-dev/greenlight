@@ -12,6 +12,7 @@ versions follow [SemVer](https://semver.org/).
   them.
 
 ### Fixed
+- `bdd run --against-red` links the installed folders below the project root too, at the same relative path (`tests/node_modules` of the Playwright adapter, `web/tests/node_modules` with `--into web`, a nested `.venv`), up to 4 folders deep; before, only the root's were linked and the run failed with `playwright-bdd` missing. A dependency folder that holds Next.js is copied instead of linked, because Turbopack (Next.js 16) does not read `next` through a link outside its project root; the result message marks it "(copied)".
 - `bdd run --against-red` on Windows without Developer Mode or administrator rights: the installed folders
   (`node_modules`, `.venv`, `venv`) are now linked into the temporary worktree with junctions, which need no privilege
   (symbolic links stay on other systems). Before, the failed symbolic link was only a warning, the tests ran without

@@ -43,7 +43,7 @@ rebound tests must still be shown to fail without the feature's code, and in the
 code is there. `bdd run FEAT-n --against-red` runs them in a temporary git worktree of that snapshot, with today's
 feature files, steps, drivers and plumbing laid over it (production files always come from the snapshot), and the bind
 gate accepts that run and keeps the first red as the feature's red. Installed dependency folders (`node_modules`,
-`.venv`, `venv`) are linked into the worktree, not copied; build output never is. On Windows the link is a junction,
+`.venv`, `venv`; at the project root and up to 4 folders below it, such as `tests/node_modules`) are linked into the worktree at the same path, not copied, except one that holds Next.js, which Turbopack cannot read through a link; build output never is. On Windows the link is a junction,
 which needs no privilege (a symbolic link needs Developer Mode or an administrator); elsewhere it is a symbolic link.
 If a folder cannot be linked the command stops before any test runs and names the folder, because tests run without
 the project's installed packages prove nothing. The links are removed before the worktree, each one itself and never
