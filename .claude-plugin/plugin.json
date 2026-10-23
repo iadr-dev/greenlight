@@ -1,6 +1,6 @@
 {
   "name": "greenlight",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI x BDD spec-driven development: feature request to human-approved rules and examples, red tests, then green code, under gates the AI cannot bypass.",
   "author": { "name": "Ray Shen" },
   "homepage": "https://github.com/iadr-dev/greenlight",
