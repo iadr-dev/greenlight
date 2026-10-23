@@ -9,11 +9,14 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from bddlib import againstred, changecmd, classify, lockfile, redrecord, runcmd, runner, state
+from bddlib import againstred, changecmd, classify, folderlinks, lockfile, redrecord, runcmd, runner, state
 from bddlib import config as cfg
 from bddlib.errors import UsageError
 
@@ -192,6 +195,151 @@ class TheDeadlockTest(AgainstRedCase):
             self.assertFalse((place / "src" / "extra.py").exists())
             self.assertIn("An order of 2000", (place / "features" / "discounts.feature").read_text(encoding="utf-8"))
             self.assertFalse((place / ".bdd" / ".runs").exists())
+
+
+class DependencyLinksTest(AgainstRedCase):
+    """The installed folders (``node_modules`` and the like) reach the temporary worktree through links, and the links
+    go away without touching the folders: on Windows a junction, because a symbolic link needs a privilege."""
+
+    def setUp(self):
+        super().setUp()
+        self.first_red_and_code()
+        self.reopen_and_add_example()
+        self.marker = self.write("node_modules/pkg/marker.txt", "the real package\n")
+        self.write(".venv/pyvenv.cfg", "home = elsewhere\n")
+
+    def worktree(self):
+        return againstred.red_worktree(self.root, againstred.baseline(self.data()), cfg.load(self.root))
+
+    def refuse_links(self):
+        """Neither a junction nor a symbolic link can be made, as on a Windows machine without the right."""
+        denied = OSError("A required privilege is not held by the client")
+        return _patched((folderlinks, "_junction", denied), (os, "symlink", denied))
+
+    def test_the_folders_are_reachable_in_the_worktree_and_survive_its_removal(self):
+        with self.worktree() as (place, linked):
+            self.assertEqual(linked, ["node_modules", ".venv"])
+            self.assertEqual((place / "node_modules" / "pkg" / "marker.txt").read_text(encoding="utf-8"),
+                             "the real package\n")
+            self.assertTrue(folderlinks.is_link(place / "node_modules"))
+            holder = place.parent
+        self.assertFalse(holder.exists())
+        self.assertEqual(self.marker.read_text(encoding="utf-8"), "the real package\n")
+        self.assertTrue((self.root / ".venv" / "pyvenv.cfg").is_file())
+
+    @unittest.skipUnless(os.name == "nt", "a junction exists on Windows only")
+    def test_on_windows_the_link_is_a_junction_which_needs_no_privilege(self):
+        with self.worktree() as (place, _linked):
+            link = place / "node_modules"
+            self.assertFalse(link.is_symlink())          # a junction is not a symbolic link
+            self.assertTrue(folderlinks.is_link(link))
+            self.assertEqual(os.lstat(link).st_reparse_tag, stat.IO_REPARSE_TAG_MOUNT_POINT)
+            self.assertTrue((link / "pkg" / "marker.txt").is_file())
+
+    @unittest.skipUnless(os.name == "nt", "mklink exists on Windows only")
+    def test_on_windows_mklink_makes_the_same_junction_without_a_shell_string(self):
+        target = Path(self.enterContext(tempfile.TemporaryDirectory())) / "linked"
+        folderlinks._mklink_junction((self.root / "node_modules").resolve(), target)
+        self.assertTrue(folderlinks.is_link(target))
+        self.assertTrue((target / "pkg" / "marker.txt").is_file())
+        folderlinks.remove_link(target)
+        self.assertTrue(self.marker.is_file())
+
+    def test_a_path_cmd_would_read_as_syntax_is_not_passed_to_mklink(self):
+        with self.assertRaises(UsageError):
+            folderlinks._mklink_junction(Path("C:/a&b"), Path("C:/target"))
+
+    def test_a_relative_path_is_refused(self):
+        with self.assertRaises(UsageError):
+            folderlinks.link_directory(Path("node_modules"), Path("elsewhere"))
+
+    def test_a_folder_that_cannot_be_linked_stops_the_run_before_any_test_runs(self):
+        before = self.latest()
+        with self.refuse_links():
+            code, _out, err = self.bdd_run("--against-red")
+        self.assertEqual(code, 2)
+        self.assertIn("cannot link the installed folder node_modules", err)
+        self.assertIn("Nothing was run", err)
+        self.assertIn("privilege", err)
+        self.assertIn("Developer Mode" if os.name == "nt" else "TMPDIR", err)
+        self.assertEqual(self.latest(), before)           # no run was recorded
+        self.assertTrue(self.marker.is_file())
+        self.assertEqual(git(self.root, "worktree", "list").count("greenlight-red-"), 0)
+
+    def test_links_made_before_the_one_that_failed_are_removed_and_leave_their_folders(self):
+        real = folderlinks.link_directory
+        made = []
+
+        def second_fails(source, target):
+            if made:
+                raise UsageError("cannot link the installed folder .venv: refused")
+            made.append(real(source, target))
+            return made[0]
+
+        with mock.patch.object(folderlinks, "link_directory", second_fails), self.assertRaises(UsageError):
+            with self.worktree():
+                self.fail("the worktree must not be handed out")
+        self.assertEqual(len(made), 1)
+        self.assertTrue(self.marker.is_file())
+
+    def test_the_folders_survive_when_removing_the_worktree_fails_half_way(self):
+        real = redrecord.git
+
+        def refuse_removal(root, *args, **kwargs):
+            if args[:2] == ("worktree", "remove"):
+                raise UsageError("the worktree could not be removed")
+            return real(root, *args, **kwargs)
+
+        with mock.patch.object(redrecord, "git", refuse_removal):
+            with self.worktree() as (place, _linked):
+                holder = place.parent
+        self.assertFalse(holder.exists())
+        self.assertEqual(self.marker.read_text(encoding="utf-8"), "the real package\n")
+
+    def test_a_link_that_cannot_be_removed_keeps_the_worktree_and_the_folder(self):
+        err = io.StringIO()
+        with mock.patch.object(folderlinks, "remove_link", side_effect=OSError("in use")):
+            with contextlib.redirect_stderr(err), self.worktree() as (place, _linked):
+                holder = place.parent
+        try:
+            self.assertTrue(holder.exists())
+            self.assertIn(str(place / "node_modules"), err.getvalue())
+            self.assertEqual(self.marker.read_text(encoding="utf-8"), "the real package\n")
+        finally:                                          # the test's own cleanup, link by link, then the folder
+            for name in againstred.DEPENDENCY_DIRS:
+                if folderlinks.is_link(place / name):
+                    folderlinks.remove_link(place / name)
+            redrecord.git(self.root, "worktree", "remove", "--force", str(place))
+            shutil.rmtree(holder, ignore_errors=True)
+        self.assertTrue(self.marker.is_file())
+
+    def test_removing_a_link_leaves_what_it_points_at(self):
+        target = Path(self.enterContext(tempfile.TemporaryDirectory())) / "linked"
+        folderlinks.link_directory((self.root / "node_modules").resolve(), target)
+        folderlinks.remove_link(target)
+        self.assertFalse(target.exists())
+        self.assertTrue(self.marker.is_file())
+
+    def test_a_real_folder_is_never_removed_as_a_link(self):
+        with self.assertRaises(OSError):
+            folderlinks.remove_link(self.root / "node_modules")
+        self.assertTrue(self.marker.is_file())
+
+    def test_an_empty_result_says_which_folders_were_linked(self):
+        self.assertIn("linked into the temporary worktree: node_modules, .venv", runcmd.links_note(["node_modules", ".venv"]))
+
+    def test_an_empty_result_says_when_the_project_has_nothing_to_link(self):
+        note = runcmd.links_note([])
+        self.assertIn("none of node_modules", note)
+        self.assertIn("install the project's dependencies", note)
+
+
+def _patched(*changes):
+    """Replace several attributes with functions that raise; an ExitStack of the patches."""
+    stack = contextlib.ExitStack()
+    for owner, name, error in changes:
+        stack.enter_context(mock.patch.object(owner, name, side_effect=error))
+    return stack
 
 
 class TheSnapshotTest(AgainstRedCase):

@@ -15,14 +15,14 @@ then keeps the original red record, so the order "red, then code" stays provable
 from __future__ import annotations
 
 import contextlib
-import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
 from . import config as cfg
-from . import lockfile, redrecord
+from . import folderlinks, lockfile, redrecord
 from .errors import UsageError
 
 # Folders a project installs into and git ignores, that the tests need to run and that hold no production code:
@@ -79,9 +79,11 @@ def _copy(source: Path, target: Path) -> None:
 
 
 def _remove(path: Path) -> None:
-    if path.is_dir() and not path.is_symlink():
+    if folderlinks.is_link(path):
+        folderlinks.remove_link(path)
+    elif path.is_dir():
         shutil.rmtree(path)
-    elif path.exists() or path.is_symlink():
+    elif path.exists():
         path.unlink()
 
 
@@ -102,22 +104,17 @@ def overlay(root: Path, place: Path, config: cfg.Config) -> list[str]:
     return laid
 
 
-def link_dependencies(root: Path, place: Path) -> tuple[list[Path], list[str]]:
-    """Link the installed dependency folders the project has into the worktree. Returns the links made and the folders
-    that could not be linked (Windows allows a link only with Developer Mode or as administrator)."""
-    made: list[Path] = []
-    missing: list[str] = []
+def link_dependencies(root: Path, place: Path) -> Iterator[Path]:
+    """Link the installed dependency folders the project has into the worktree, yielding each link as it is made so
+    the caller can remove it even when a later one fails. A folder that cannot be linked raises UsageError naming it:
+    tests that run without the project's installed dependencies prove nothing."""
     for name in DEPENDENCY_DIRS:
         source = root / name
         target = place / name
-        if not source.is_dir() or target.exists():
+        if not source.is_dir() or target.exists() or folderlinks.is_link(target):
             continue
-        try:
-            os.symlink(source, target, target_is_directory=True)
-            made.append(target)
-        except OSError:
-            missing.append(name)
-    return made, missing
+        folderlinks.link_directory(source.resolve(), target)
+        yield target
 
 
 def _production_digest(place: Path, root: Path, config: cfg.Config) -> str:
@@ -125,10 +122,34 @@ def _production_digest(place: Path, root: Path, config: cfg.Config) -> str:
     return redrecord.source_digest(place, test_dirs)
 
 
+def _discard(root: Path, holder: Path, links: list[Path]) -> None:
+    """Remove the worktree and its folder. The links go first, each one itself: a recursive delete would follow a
+    junction into the project's real ``node_modules``. A link that cannot be removed stops the deletion, so the
+    project's folder is never put at risk, and the leftover is named."""
+    place = holder / "red"
+    stuck = []
+    for link in links:
+        try:
+            folderlinks.remove_link(link)
+        except OSError:
+            stuck.append(link)
+    if stuck:
+        print(f"the temporary worktree {holder} was left in place because these links to the project's folders could "
+              f"not be removed: {', '.join(str(link) for link in stuck)}; remove each link itself (not its "
+              "contents), then delete the worktree folder", file=sys.stderr)
+        return
+    with contextlib.suppress(UsageError):
+        redrecord.git(root, "worktree", "remove", "--force", str(place))
+    shutil.rmtree(holder, ignore_errors=True)
+    with contextlib.suppress(UsageError):
+        redrecord.git(root, "worktree", "prune")
+
+
 @contextlib.contextmanager
 def red_worktree(root: Path, red: dict, config: cfg.Config) -> Iterator[tuple[Path, list[str]]]:
     """A temporary worktree outside the project with the red's production source and today's test material.
-    Yields (the worktree, the dependency folders that could not be linked); removes it afterwards."""
+    Yields (the worktree, the names of the dependency folders linked into it); removes it afterwards. Raises
+    UsageError, before anything runs, when a dependency folder the project has cannot be linked."""
     commit = source_commit(red)
     holder = Path(tempfile.mkdtemp(prefix="greenlight-red-"))
     place = holder / "red"
@@ -139,17 +160,10 @@ def red_worktree(root: Path, red: dict, config: cfg.Config) -> Iterator[tuple[Pa
             raise UsageError(f"the production source at {commit[:12]} is not the source the red was proven against "
                              "(its digest differs), so a run there would not reproduce that red")
         overlay(root, place, config)
-        links, missing = link_dependencies(root, place)
-        yield place, missing
+        links.extend(link_dependencies(root, place))
+        yield place, [link.name for link in links]
     finally:
-        for link in links:
-            with contextlib.suppress(OSError):
-                link.unlink()
-        with contextlib.suppress(UsageError):
-            redrecord.git(root, "worktree", "remove", "--force", str(place))
-        shutil.rmtree(holder, ignore_errors=True)
-        with contextlib.suppress(UsageError):
-            redrecord.git(root, "worktree", "prune")
+        _discard(root, holder, links)
 
 
 def describe(red: dict) -> dict:
