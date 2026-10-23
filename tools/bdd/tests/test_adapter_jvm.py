@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import adapter, classify, cli, initcmd, junit, runner, state
+from bddlib import adapter, classify, cli, initcmd, junit, proctree, runner, state
 from bddlib import config as cfg
 
 REPO = Path(__file__).resolve().parents[3]
@@ -273,11 +273,18 @@ class ClassifyDefaultsTest(unittest.TestCase):
             self.assertEqual(self.kind(name, "java.lang.NullPointerException"), classify.UNKNOWN)
 
 
+GRADLE_SETUP_SECONDS = 600       # the whole Kotlin class ran in about a minute on every runner
+
+
 def make_gradle_wrapper(root: Path) -> None:
     """Create the module's Gradle wrapper and fetch its distribution now, so that a failed download stops the set-up with
     Gradle's own message instead of surfacing later as a first test run that found no test cases."""
     for words in ([shutil.which("gradle"), "wrapper", "-q"], [str(root / ("gradlew.bat" if os.name == "nt" else "gradlew")), "--version"]):
-        done = subprocess.run(words, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+        try:
+            done = proctree.run(words, cwd=root, timeout=GRADLE_SETUP_SECONDS)
+        except proctree.TimedOut as stopped:
+            raise RuntimeError(f"{Path(words[0]).name} {' '.join(words[1:])} did not finish in {GRADLE_SETUP_SECONDS} s and was stopped "
+                               f"with its daemons; its output so far:\n{stopped.stdout[-2000:]}\n{stopped.stderr[-2000:]}") from stopped
         if done.returncode:
             raise RuntimeError(f"{Path(words[0]).name} {' '.join(words[1:])} failed with exit {done.returncode}:\n"
                                f"{done.stdout[-2000:]}\n{done.stderr[-2000:]}")

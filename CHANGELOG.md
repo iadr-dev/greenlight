@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A test run that exceeded its time limit could hang on Windows for as long as a process started by the command lived (`gradlew.bat` starts a Java process that keeps the output pipes; the Kotlin adapter's CI job on Windows hung for 40 minutes to 2 hours). Commands now start in their own process group or job object, a timeout ends the whole tree and the wait for their output is bounded; the message of a timed-out run ends with the output it had written. **Not fixed, and not known:** why Gradle sometimes stalls in that job; the job now prints the process tree and the Gradle daemon logs when its step fails.
+- Every job of the CI workflow has a time limit (10 minutes; 25 for ts-playwright-bdd and 30 for shop-web), so a hung job fails with a log instead of holding a runner for 6 hours.
+
 ### Changed
 - README and quickstart: a short "How it works" section, the four autonomy levels, the toolchain each adapter needs, what
   greenlight writes into a repository and how to remove it, and the known limits; the opening claims now say that hard

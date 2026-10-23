@@ -13,10 +13,15 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every job has a time limit. A job that has no limit and hangs holds its runner for 6 hours (the default), and a run that
+# is cancelled by hand leaves no log. The limits are at least twice the slowest successful run recorded for the job
+# (most jobs take under 4 minutes; ts-playwright-bdd up to 10 minutes, shop-web up to 11) so that a hang fails in minutes
+# with a log. A limit is a guard, not a fix for a hang: see docs/dev/platform-notes.md.
 jobs:
   unit:
     name: unit (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +43,7 @@ jobs:
   coverage:
     name: coverage (tools/bdd, ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,6 +64,7 @@ jobs:
   adapter-python-pytest-bdd:
     name: adapter contract (python-pytest-bdd, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -84,6 +91,7 @@ jobs:
   reference-app-legacy-billing:
     name: reference app (legacy-billing, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -107,6 +115,7 @@ jobs:
   mutation-wrapper:
     name: mutation wrapper (mutmut, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +134,7 @@ jobs:
   adapter-ts-playwright-bdd:
     name: adapter contract (ts-playwright-bdd, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -156,6 +166,7 @@ jobs:
   adapter-go-godog:
     name: adapter contract (go-godog, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -183,6 +194,7 @@ jobs:
   adapter-dotnet-reqnroll:
     name: adapter contract (dotnet-reqnroll, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -211,6 +223,7 @@ jobs:
   adapter-java-cucumber-spring:
     name: adapter contract (java-cucumber-spring, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -234,6 +247,7 @@ jobs:
   adapter-kotlin-android:
     name: adapter contract (kotlin-android, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -253,11 +267,29 @@ jobs:
         with:
           gradle-version: "9.8.2"
       - name: Fresh scaffold runs green under Gradle as a Kotlin/JVM module, red looks like red
+        timeout-minutes: 8        # the step takes about a minute on every system; this one fails with the log of what ran
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k KotlinContractTest -v
+      - name: What was running when the step failed (processes and Gradle daemon logs)
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          echo '--- java, gradle, python and cmd processes'
+          if command -v powershell > /dev/null; then
+            powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'java|gradle|python|cmd' } | Select-Object ProcessId,ParentProcessId,Name,CreationDate,CommandLine | Format-List"
+          else
+            ps -eo pid,ppid,etime,args | grep -E 'java|gradle|python' | grep -v grep || true
+          fi
+          home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          command -v cygpath > /dev/null && home="$(cygpath -u "$home")"
+          for log in "$home"/daemon/*/daemon-*.out.log; do
+            [ -f "$log" ] && { echo "--- $log (last 80 lines)"; tail -n 80 "$log"; }
+          done
+          exit 0
 
   adapter-kotlin-android-agp:
     name: adapter contract (kotlin-android, Android Gradle Plugin)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GREENLIGHT_JVM_ADAPTER_TESTS: "1"
     steps:
@@ -278,6 +310,7 @@ jobs:
   language-card-rust:
     name: language card commands (Rust)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: The rustup toolchain of the runner, with rustfmt and clippy
@@ -288,6 +321,7 @@ jobs:
   language-card-swift:
     name: language card commands (Swift)
     runs-on: macos-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: SwiftLint 0.65.1, the release the card was checked with (checksum pinned)
@@ -304,6 +338,7 @@ jobs:
   language-card-kotlin:
     name: language card commands (Kotlin)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
@@ -319,6 +354,7 @@ jobs:
   reference-app-csv-tool:
     name: reference app (csv-tool, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -338,6 +374,7 @@ jobs:
   reference-app-money-lib:
     name: reference app (money-lib, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -358,6 +395,7 @@ jobs:
   adapter-generic-junit:
     name: adapter contract (generic-junit on the reference apps, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -384,6 +422,7 @@ jobs:
   reference-app-shop-web:
     name: reference app (shop-web, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
