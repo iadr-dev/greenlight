@@ -17,6 +17,8 @@ from .errors import UsageError
 
 # Characters cmd.exe would read as syntax even when the command line is built without a shell string.
 CMD_SYNTAX = set('&|<>^%"\r\n')
+# The reparse tag of a Windows junction (a mount point). ``stat.IO_REPARSE_TAG_MOUNT_POINT`` exists on Windows only.
+REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
 
 def is_link(path: Path) -> bool:
@@ -25,7 +27,7 @@ def is_link(path: Path) -> bool:
         info = os.lstat(path)
     except OSError:
         return False
-    return stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) == stat.IO_REPARSE_TAG_MOUNT_POINT
+    return stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) == REPARSE_TAG_MOUNT_POINT
 
 
 def remove_link(path: Path) -> None:
