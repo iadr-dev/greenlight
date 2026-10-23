@@ -14,6 +14,33 @@ versions follow [SemVer](https://semver.org/).
   installs from a lock file for each stack. Nothing in the adapters changes, and pnpm and bun have not been run with
   them.
 
+### Measured since 1.0.0
+Single end-to-end runs on 2026-10-23 with `evals/run_e2e.py`, plugin arm, hooks on, on Windows, after the `--against-red`
+fixes below. One run is one feature once, so these show what each run did, not which model is better.
+
+| Request | Model | Autonomy | Result | Cost |
+|---|---|---|---|---|
+| `login-return` (web UI) | Sonnet 5.5 | autopilot | finished, auditor PASS, 11 scenarios green | $5.77 |
+| `discounts` | Opus 5.5 | autopilot | finished, auditor PASS | $4.81 |
+| `discounts` | Haiku 5.5 | autopilot | stopped at verify: FINDINGS (the cent-rounding rule had no test that could fail) | $4.97 |
+| `minimum-order` (web UI) | Sonnet 5.5 | autopilot | stopped at verify: FINDINGS (a decision for the person: the minimum message now wins over a declined card) | $6.54 |
+| `discounts` | Sonnet 5.5 | standard | stopped at test-design: the rules need a person's approval, which an unattended run cannot give | $2.51 |
+
+A run that stops at a gate with a clear question for the person is the gates doing their work; only the first two
+finished the feature. Every autopilot feature is marked UNREVIEWED because no person approved its rules or examples.
+Before the fixes, `minimum-order` stopped at the bind gate because `--against-red` could not start the app.
+
+### Known limits found in these runs
+- `standard` autonomy cannot be measured by an unattended harness: a person has to approve the rules, and the gate
+  refuses an approval typed in a headless session.
+- Next.js with Turbopack resolves modules only inside its project root (Next.js documentation, Turbopack configuration
+  page, last updated 2026-09-24), so `--against-red` copies, not links, a dependency folder that holds Next.js. The copy of
+  `shop-web` is about 342 MB and took 26 s. A development server and a Playwright run inside that worktree were not tried; the
+  runs above exercised `next build` and the adapter's own run.
+- A run's final message can claim more than the gates allow (a first run called a feature complete while the bind gate
+  had refused). The result row's `completed`, `phase` and `gates` are the record.
+- pnpm and bun were not run with the adapters.
+
 ### Fixed
 - `bdd run --against-red` links the installed folders below the project root too, at the same relative path (`tests/node_modules` of the Playwright adapter, `web/tests/node_modules` with `--into web`, a nested `.venv`), up to 4 folders deep; before, only the root's were linked and the run failed with `playwright-bdd` missing. A dependency folder that holds Next.js is copied instead of linked, because Turbopack (Next.js 16) does not read `next` through a link outside its project root; the result message marks it "(copied)".
 - `bdd run --against-red` on Windows without Developer Mode or administrator rights: the installed folders
