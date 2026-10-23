@@ -20,7 +20,8 @@ Open Claude Code in your project and run:
 /greenlight:init
 ```
 
-It checks your machine, recommends a test adapter for what it finds (today: `python-pytest-bdd`), asks you to confirm
+It checks your machine, recommends a test adapter for what it finds (for example `python-pytest-bdd` for a Python project; see
+[adapters](adapters.md) for the seven), asks you to confirm
 the adapter and a starting autonomy level, creates `.bdd/` and the adapter's `tests/` skeleton without overwriting
 anything, and proves the sample feature runs green. It never installs packages without asking; for
 `python-pytest-bdd` you need `pytest` and `pytest-bdd` in the project's environment (a `.venv` in the project is
@@ -47,7 +48,8 @@ greenlight recommends an autonomy level (say `guided` the first time) and then r
 
 ## 4. Approve the contract (you, by typing)
 
-Twice, the work stops and waits for you. Read `rules.md`, then type:
+At `guided` and `standard` the work stops twice and waits for you (at `auto` the approvals are recorded for you, and at
+`autopilot` nothing is asked and the report is marked UNREVIEWED; see [concepts](concepts.md)). Read `rules.md`, then type:
 
 ```text
 /greenlight:approve FEAT-001 rules
