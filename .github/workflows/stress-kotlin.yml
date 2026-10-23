@@ -20,6 +20,7 @@ jobs:
   stress:
     name: stress (${{ matrix.os }}, ${{ matrix.gradle-home }} Gradle home)
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 150        # 25 iterations of about 1 to 2 minutes; a stalled iteration is stopped below, this is the backstop
     strategy:
       fail-fast: false
       matrix:
@@ -52,12 +53,19 @@ jobs:
               export GRADLE_USER_HOME="$RUNNER_TEMP/gradle-home-$i"
             fi
             log="$RUNNER_TEMP/iteration-$i.log"
-            if python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k KotlinContractTest.test_1 -v >"$log" 2>&1; then
+            if timeout 600 python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_jvm.py" -k KotlinContractTest.test_1 -v >"$log" 2>&1; then
               echo "iteration $i: ok"
             else
               failures=$((failures + 1))
               echo "::group::iteration $i: FAILED"
               cat "$log"
+              echo "::endgroup::"
+              echo "::group::iteration $i: processes at the time of the failure"
+              if command -v powershell > /dev/null; then
+                powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'java|gradle|python|cmd' } | Select-Object ProcessId,ParentProcessId,Name,CreationDate,CommandLine | Format-List"
+              else
+                ps -eo pid,ppid,etime,args | grep -E 'java|gradle|python' | grep -v grep || true
+              fi
               echo "::endgroup::"
             fi
           done

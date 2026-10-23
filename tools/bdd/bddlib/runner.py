@@ -10,13 +10,12 @@ import os
 import random
 import re
 import shlex
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from . import config as cfg
-from . import featurefiles, junit, lockfile, store
+from . import featurefiles, junit, lockfile, proctree, store
 from .errors import UsageError
 
 RUNS_DIR = ".runs"
@@ -244,11 +243,12 @@ def execute(words: list[str], root: Path, timeout: int, scrub: tuple[str, ...] =
         if os.name == "nt":
             env["NoDefaultCurrentDirectoryInExePath"] = "1"          # nothing the tool starts looks in the project first
         # the program as found, so a script shim such as npm.cmd or gradlew.bat starts on Windows without a shell
-        done = subprocess.run([program, *words[1:]], cwd=workdir, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=timeout, stdin=subprocess.DEVNULL)
-    except subprocess.TimeoutExpired as exc:
-        raise UsageError(f"the test run took longer than {timeout} s and was stopped") from exc
-    return done.returncode, (done.stdout or "") + (done.stderr or "")
+        done = proctree.run([program, *words[1:]], cwd=workdir, env=env, timeout=timeout)
+    except proctree.TimedOut as exc:
+        seen = (exc.stdout + exc.stderr)[-TAIL_CHARS:]
+        raise UsageError(f"the test run took longer than {timeout} s and was stopped, with every process it had started"
+                         + (f"; its output ended with:\n{seen}" if seen else "")) from exc
+    return done.returncode, done.stdout + done.stderr
 
 
 def one_run(rules: cfg.RunRules, root: Path, folder: Path, index: int, tag: str, workdir: Path | None = None,
