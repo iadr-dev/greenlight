@@ -48,8 +48,10 @@ def do_run(args: argparse.Namespace) -> int:
     config = cfg.load(root)
     adapters = runner.pick_all(config, args.adapter)
     scenarios = classify.feature_scenarios(root, args.feature)
+    note = ""
     if args.against_red:
-        record = run_against_red(root, args.feature, state.load(feature_dir), config, scenarios, adapters)
+        record, linked = run_against_red(root, args.feature, state.load(feature_dir), config, scenarios, adapters)
+        note = links_note(linked)
     else:
         record = runner.run_feature(root, args.feature, scenarios, adapters,
                                     shuffle=args.shuffle, isolated=args.isolated, seed=args.seed)
@@ -63,27 +65,32 @@ def do_run(args: argparse.Namespace) -> int:
     empty = [r for r in record["runs"] if r["report"] and not r.get("cases")]
     for r in empty:
         print(f"the test report holds no test cases (the runner exited with status {r['exit']}): {' '.join(r['command'])}\n"
-              f"Nothing matched the feature's tag, or the runner found no tests to run. Its output was:\n{r['tail']}", file=sys.stderr)
+              f"Nothing matched the feature's tag, or the runner found no tests to run. {note}Its output was:\n{r['tail']}",
+              file=sys.stderr)
     return 1 if missing or empty or not record["cases"] else 0
 
 
 def run_against_red(root, feature_id: str, data: dict, config: cfg.Config, scenarios: list[dict],
-                    adapters: list[cfg.RunRules]) -> dict:
+                    adapters: list[cfg.RunRules]) -> tuple[dict, list[str]]:
     """Run the feature's current tests against the production source of its recorded red (see ``againstred``)."""
     why = againstred.problem(data)
     if why:
         raise UsageError(why)
     red = againstred.baseline(data)
-    with againstred.red_worktree(root, red, config) as (place, missing):
-        if missing:
-            print("could not link these installed dependency folders into the temporary worktree (on Windows a link "
-                  f"needs Developer Mode or an administrator): {', '.join(missing)}; tests that need them will fail",
-                  file=sys.stderr)
+    with againstred.red_worktree(root, red, config) as (place, linked):
         record = runner.run_feature(root, feature_id, scenarios, adapters, workdir=place,
                                     against_red=againstred.describe(red))
     source = red.get("snapshot") or red.get("commit") or ""
     print(f"{feature_id}: ran against the red recorded at {red.get('at')} (production source {source[:12]})")
-    return record
+    return record, linked
+
+
+def links_note(linked: list[str]) -> str:
+    """What an empty result of a run in the temporary worktree can say about the project's installed folders."""
+    if linked:
+        return f"The project's folders linked into the temporary worktree: {', '.join(linked)}. "
+    return (f"The project has none of {', '.join(againstred.DEPENDENCY_DIRS)} to link into the temporary worktree, "
+            "so tests that load packages from them find nothing there: install the project's dependencies first. ")
 
 
 def run_classify(argv: list[str]) -> int:

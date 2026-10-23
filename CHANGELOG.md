@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `bdd run --against-red` on Windows without Developer Mode or administrator rights: the installed folders
+  (`node_modules`, `.venv`, `venv`) are now linked into the temporary worktree with junctions, which need no privilege
+  (symbolic links stay on other systems). Before, the failed symbolic link was only a warning, the tests ran without
+  `node_modules`, found no test cases and the bind gate refused. A folder that cannot be linked now stops the command
+  before any test runs, naming the folder and what to do, and an empty result names the folders that were linked.
+  Cleanup removes each link itself before the worktree, so the project's real folders are never touched, also when
+  removing the worktree fails half way.
+
 ## [1.0.0] - 2026-10-21
 
 The first complete release: the flow from feature request to verified code for seven test stacks, with Claude Code hooks for
