@@ -18,7 +18,7 @@ Status: DRAFT
      when you fill this in rather than copying a number from an example. An existing project keeps its version until
      you decide to upgrade (an agent never upgrades a toolchain, framework or dependency on its own). -->
 - Language and version: <the exact version, for example "Python 3.14", "Go 1.27", "Java 25 (LTS) with Kotlin 2.4", ".NET 10 (LTS)">
-- Build and package tool: <uv, Gradle, SwiftPM, pnpm, go modules, cargo>
+- Build and package tool: <uv, Gradle, SwiftPM, pnpm, go modules, cargo>; where the project is free to choose, a fast tool that installs from a lock file (uv for Python, pnpm for JavaScript and TypeScript, cargo, go modules, Gradle with its build cache) rather than a slower default.
 - Frameworks: <for example FastAPI, Expo SDK n, Next.js n (app router)>
 - Project type: <new | existing>; an existing project keeps its conventions unless this file says otherwise.
 

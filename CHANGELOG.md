@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Package-manager guidance: the TypeScript card says a new project may choose pnpm (with the reasons, and that the
+  adapter's own `tests/` tooling stays on npm and its lock file), and the standards template suggests a fast tool that
+  installs from a lock file for each stack. Nothing in the adapters changes, and pnpm and bun have not been run with
+  them.
+
 ### Fixed
 - `bdd run --against-red` links the installed folders below the project root too, at the same relative path (`tests/node_modules` of the Playwright adapter, `web/tests/node_modules` with `--into web`, a nested `.venv`), up to 4 folders deep; before, only the root's were linked and the run failed with `playwright-bdd` missing. A dependency folder that holds Next.js is copied instead of linked, because Turbopack (Next.js 16) does not read `next` through a link outside its project root; the result message marks it "(copied)".
 - `bdd run --against-red` on Windows without Developer Mode or administrator rights: the installed folders
