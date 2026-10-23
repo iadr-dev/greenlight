@@ -6,6 +6,10 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- README and quickstart: a short "How it works" section, the four autonomy levels, the toolchain each adapter needs, what
+  greenlight writes into a repository and how to remove it, and the known limits; the opening claims now say that hard
+  enforcement needs the plugin's hooks and that `autopilot` asks nobody. The quickstart no longer calls
+  `python-pytest-bdd` the only adapter or says the work always stops twice.
 - The evaluation harness runs the main session on Sonnet 5.5 unless `--model` says otherwise (it was the older Haiku, so a
   run without `--model` behaved differently from the documented examples). The plugin's own agents keep their models: the
   implementer and the step-engineer on Sonnet; the analysts, the QA designer and the auditor on Opus.
