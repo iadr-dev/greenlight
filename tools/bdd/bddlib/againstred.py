@@ -15,6 +15,7 @@ then keeps the original red record, so the order "red, then code" stays provable
 from __future__ import annotations
 
 import contextlib
+import os
 import shutil
 import sys
 import tempfile
@@ -28,6 +29,14 @@ from .errors import UsageError
 # Folders a project installs into and git ignores, that the tests need to run and that hold no production code:
 # they are linked into the worktree rather than copied (build output is never linked: it was made from today's code).
 DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
+# How far below the project root a dependency folder is looked for (web/tests/node_modules is 3 folders deep), and the
+# folders the search never enters: version control, greenlight's data and caches hold none the tests need.
+MAX_DEPTH = 4
+NOT_SEARCHED = {".git", ".bdd", "__pycache__"}
+# Turbopack, the default compiler of Next.js 16, resolves modules only inside its project root and does not read `next`
+# through a link to a folder outside it, so a dependency folder that holds Next.js is copied rather than linked.
+COPIED_WHEN_IT_HOLDS = Path("next") / "package.json"
+COPIED = " (copied)"
 SKIPPED = {"__pycache__", "node_modules", ".git", ".venv", "venv"}
 LOCAL_DATA = {".runs", ".integrity", ".enforcement"}
 
@@ -104,16 +113,40 @@ def overlay(root: Path, place: Path, config: cfg.Config) -> list[str]:
     return laid
 
 
+def find_dependency_dirs(root: Path) -> list[Path]:
+    """The installed dependency folders below ``root``, shallowest first, at most ``MAX_DEPTH`` folders deep. A
+    dependency folder is not searched (a package's own ``node_modules`` belongs to it), nor are version control,
+    greenlight's data, caches or links."""
+    found: list[Path] = []
+    for here, names, _files in os.walk(root):
+        base = Path(here)
+        depth = len(base.relative_to(root).parts)
+        keep = []
+        for name in sorted(names):
+            path = base / name
+            if name in DEPENDENCY_DIRS:
+                found.append(path)
+            elif name not in NOT_SEARCHED and depth + 1 < MAX_DEPTH and not folderlinks.is_link(path):
+                keep.append(name)
+        names[:] = keep
+    return sorted(found, key=lambda p: (len(p.relative_to(root).parts), DEPENDENCY_DIRS.index(p.name), p.parts))
+
+
 def link_dependencies(root: Path, place: Path) -> Iterator[Path]:
-    """Link the installed dependency folders the project has into the worktree, yielding each link as it is made so
-    the caller can remove it even when a later one fails. A folder that cannot be linked raises UsageError naming it:
-    tests that run without the project's installed dependencies prove nothing."""
-    for name in DEPENDENCY_DIRS:
-        source = root / name
-        target = place / name
-        if not source.is_dir() or target.exists() or folderlinks.is_link(target):
+    """Link the installed dependency folders the project has (at its root and in folders below it, such as an
+    adapter's ``tests/node_modules``) into the worktree at the same relative path, yielding each link as it is made so
+    the caller can remove it even when a later one fails. A folder the worktree already has is never replaced. A
+    folder that holds Next.js is copied, not linked (see ``COPIED_WHEN_IT_HOLDS``). A folder that cannot be linked
+    raises UsageError naming it: tests that run without the project's installed dependencies prove nothing."""
+    for source in find_dependency_dirs(root):
+        target = place / source.relative_to(root)
+        if target.exists() or folderlinks.is_link(target):
             continue
-        folderlinks.link_directory(source.resolve(), target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if (source / COPIED_WHEN_IT_HOLDS).is_file():
+            shutil.copytree(source, target, symlinks=True)
+        else:
+            folderlinks.link_directory(source.resolve(), target)
         yield target
 
 
@@ -129,6 +162,8 @@ def _discard(root: Path, holder: Path, links: list[Path]) -> None:
     place = holder / "red"
     stuck = []
     for link in links:
+        if not folderlinks.is_link(link):
+            continue                                       # a copy goes with the worktree folder
         try:
             folderlinks.remove_link(link)
         except OSError:
@@ -148,7 +183,7 @@ def _discard(root: Path, holder: Path, links: list[Path]) -> None:
 @contextlib.contextmanager
 def red_worktree(root: Path, red: dict, config: cfg.Config) -> Iterator[tuple[Path, list[str]]]:
     """A temporary worktree outside the project with the red's production source and today's test material.
-    Yields (the worktree, the names of the dependency folders linked into it); removes it afterwards. Raises
+    Yields (the worktree, the dependency folders linked into it, a copied one marked as such); removes it afterwards. Raises
     UsageError, before anything runs, when a dependency folder the project has cannot be linked."""
     commit = source_commit(red)
     holder = Path(tempfile.mkdtemp(prefix="greenlight-red-"))
@@ -161,7 +196,8 @@ def red_worktree(root: Path, red: dict, config: cfg.Config) -> Iterator[tuple[Pa
                              "(its digest differs), so a run there would not reproduce that red")
         overlay(root, place, config)
         links.extend(link_dependencies(root, place))
-        yield place, [link.name for link in links]
+        yield place, [link.relative_to(place).as_posix() + ("" if folderlinks.is_link(link) else COPIED)
+                      for link in links]
     finally:
         _discard(root, holder, links)
 
