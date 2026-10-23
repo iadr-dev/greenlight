@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Package-manager guidance: the TypeScript card says a new project may choose pnpm (with the reasons, and that the
+  adapter's own `tests/` tooling stays on npm and its lock file), and the standards template suggests a fast tool that
+  installs from a lock file for each stack. Nothing in the adapters changes, and pnpm and bun have not been run with
+  them.
+
 ### Fixed
 - `bdd run --against-red` on Windows without Developer Mode or administrator rights: the installed folders
   (`node_modules`, `.venv`, `venv`) are now linked into the temporary worktree with junctions, which need no privilege
