@@ -498,7 +498,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     requests = {p.stem: p for p in sorted(REQUESTS.glob("*.md"))}
     ap.add_argument("--request", default="discounts", choices=sorted(REQUEST_KINDS), help="a file in evals/requests/")
-    ap.add_argument("--model", default="haiku", choices=sorted(MODELS), help="a name from the MODELS table")
+    ap.add_argument("--model", default="sonnet-5.5", choices=sorted(MODELS),
+                    help="a name from the MODELS table (the main session; the plugin's agents name their own model)")
     ap.add_argument("--autonomy", default="autopilot", type=lambda v: parse_list(v, LEVELS, "autonomy"),
                     help="one level or a comma-separated list, e.g. standard,autopilot")
     ap.add_argument("--arms", default="plugin", type=lambda v: parse_list(v, ARMS, "arms"), help="plugin, baseline or both")
