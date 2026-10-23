@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `.gitignore` ignores `.codegraph/`, the local index of the CodeGraph code-intelligence tool.
+
 ## [1.0.1] - 2026-10-23
 
 A patch release: the fixes and measurements made after 1.0.0. Nothing in the file formats changed (`bdd migrate` still

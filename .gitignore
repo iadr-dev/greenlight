@@ -10,3 +10,5 @@ evals/apps/*/dist/
 .claude/settings.local.json
 .claude/scheduled_tasks.*
 evals/results/
+# CodeGraph local index
+.codegraph/
