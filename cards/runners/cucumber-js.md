@@ -3,6 +3,9 @@ id: cucumber-js
 kind: runner
 apply_when: "a JavaScript or TypeScript project whose scenarios run with cucumber-js (the generic-junit adapter)"
 ---
+For a TypeScript project, the `ts-cucumber-js` adapter ships this recipe ready made (steps, drivers, `tsx` loader, pinned tooling and
+the run command); use it instead unless you already have cucumber-js steps of your own.
+
 ## Run
 
 cucumber-js reads the `.feature` files itself and writes JUnit with its built-in formatter, so no wrapper is needed:

@@ -11,6 +11,7 @@ broken test.
 | `python-pytest-bdd` | available | Python services, libraries and command-line tools with `pytest` (8+) and `pytest-bdd` (8+); profiles `base`, `api`, `cli`, `lib`, `data` |
 | `go-godog` | available | Go services, libraries and command-line tools with godog (Cucumber for Go); profiles `base`, `api`, `cli`, `lib`, `data` |
 | `dotnet-reqnroll` | available | .NET services, libraries and command-line tools with Reqnroll and xUnit; profiles `base`, `api`, `cli`, `lib`, `data` |
+| `ts-cucumber-js` | available | Node and TypeScript services, libraries and command-line tools (and the logic of Expo and React Native apps) with cucumber-js and `tsx`; profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
 | `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests, and (opt-in) the same scenarios on a device through Cucumber-Android; profiles `base`, `lib`, `data` |
@@ -32,7 +33,12 @@ from the first run.
   `RestoreLockedMode`), runs `dotnet test` through a small bound wrapper and lets `JunitXml.TestLogger` write the report. See
   `adapters/dotnet-reqnroll/guide.md`.
 
-Detection suggests them from `go.mod` and from `*.csproj`/`*.sln`. In CI, each adapter has a job that scaffolds it into a
+- `ts-cucumber-js` puts the test code in its own package in `tests/` (`package.json` and `package-lock.json` pinned, installed
+  with `npm ci`), loads the TypeScript steps through `tsx` and lets cucumber-js's JUnit formatter write the report. It has no
+  `ui` profile: a web UI is `ts-playwright-bdd`'s job, and the two can share a repository. See `adapters/ts-cucumber-js/guide.md`.
+
+Detection suggests them from `go.mod`, from `*.csproj`/`*.sln` and, for `ts-cucumber-js`, from a `package.json` that names a Node
+framework (`express`, `fastify`, `koa`, `@nestjs`, `hono`), a command-line library (`commander`, `yargs`) or `@cucumber/cucumber`. In CI, each adapter has a job that scaffolds it into a
 temporary project and runs the sample feature, every core step and a red phase for real, on Linux, Windows and macOS.
 
 A scenario title in another script or with accents (Chinese, an accented Latin letter, or both mixed with ASCII) maps to its

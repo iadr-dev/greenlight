@@ -1,0 +1,128 @@
+// A complete in-memory system for the contract test: every seam is implemented, so every core step can run. The
+// application is a small HTTP server on a free loopback port.
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { httpClient, type HttpClient } from './api';
+import { ExpectedMissing } from './errors';
+import { QueryCounter } from './queries';
+import type { Clock } from './clock';
+import type { Stubs } from './stubs';
+
+type Row = Record<string, unknown>;
+
+export class System {
+  constructor(readonly clock: Clock, readonly stubs: Stubs) {}
+
+  private readonly rows: Record<string, Row[]> = {};
+  private readonly received: Record<string, unknown[]> = {};
+  private readonly emitted: Record<string, unknown[]> = {};
+  private readonly flags: Record<string, boolean> = {};
+  private readonly queries = new QueryCounter();
+  private server: Server | undefined;
+  private client: HttpClient | undefined;
+
+  seed(entity: string, rows: Row[]): Promise<void> {
+    this.rows[entity] = [...(this.rows[entity] ?? []), ...rows];
+    return Promise.resolve();
+  }
+
+  authenticate(actor: string, role: string): Promise<Record<string, string>> {
+    return Promise.resolve({ authorization: `Bearer ${actor}:${role}` });
+  }
+
+  setFlag(flag: string, enabled: boolean): Promise<void> {
+    this.flags[flag] = enabled;
+    return Promise.resolve();
+  }
+
+  setTime(_moment: Date): Promise<void> {
+    return Promise.resolve();
+  }
+
+  http(): HttpClient {
+    if (!this.client) {
+      throw new ExpectedMissing('the application is not started: call start() first');
+    }
+    return this.client;
+  }
+
+  async start(): Promise<void> {
+    this.server = createServer((request, response) => this.handle(request, response));
+    await new Promise<void>((done) => this.server?.listen(0, '127.0.0.1', done));
+    this.client = httpClient(`http://127.0.0.1:${(this.server.address() as AddressInfo).port}`);
+  }
+
+  private handle(request: IncomingMessage, response: ServerResponse): void {
+    const send = (status: number, body: unknown): void => {
+      response.writeHead(status, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(body));
+    };
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const path = (request.url ?? '').split('?')[0];
+      if (request.method === 'POST' && path === '/orders') {
+        if (!request.headers.authorization) {
+          send(401, { error: 'sign in first' });
+          return;
+        }
+        const order = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}') as Row;
+        try {
+          this.stubs.call('payments', 'charge', { amount: 900 });
+        } catch (error) {
+          send(502, { error: (error as Error).message });
+          return;
+        }
+        this.queries.record('INSERT INTO orders');
+        order.status = 'placed';
+        (this.rows.order ??= []).push(order);
+        send(201, { id: this.rows.order.length, status: 'placed', total: 900 });
+      } else if (request.method === 'GET' && path === '/orders') {
+        this.queries.record('SELECT * FROM orders');
+        if (this.flags['n-plus-one']) {
+          for (const _ of this.rows.order ?? []) {
+            this.queries.record('SELECT * FROM lines WHERE order_id = ?');
+          }
+        }
+        send(200, this.rows.order ?? []);
+      } else if (request.method === 'GET' && path === '/time') {
+        send(200, { now: this.clock.now().toISOString().replace('.000Z', 'Z') });
+      } else {
+        send(404, { error: 'not found' });
+      }
+    });
+  }
+
+  deliverEvent(event: string, payload: unknown): Promise<void> {
+    (this.received[event] ??= []).push(payload);
+    return Promise.resolve();
+  }
+
+  runJob(job: string): Promise<void> {
+    if (job === 'receipts') {
+      this.emitted.receipt = [...(this.emitted.receipt ?? []), ...(this.received.payment ?? [])];
+      return Promise.resolve();
+    }
+    return Promise.reject(new ExpectedMissing(`the ${job} job`));
+  }
+
+  complete(operation: string, fields: Row): Row {
+    return operation === 'place order' && fields.qty === undefined ? { item: fields.item, qty: 1 } : fields;
+  }
+
+  records(entity: string): Promise<Row[]> {
+    return Promise.resolve(this.rows[entity] ?? []);
+  }
+
+  queriesExecuted(): number {
+    return this.queries.count;
+  }
+
+  published(event: string): Promise<unknown[]> {
+    return Promise.resolve(this.emitted[event] ?? []);
+  }
+
+  async reset(): Promise<void> {
+    await new Promise<void>((done) => (this.server ? this.server.close(() => done()) : done()));
+  }
+}

@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `ts-cucumber-js`, a first-class adapter for Node and TypeScript services, libraries and command-line tools (and the logic of Expo and
+  React Native apps): cucumber-js with the `tsx` loader, pinned tooling in `tests/`, profiles `base`, `api`, `cli`, `lib` and `data`, detection from `package.json`, a contract test (green, shuffled and isolated runs, every core step, red classification, accented and Chinese titles, type check) on Linux, Windows and macOS in CI, and a gates workflow. Web UIs stay with `ts-playwright-bdd`. Decision D51, platform note P38.
+
 ### Changed
 - `.gitignore` ignores `.codegraph/`, the local index of the CodeGraph code-intelligence tool.
 

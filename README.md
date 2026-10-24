@@ -84,7 +84,7 @@ It does not matter whether you start `claude` from PowerShell, cmd or Git Bash; 
 Git Bash. Without Git for Windows greenlight still works, but only with soft enforcement.
 
 Each adapter also needs its own stack on the machine, which greenlight never installs for you: `pytest` and `pytest-bdd`
-for Python; Node.js with npm for the TypeScript web adapter (CI uses Node 22); Go 1.24 or newer; the .NET 10 SDK; a JDK
+for Python; Node.js with npm for the TypeScript adapters (web UI and Node services; CI uses Node 22); Go 1.24 or newer; the .NET 10 SDK; a JDK
 with Maven or Gradle for Spring Boot and Kotlin/Android (CI uses JDK 21). `/greenlight:init` checks your machine.
 
 greenlight writes `.bdd/` (commit it; its machine-local `.enforcement/`, `.integrity/` and `.runs/` folders are
