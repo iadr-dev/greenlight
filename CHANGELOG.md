@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-24
+
+A minor release: three adapters (Node and TypeScript logic, Flutter, Android screens), `bdd report`, swipes, scrolls
+and going back in the core vocabulary (version 3), and engineering standards that apply without approval. Nothing in
+the `.bdd/` file formats changed (`bdd migrate` still reports schema 1), features written for vocabulary 2 mean the
+same, and projects made with 1.0.x keep working. A `Status:` line left in an existing `.bdd/standards.md` is ignored.
+
 ### Fixed
 - The process-tree timeout tests sometimes failed on slow CI machines (macOS and Linux) with "the grandchild never started". The cause was in the test, not in greenlight: when two Python start-ups took most of the 3-second limit, the timeout stopped the grandchild, correctly, in the middle of its first write, and the test then waited for a heartbeat in a file left empty. The grandchild now writes its heartbeat by renaming a new file over the old one, its parent says "the grandchild is alive" only after the first heartbeat, and the limit is 10 seconds.
 
