@@ -41,9 +41,9 @@ class UiSteps(private val world: World) {
     }
 
     /** The value an action carries: the `value` cell of a table, its only cell, or a doc string. */
-    private fun valueOf(given: Any?): String? = when (given) {
-        is Map<*, *> -> (given["value"] ?: given.values.firstOrNull())?.toString()
-        else -> given?.toString()
+    private fun valueOf(given: Any?): String? {
+        val cell = if (given is Map<*, *>) given["value"] ?: given.values.firstOrNull() else given
+        return if (cell == null) null else cell.toString()
     }
 
     private fun act(action: String, target: String, value: String?) {
