@@ -19,13 +19,19 @@ export class System {
   constructor(readonly clock: Clock, readonly stubs: Stubs) {}
 
   /** Called once, before the first action of a scenario: start the application (a server on a free port, a database). */
-  async start(): Promise<void> {}
+  start(): Promise<void> {
+    return Promise.resolve();
+  }
 
   /** Called after every scenario: drop data, close clients. */
-  async reset(): Promise<void> {}
+  reset(): Promise<void> {
+    return Promise.resolve();
+  }
 
   /** The scenario's clock is set already (`world.clock`). Override this if the application needs the same time. */
-  async setTime(_moment: Date): Promise<void> {}
+  setTime(_moment: Date): Promise<void> {
+    return Promise.resolve();
+  }
 
   /** Fill in request fields the scenario did not give, for example the id of the order created earlier, so that a step
    *  like `alice calls look up order` needs no id. The default adds nothing. */

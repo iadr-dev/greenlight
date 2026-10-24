@@ -1,41 +1,74 @@
 // Calling an API operation by its logical name and judging the response by logical result.
 import { strict as assert } from 'node:assert';
 import { NotMapped } from './errors';
-import { API } from './operations';
+import { API, type Api } from './operations';
 import type { GreenlightWorld } from './world';
+
+type Fields = Record<string, unknown>;
 
 export interface HttpResponse {
   status: number;
   body: unknown;
 }
 
+export interface RequestOptions {
+  json?: unknown;
+  params?: Fields;
+  headers?: Record<string, string>;
+}
+
 export interface HttpClient {
-  request(method: string, path: string, options?: { json?: unknown; params?: Record<string, unknown>; headers?: Record<string, string> }): Promise<HttpResponse>;
+  request(method: string, path: string, options?: RequestOptions): Promise<HttpResponse>;
+}
+
+/** The body of a response: JSON when it parses, else the text. */
+function parseBody(text: string): unknown {
+  try {
+    return text === '' ? null : JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 /** An HttpClient on `fetch` for an application listening at `baseUrl`. Loopback is let through by the network guard. */
 export function httpClient(baseUrl: string): HttpClient {
   return {
-    async request(method, path, options = {}) {
+    async request(method, path, options) {
+      const { json, params, headers } = options ?? {};
       const url = new URL(path, baseUrl);
-      for (const [key, value] of Object.entries(options.params ?? {})) {
-        url.searchParams.set(key, String(value));
-      }
-      const headers: Record<string, string> = { ...(options.headers ?? {}) };
-      if (options.json !== undefined) {
-        headers['content-type'] = 'application/json';
-      }
-      const response = await fetch(url, { method, headers, body: options.json === undefined ? undefined : JSON.stringify(options.json) });
-      const text = await response.text();
-      let body: unknown = text;
-      try {
-        body = text === '' ? null : JSON.parse(text);
-      } catch {
-        // not JSON: keep the text
-      }
-      return { status: response.status, body };
+      Object.entries(params ?? {}).forEach(([key, value]) => url.searchParams.set(key, String(value)));
+      const response = await fetch(url, {
+        method,
+        headers: json === undefined ? headers : { ...headers, 'content-type': 'application/json' },
+        body: json === undefined ? undefined : JSON.stringify(json),
+      });
+      return { status: response.status, body: parseBody(await response.text()) };
     },
   };
+}
+
+const isFields = (value: unknown): value is Fields => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isEmpty = (value: unknown): boolean => value === undefined || value === null || (typeof value === 'object' && Object.keys(value).length === 0);
+
+/** The route's path with its `{field}` placeholders filled in, and the request data that is left over. */
+function addressed(route: Api, fields: Fields, data: unknown): { path: string; sent: unknown } {
+  const used = new Set<string>();
+  const path = route.path.replace(/\{(\w+)\}/g, (_all, name: string) => {
+    used.add(name);
+    return encodeURIComponent(String(fields[name]));
+  });
+  const sent = isFields(data) || Object.keys(fields).length > 0
+    ? Object.fromEntries(Object.entries(fields).filter(([key]) => !used.has(key)))
+    : data;
+  return { path, sent };
+}
+
+/** A GET carries its data in the query string, any other method in a JSON body. */
+function carrying(method: string, sent: unknown): RequestOptions {
+  if (isEmpty(sent)) {
+    return {};
+  }
+  return method === 'GET' ? { params: sent as Fields } : { json: sent };
 }
 
 export async function call(world: GreenlightWorld, actor: string, operation: string, data: unknown): Promise<void> {
@@ -43,26 +76,17 @@ export async function call(world: GreenlightWorld, actor: string, operation: str
   if (route === undefined) {
     throw new NotMapped('API operation', operation, Object.keys(API));
   }
-  const given = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
-  const fields = world.system.complete(operation, given);          // the project may add what the scenario left out
-  const path = route.path.replace(/\{(\w+)\}/g, (_all, name: string) => encodeURIComponent(String(fields[name])));
-  const used = new Set([...route.path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]));
-  const sent = Object.keys(fields).length > 0 || (data && typeof data === 'object' && !Array.isArray(data))
-    ? Object.fromEntries(Object.entries(fields).filter(([key]) => !used.has(key)))
-    : data;
-  const isGet = route.method.toUpperCase() === 'GET';
-  const empty = sent === undefined || sent === null || (typeof sent === 'object' && Object.keys(sent).length === 0);
-  const response = await world.system.http().request(route.method.toUpperCase(), path, {
-    headers: world.headers.get(actor) ?? {},
-    ...(empty ? {} : isGet ? { params: sent as Record<string, unknown> } : { json: sent }),
-  });
+  const fields = world.system.complete(operation, isFields(data) ? data : {});      // the project may add what the scenario left out
+  const { path, sent } = addressed(route, fields, data);
+  const method = route.method.toUpperCase();
+  const headers = world.headers.get(actor);
+  const response = await world.system.http().request(method, path, { ...carrying(method, sent), ...(headers && { headers }) });
   world.outcome = { kind: 'api', status: response.status, body: response.body, operation, stdout: '', stderr: '' };
 }
 
 export function assertSucceeds(world: GreenlightWorld): void {
-  const outcome = world.last('api');
-  assert.ok((outcome.status ?? 0) >= 200 && (outcome.status ?? 0) < 300,
-    `the request should succeed but got status ${outcome.status}: ${JSON.stringify(outcome.body)}`);
+  const { status = 0, body } = world.last('api');
+  assert.ok(status >= 200 && status < 300, `the request should succeed but got status ${status}: ${JSON.stringify(body)}`);
 }
 
 export function assertRejected(world: GreenlightWorld, error: string): void {

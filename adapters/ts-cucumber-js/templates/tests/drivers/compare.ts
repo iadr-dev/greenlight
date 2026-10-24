@@ -66,39 +66,47 @@ export function assertSubset(actual: unknown, expected: unknown, what: string): 
 
 /** Why `actual` does not contain `expected`, or null when it does. `at` names the place, such as `order.lines`. */
 function mismatch(actual: unknown, expected: unknown, at: string): string | null {
-  const place = at || 'value';
   if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) {
-      return `${place} should be a list`;
-    }
-    const missing = expected.find((item) => !actual.some((candidate) => mismatch(candidate, item, at) === null));
-    return missing === undefined ? null : `${place} has no item matching ${show(missing)}`;
+    return listMismatch(actual, expected, at);
   }
   if (isObject(expected)) {
-    if (!isObject(actual)) {
-      return `${place} should be an object`;
-    }
-    for (const [key, value] of Object.entries(expected)) {
-      const where = at ? `${at}.${key}` : key;
-      const problem = key in actual ? mismatch(actual[key], value, where) : `${where} is missing`;
-      if (problem !== null) {
-        return problem;
-      }
-    }
-    return null;
+    return objectMismatch(actual, expected, at);
   }
-  return Object.is(actual, expected) ? null : `${place} is ${show(actual)}, expected ${show(expected)}`;
+  return Object.is(actual, expected) ? null : `${at || 'value'} is ${show(actual)}, expected ${show(expected)}`;
 }
 
-const UNIT_SECONDS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86_400, w: 604_800 };
-const AMOUNT = /(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|[smhdw])\b/g;
+function listMismatch(actual: unknown, expected: unknown[], at: string): string | null {
+  if (!Array.isArray(actual)) {
+    return `${at || 'value'} should be a list`;
+  }
+  const missing = expected.find((item) => !actual.some((candidate) => mismatch(candidate, item, at) === null));
+  return missing === undefined ? null : `${at || 'value'} has no item matching ${show(missing)}`;
+}
 
-/** '2 days', '30 minutes', '1h 30m' as milliseconds: each amount is a number and a unit (the first letter says which). */
+function objectMismatch(actual: unknown, expected: Row, at: string): string | null {
+  if (!isObject(actual)) {
+    return `${at || 'value'} should be an object`;
+  }
+  const where = (key: string): string => (at ? `${at}.${key}` : key);
+  const problems = Object.entries(expected).map(([key, value]) => (key in actual ? mismatch(actual[key], value, where(key)) : `${where(key)} is missing`));
+  return problems.find((problem) => problem !== null) ?? null;
+}
+
+const SECONDS_PER_UNIT: Record<string, number> = {
+  s: 1, sec: 1, secs: 1, second: 1, seconds: 1,
+  m: 60, min: 60, mins: 60, minute: 60, minutes: 60,
+  h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600,
+  d: 86_400, day: 86_400, days: 86_400,
+  w: 604_800, week: 604_800, weeks: 604_800,
+};
+const AMOUNT = /(\d+(?:\.\d+)?)\s*([a-z]+)/g;
+
+/** '2 days', '30 minutes', '1h 30m' as milliseconds. An amount is a number and a unit; "and" and commas are ignored. */
 export function durationMs(text: string): number {
   const lower = text.toLowerCase();
   const amounts = [...lower.matchAll(AMOUNT)];
   const leftover = lower.replace(AMOUNT, '').replace(/\band\b|[\s,]/g, '');
-  assert.ok(amounts.length > 0 && leftover === '', `cannot read the duration '${text}'`);
-  const seconds = amounts.map(([, amount, unit]) => Number(amount) * (UNIT_SECONDS[(unit as string).charAt(0)] as number));
+  const seconds = amounts.map(([, amount, unit]) => Number(amount) * (SECONDS_PER_UNIT[unit as string] ?? Number.NaN));
+  assert.ok(amounts.length > 0 && leftover === '' && seconds.every(Number.isFinite), `cannot read the duration '${text}'`);
   return seconds.reduce((sum, value) => sum + value, 0) * 1000;
 }

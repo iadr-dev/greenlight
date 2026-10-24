@@ -5,28 +5,32 @@ import { NotMapped } from './errors';
 import { LIB } from './operations';
 import type { GreenlightWorld } from './world';
 
+/** An error as one line: `RangeError: negative numbers are not allowed`. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error);
+}
+
 export async function call(world: GreenlightWorld, operation: string, data: unknown): Promise<void> {
   const mapped = LIB[operation] as ((...args: unknown[]) => unknown) | undefined;
   if (mapped === undefined) {
     throw new NotMapped('library operation', operation, Object.keys(LIB));       // a missing name is a failure, not a result
   }
+  const outcome = { kind: 'lib' as const, operation, stdout: '', stderr: '' };
   try {
-    const value = Array.isArray(data) ? await mapped(...data) : await mapped(data);
-    world.outcome = { kind: 'lib', body: value, operation, stdout: '', stderr: '' };
+    world.outcome = { ...outcome, body: Array.isArray(data) ? await mapped(...data) : await mapped(data) };
   } catch (error) {                                                               // the scenario decides whether this error was wanted
-    world.outcome = { kind: 'lib', error, operation, stdout: '', stderr: '' };
+    world.outcome = { ...outcome, error };
   }
 }
 
 export function assertResult(world: GreenlightWorld, expected: unknown, exact: boolean): void {
-  const outcome = world.last('lib');
-  assert.equal(outcome.error, undefined, `the call threw ${outcome.error instanceof Error ? `${outcome.error.constructor.name}: ${outcome.error.message}` : String(outcome.error)}`);
-  (exact ? assertEqual : assertSubset)(outcome.body, expected, 'the result');
+  const { error, body } = world.last('lib');
+  assert.equal(error, undefined, `the call threw ${describeError(error)}`);
+  (exact ? assertEqual : assertSubset)(body, expected, 'the result');
 }
 
-export function assertFails(world: GreenlightWorld, error: string): void {
+export function assertFails(world: GreenlightWorld, name: string): void {
   const outcome = world.last('lib');
   assert.notEqual(outcome.error, undefined, `the call should fail but returned ${JSON.stringify(outcome.body)}`);
-  assert.ok(world.matchesError(outcome, error),
-    `the call failed, but not with '${error}': ${outcome.error instanceof Error ? `${outcome.error.constructor.name}: ${outcome.error.message}` : String(outcome.error)}`);
+  assert.ok(world.matchesError(outcome, name), `the call failed, but not with '${name}': ${describeError(outcome.error)}`);
 }

@@ -36,22 +36,23 @@ jobs:
         run: git clone --depth 1 --branch "$GREENLIGHT_REF" https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
       - name: Install the test tooling from the lockfile
         run: npm ci --ignore-scripts --prefix tests --no-audit --no-fund
+      - name: Feature files follow the vocabulary
+        run: |
+          bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
+          "$bdd" lint tests/features
       - name: Gates for every finished feature
         run: |
-          set -eu
-          bdd() { sh "$RUNNER_TEMP/greenlight/tools/bdd/bdd" "$@"; }
-          configured() { grep -q "$1" .bdd/config.toml; }
-          bdd lint tests/features
-          ids=$(bdd status --done)    # an assignment: a failing status stops the job instead of looping over nothing
+          bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
+          ids=$("$bdd" status --done)   # an assignment: a failing status stops the job instead of looping over nothing
           for id in $ids; do
-            bdd approve "$id" --check             # the approvals in the committed record
-            bdd lock "$id" --check --require      # approved files are unchanged
-            bdd run "$id"                         # a fresh run, then it must be green
-            bdd classify "$id" --expect green
-            bdd trace "$id"
-            ! configured '^\[stability\]' || bdd stability "$id"
-            ! configured '^\[adapters.quality' || bdd check "$id"
-            ! configured '^\[adapters.mutation\]' || bdd mutate "$id"
+            "$bdd" approve "$id" --check
+            "$bdd" lock "$id" --check --require
+            "$bdd" run "$id"
+            "$bdd" classify "$id" --expect green
+            "$bdd" trace "$id"
+            if grep -q '^\[stability\]' .bdd/config.toml; then "$bdd" stability "$id"; fi
+            if grep -q '^\[adapters.quality' .bdd/config.toml; then "$bdd" check "$id"; fi
+            if grep -q '^\[adapters.mutation\]' .bdd/config.toml; then "$bdd" mutate "$id"; fi
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()

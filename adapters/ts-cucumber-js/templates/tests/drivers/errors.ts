@@ -25,6 +25,6 @@ export class OutboundNetworkBlocked extends DriverError {}
 /** A logical name in a feature has no entry in tests/drivers/operations.ts: a defect of the test, not a missing feature. */
 export class NotMapped extends DriverError {
   constructor(kind: string, name: string, known: Iterable<string>) {
-    super(`NotMapped: no ${kind} named '${name}' in tests/drivers/operations.ts (known: ${[...known].sort().join(', ')})`);
+    super(`NotMapped: no ${kind} named '${name}' in tests/drivers/operations.ts (known: ${[...known].sort((a, b) => a.localeCompare(b)).join(', ')})`);
   }
 }

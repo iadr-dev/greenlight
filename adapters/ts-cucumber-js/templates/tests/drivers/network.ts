@@ -15,19 +15,22 @@ type Target = { local: true } | { local: false; host: string };
 
 let original: Connect | undefined;
 
+function fromOptions(options: { host?: unknown; path?: unknown; port?: unknown }): Target | undefined {
+  if (typeof options.path === 'string' && options.path !== '') {
+    return { local: true };                                                            // a path is a local socket
+  }
+  if (options.host === undefined || options.host === '') {
+    return options.port === undefined ? undefined : { local: false, host: 'localhost' };
+  }
+  return typeof options.host === 'string' ? { local: false, host: options.host } : undefined;
+}
+
 /** Where a call to `connect` goes. Node calls it as `connect(options)`, `connect(port, host)`, `connect(path)` and, when it
  *  re-enters itself, with the already-normalised `[options, callback]`; anything else is unreadable. */
 function targetOf(args: unknown[]): Target | undefined {
   const first = Array.isArray(args[0]) ? (args[0] as unknown[])[0] : args[0];        // unwrap the normalised form
-  if (first && typeof first === 'object') {
-    const options = first as { host?: unknown; path?: unknown; port?: unknown };
-    if (typeof options.path === 'string' && options.path !== '') {
-      return { local: true };                                                          // a path is a local socket
-    }
-    if (options.host === undefined || options.host === '') {
-      return typeof options.port === 'number' || typeof options.port === 'string' ? { local: false, host: 'localhost' } : undefined;
-    }
-    return typeof options.host === 'string' ? { local: false, host: options.host } : undefined;
+  if (typeof first === 'object' && first !== null) {
+    return fromOptions(first);
   }
   if (typeof first === 'number' || (typeof first === 'string' && /^\d+$/.test(first))) {
     return { local: false, host: typeof args[1] === 'string' ? args[1] : 'localhost' };
