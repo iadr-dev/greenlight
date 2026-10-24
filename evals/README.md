@@ -32,10 +32,9 @@ The table is `REQUEST_KINDS` in `run_e2e.py`. For the two `generic-junit` apps t
 around `node --test` for TypeScript) and removes the sample. They need Go, or Node and npm, on PATH instead of `uv`, and the
 baseline arm runs the app's own tests (`go test ./...`, `npm test`).
 
-Each app has its engineering standards in `evals/apps/<app>/standards.md`: filled in from the app's real stack and
-approved by the person running the evaluation. After `bdd init` the harness, acting as that person, puts it in place of
-the draft as `.bdd/standards.md`, before any agent starts; it is not an agent's write. The product template
-(`templates/standards.md`) stays a draft, so a real project never starts approved without its person reading it.
+Each app has its engineering standards in `evals/apps/<app>/standards.md`: filled in from the app's real stack by the
+person running the evaluation. After `bdd init` the harness, acting as that person, puts it in place of greenlight's
+defaults as `.bdd/standards.md`, before any agent starts; it is not an agent's write.
 
 ## Targets
 

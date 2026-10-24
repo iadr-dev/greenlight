@@ -110,9 +110,10 @@ pass from the start and no production code is touched. You still approve the rul
 
 ## State your engineering standards
 
-`bdd init` also creates `.bdd/standards.md` (in an existing project: `bdd init --standards`). Read it, describe your
-language and toolchain version, style, quality rules and deprecation policy, and change `Status: DRAFT` to
-`Status: APPROVED`. If you use a formatter, linter or type checker, name it in `[adapters.quality.NAME]` tables so
+`bdd init` also creates `.bdd/standards.md` (in an existing project: `bdd init --standards`) with greenlight's default
+engineering standards. They are in force at once and need no approval; a placeholder you leave means what the project
+already uses. If you want, edit them to describe your language and toolchain version, style, quality rules and
+deprecation policy; agents cannot. If you use a formatter, linter or type checker, name it in `[adapters.quality.NAME]` tables so
 `bdd check` and the gates enforce it; see [adapters](adapters.md).
 
 ## 6. Change your mind later

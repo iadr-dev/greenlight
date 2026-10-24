@@ -1,8 +1,6 @@
 # Engineering standards
 
-Status: APPROVED
-
-Approved by the person running the evaluation, for the evaluation runs of this reference app. It is copied into the
+Written by the person running the evaluation, for the evaluation runs of this reference app. It is copied into the
 project's `.bdd/standards.md` by the evaluation harness, acting as that person.
 
 Each rule is marked [tool] (enforced by a linter, type checker, test or CI step) or [review] (enforced by the auditor

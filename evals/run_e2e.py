@@ -57,7 +57,7 @@ import collect  # noqa: E402  (a sibling module; the script directory is on the 
 
 REPO = Path(__file__).resolve().parents[1]
 APPS = REPO / "evals" / "apps"
-STANDARDS = "standards.md"          # an app's approved engineering standards, put in its project's .bdd/ by the harness
+STANDARDS = "standards.md"          # an app's own engineering standards, put in its project's .bdd/ by the harness
 REQUESTS = REPO / "evals" / "requests"
 RESULTS = REPO / "evals" / "results"
 TOOLS = "Agent Bash Read Write Edit MultiEdit Grep Glob"
@@ -275,15 +275,15 @@ def set_up_web(project: Path, env: dict) -> None:
     config.write_text(found.replace(WEB_SERVER_COMMENT, WEB_SERVER), encoding="utf-8", newline="\n")
 
 
-def approve_standards(project: Path, kind: dict) -> None:
-    """Act as the person: put the app's approved engineering standards in place of the draft that `bdd init` copied.
+def use_app_standards(project: Path, kind: dict) -> None:
+    """Act as the person: put the app's engineering standards in place of the defaults that `bdd init` copied.
 
-    The person running the evaluation reviewed and approved `evals/apps/<app>/standards.md` for these runs; the harness
-    writes it before the agents start, so it is the person's file, not an agent's write. An app without one keeps the
-    draft, as a new project would."""
-    approved = APPS / kind["app"] / STANDARDS
-    if approved.is_file():
-        shutil.copyfile(approved, project / ".bdd" / STANDARDS)
+    The person running the evaluation wrote `evals/apps/<app>/standards.md` for these runs; the harness writes it before
+    the agents start, so it is the person's file, not an agent's write. An app without one keeps greenlight's defaults,
+    as a new project would."""
+    own = APPS / kind["app"] / STANDARDS
+    if own.is_file():
+        shutil.copyfile(own, project / ".bdd" / STANDARDS)
 
 
 def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> None:
@@ -291,7 +291,7 @@ def set_up(project: Path, env: dict, autonomy: str, python: str, kind: dict) -> 
     commit_all(project, env, "reference app")
     python_adapter = kind["adapter"] == "python-pytest-bdd"
     bdd(project, env, "init", "--adapter", kind["adapter"], "--autonomy", autonomy, *(["--python", python] if python_adapter else []))
-    approve_standards(project, kind)
+    use_app_standards(project, kind)
     if kind["adapter"] == "ts-playwright-bdd":
         set_up_web(project, env)
     print(bdd(project, env, "init", "--smoke").stdout.strip())

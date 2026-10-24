@@ -73,9 +73,11 @@ Languages, frameworks and conventions differ too much for greenlight to carry ru
 project:
 
 - `.bdd/standards.md` (made by `bdd init`, or `bdd init --standards` in an existing project) states the language and
-  toolchain version, style, quality rules and deprecation policy. Only you can edit it and mark it `Status: APPROVED`;
-  agents cannot write it, and `bdd doctor` warns while it is missing or a draft. The implementer, the step-engineer and the
-  auditor read it. The declared toolchain is the standard: a new project starts on the current stable release, an existing
+  toolchain version, style, clean code, architecture, security, quality rules and deprecation policy. It starts as
+  greenlight's defaults and is in force as it is: nobody has to approve it, so a project whose person is not a
+  programmer still gets them. You may edit it; agents cannot write it, and `bdd doctor` warns while it is missing. A
+  placeholder left in it means what the project already uses (its manifests, lock files and tool configuration), never
+  a tool to add. The implementer and the step-engineer follow it, and the auditor fails a feature whose code does not. The declared toolchain is the standard: a new project starts on the current stable release, an existing
   one is never upgraded silently, and an agent never upgrades or adds a toolchain, framework or dependency on its own.
 - `[adapters.quality.NAME]` tables in `.bdd/config.toml` name the project's own tools (formatter, linter, type checker,
   a deprecation check). `bdd check FEAT-n` runs them without a shell, records the result, and the implement and verify

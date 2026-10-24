@@ -313,45 +313,44 @@ class ContaminationTest(unittest.TestCase):
         self.assertIn("run 2 (plugin, autopilot): C:/Users/x/.codex/config.toml", table)
 
 
-class ApprovedStandardsTest(unittest.TestCase):
-    """Each reference app brings standards its person approved; the product template stays a draft."""
+class AppStandardsTest(unittest.TestCase):
+    """Each reference app brings the standards its person wrote, in place of greenlight's defaults."""
 
     APPS = sorted({kind["app"] for kind in run_e2e.REQUEST_KINDS.values()})
 
-    def test_every_app_has_approved_standards_with_nothing_left_to_fill_in(self):
+    def test_every_app_has_standards_with_nothing_left_to_fill_in(self):
         for app in self.APPS:
             with self.subTest(app=app):
                 text = (run_e2e.APPS / app / run_e2e.STANDARDS).read_text(encoding="utf-8")
-                self.assertIn("\nStatus: APPROVED\n", text)
                 self.assertEqual(doctor.unfilled_placeholders(text), [])
 
-    def test_doctor_calls_each_one_approved(self):
+    def test_doctor_calls_each_one_in_force(self):
         for app in self.APPS:
             with self.subTest(app=app), tempfile.TemporaryDirectory() as tmp:
                 project = Path(tmp)
                 (project / ".bdd").mkdir()
-                run_e2e.approve_standards(project, {"app": app})
-                self.assertEqual(doctor.check_standards(project).status, "ok")
+                run_e2e.use_app_standards(project, {"app": app})
+                self.assertEqual(doctor.check_standards(project).detail, ".bdd/standards.md is in force")
 
-    def test_the_harness_puts_the_approved_file_in_place_of_the_draft(self):
+    def test_the_harness_puts_the_app_file_in_place_of_the_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / ".bdd").mkdir()
-            draft = project / ".bdd" / run_e2e.STANDARDS
-            draft.write_text((REPO / "templates" / "standards.md").read_text(encoding="utf-8"), encoding="utf-8")
-            run_e2e.approve_standards(project, {"app": "shop-api"})
-            self.assertEqual(draft.read_text(encoding="utf-8"),
+            defaults = project / ".bdd" / run_e2e.STANDARDS
+            defaults.write_text((REPO / "templates" / "standards.md").read_text(encoding="utf-8"), encoding="utf-8")
+            run_e2e.use_app_standards(project, {"app": "shop-api"})
+            self.assertEqual(defaults.read_text(encoding="utf-8"),
                              (run_e2e.APPS / "shop-api" / run_e2e.STANDARDS).read_text(encoding="utf-8"))
 
-    def test_an_app_without_one_keeps_the_draft(self):
+    def test_an_app_without_one_keeps_the_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / ".bdd").mkdir()
-            draft = project / ".bdd" / run_e2e.STANDARDS
-            draft.write_text("Status: DRAFT\n", encoding="utf-8")
+            defaults = project / ".bdd" / run_e2e.STANDARDS
+            defaults.write_text("# Engineering standards\n", encoding="utf-8")
             with mock.patch.object(run_e2e, "APPS", project / "no-apps"):
-                run_e2e.approve_standards(project, {"app": "shop-api"})
-            self.assertEqual(draft.read_text(encoding="utf-8"), "Status: DRAFT\n")
+                run_e2e.use_app_standards(project, {"app": "shop-api"})
+            self.assertEqual(defaults.read_text(encoding="utf-8"), "# Engineering standards\n")
 
     def test_the_file_is_not_copied_into_the_project_root_with_the_app(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -360,15 +359,15 @@ class ApprovedStandardsTest(unittest.TestCase):
             self.assertTrue((project / "go.mod").is_file())
             self.assertFalse((project / run_e2e.STANDARDS).exists())
 
-    def test_the_product_template_is_still_a_draft(self):
+    def test_the_defaults_are_in_force_as_they_are(self):
         text = (REPO / "templates" / "standards.md").read_text(encoding="utf-8")
-        status = [line for line in text.splitlines() if line.startswith("Status:")]
-        self.assertEqual(status, ["Status: DRAFT"])
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / ".bdd").mkdir()
             (project / ".bdd" / run_e2e.STANDARDS).write_text(text, encoding="utf-8")
-            self.assertIn("still a draft", doctor.check_standards(project).detail)
+            check = doctor.check_standards(project)
+            self.assertEqual(check.status, "ok")
+            self.assertIn("already uses", check.detail)
 
 
 if __name__ == "__main__":

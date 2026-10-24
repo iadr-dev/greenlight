@@ -200,7 +200,7 @@ class GateProblemsTest(GitProjectCase):
         self.write("steps/steps.py", "def then_ok():\n    assert 1 == 1\n")
         self.assertIn("out of date", self.reasons()[0])
         self.check()
-        self.write(".bdd/standards.md", "Status: APPROVED\n")
+        self.write(".bdd/standards.md", "# Engineering standards\n")
         self.assertIn("out of date", self.reasons()[0])
 
     def test_changing_which_checks_are_configured_needs_a_new_run(self):
@@ -314,11 +314,11 @@ class StandardsFileTest(ProjectCase):
         self.assertIsNone(self.bash("echo {} > not.runs/latest.json"))
 
     def test_the_tripwire_reports_a_change_by_any_route_and_the_gates_see_it(self):
-        self.write(".bdd/standards.md", "Status: DRAFT\n")
+        self.write(".bdd/standards.md", "# Engineering standards\n")
         with tempfile.TemporaryDirectory() as claude_dir, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": claude_dir}):
             tripwire.accept(self.root, None)
             self.assertEqual(tripwire.check(self.root, None), [])
-            (self.root / ".bdd" / "standards.md").write_text("Status: APPROVED\n", encoding="utf-8", newline="\n")
+            (self.root / ".bdd" / "standards.md").write_text("# Changed\n", encoding="utf-8", newline="\n")
             found = tripwire.check(self.root, None, "Bash")
         self.assertEqual([(f["kind"], Path(f["path"]).name) for f in found], [("changed", "standards.md")])
         self.assertEqual([Path(v["path"]).name for v in tripwire.open_violations(self.root)], ["standards.md"])
@@ -329,35 +329,35 @@ class StandardsFileTest(ProjectCase):
         self.assertIsNone(reason)
 
     def test_the_tripwire_watches_it(self):
-        self.write(".bdd/standards.md", "Status: DRAFT\n")
+        self.write(".bdd/standards.md", "# Engineering standards\n")
         watched = {p.name for p in tripwire.watched_files(self.root, None)}
         self.assertIn("standards.md", watched)
 
 
 class DoctorTest(ProjectCase):
-    def test_missing_draft_and_approved(self):
+    def test_a_missing_file_is_reported_and_an_existing_one_is_in_force_without_approval(self):
         self.assertEqual(doctor.check_standards(self.root).status, "warn")
         self.assertIn("does not exist", doctor.check_standards(self.root).detail)
-        self.write(".bdd/standards.md", "# Engineering standards\n\nStatus: DRAFT\n")
-        self.assertIn("still a draft", doctor.check_standards(self.root).detail)
-        self.write(".bdd/standards.md", "# Engineering standards\n\nStatus: APPROVED\n")
-        self.assertEqual(doctor.check_standards(self.root).status, "ok")
-
-    def test_an_approved_file_with_a_placeholder_left_is_reported(self):
-        self.write(".bdd/standards.md", "Status: APPROVED\n\n- Formatter: <ruff format, prettier or gofmt>\n")
+        self.write(".bdd/standards.md", "# Engineering standards\n")
         check = doctor.check_standards(self.root)
-        self.assertEqual(check.status, "warn")
+        self.assertEqual((check.status, check.detail), ("ok", ".bdd/standards.md is in force"))
+
+    def test_a_placeholder_left_means_what_the_project_already_uses(self):
+        self.write(".bdd/standards.md", "- Formatter: <ruff format, prettier or gofmt>\n")
+        check = doctor.check_standards(self.root)
+        self.assertEqual(check.status, "ok")
         self.assertIn("<ruff format, prettier or gofmt>", check.detail)
+        self.assertIn("already uses", check.detail)
 
     def test_comments_code_blocks_and_generic_types_are_not_placeholders(self):
-        text = ("Status: APPROVED\n<!-- fill in <the tool> here -->\n- Return `List<Order>` or `Map<K,V>`, never `<br>`.\n"
+        text = ("<!-- fill in <the tool> here -->\n- Return `List<Order>` or `Map<K,V>`, never `<br>`.\n"
                 "```\nsrc/<feature>/api/   # one folder per feature\n```\n")
         self.write(".bdd/standards.md", text)
-        self.assertEqual(doctor.check_standards(self.root).status, "ok")
+        self.assertEqual(doctor.check_standards(self.root).detail, ".bdd/standards.md is in force")
 
-    def test_the_template_itself_is_a_draft_full_of_placeholders(self):
+    def test_the_template_has_no_status_line_and_leaves_the_project_specific_parts_open(self):
         template = (Path(__file__).resolve().parents[3] / "templates" / "standards.md").read_text(encoding="utf-8")
-        self.assertIn("Status: DRAFT", template)
+        self.assertFalse([line for line in template.splitlines() if line.startswith("Status:")])
         self.assertTrue(doctor.unfilled_placeholders(template))
         self.assertTrue(template.endswith("\n"))
 
@@ -369,7 +369,7 @@ class InitTest(unittest.TestCase):
             created = initcmd.write_project(root, "guided", None)
             self.assertIn(".bdd/standards.md", created)
             text = (root / ".bdd" / "standards.md").read_text(encoding="utf-8")
-            self.assertIn("Status: DRAFT", text)
+            self.assertEqual(text, (Path(__file__).resolve().parents[3] / "templates" / "standards.md").read_text(encoding="utf-8"))
             (root / ".bdd" / "standards.md").write_text("mine\n", encoding="utf-8")
             self.assertIsNone(initcmd.add_standards(root))                              # never overwritten
             self.assertEqual((root / ".bdd" / "standards.md").read_text(encoding="utf-8"), "mine\n")
