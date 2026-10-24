@@ -12,8 +12,9 @@ Nothing is overwritten.
 
 | Covered (local JVM, and on a device when opted in) | Not covered by this adapter |
 |---|---|
-| use cases, repositories, view models and other logic; Kotlin libraries | screens: no step drives a Compose or View UI (Espresso), so the `ui` profile is not declared |
-| Room or SQLite access, with the query counter attached | on the JVM only: code that calls `android.*` classes, because the unit-test `android.jar` throws "Method ... not mocked"; on a device those calls are real |
+| use cases, repositories, view models and other logic; Kotlin libraries | swipes, scrolling and going back: the `ui` instruction `{actor} {action} {target}` has the actions clicks, fills, selects, uploads, types and toggles, and no more |
+| Room or SQLite access, with the query counter attached | uploading a file: a device's file picker is another app, so `uploads` is an expected failure by design |
+| screens, on a device only: opening a screen, tapping, typing, toggling and reading what a component shows, through UI Automator (see *Driving screens*) | on the JVM only: code that calls `android.*` classes, because the unit-test `android.jar` throws "Method ... not mocked"; on a device those calls are real |
 
 For code that calls the Android framework, either put the framework behind a small interface in your code and fake it in
 the seams (recommended: the logic is then testable and the scenario reads the same), or run the scenarios on a device as
@@ -205,6 +206,40 @@ How it works, and what to know:
 
   `android emulator start` is the emulator's parent: wrapping it in `timeout` or closing its shell stops the emulator.
 
+## Driving screens (the `ui` profile)
+
+The steps `{actor} opens the {screen} page`, `{actor} clicks|fills|selects|uploads|types|toggles {component}`,
+`{actor} sees {component} showing:`, `{actor} does not see {component}` and the two application-state steps are bound in
+`src/device-ui/kotlin/greenlight/steps/UiSteps.kt` (bound) on top of `UiDriver.kt` (bound), which uses
+[UI Automator](https://developer.android.com/training/testing/other-components/ui-automator): it reads the device's
+accessibility tree, so one driver serves Compose and View screens. They are compiled into the instrumented tests only, and only
+when you opt in (a project that drives no screen needs neither the folder nor the library), so:
+
+- Opt in by adding the folder and the library to the module's `build.gradle.kts` (the `androidTest` source set of step 1 above,
+  and the dependencies):
+
+  ```kotlin
+  sourceSets { getByName("androidTest") { kotlin.srcDir("src/device-ui/kotlin") } }
+  dependencies { androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0") }
+  ```
+
+- A scenario that uses a screen step carries the tag `@ui`. The local JVM run asks for `@FEAT-n and not @ui`, and the device
+  run for every scenario of the feature.
+- `UiOperations.kt` (a driver, so bound with the others) maps the logical names to the application: `SCREENS` names the app
+  (and an activity or a deep link) and `TARGETS` finds a component by `Target.Id`, `Target.Text` or `Target.Description`. For
+  Compose put `Modifier.semantics { testTagsAsResourceId = true }` on the root and `Modifier.testTag("count")` on the
+  components, then map `"count" to Target.Id("count")`.
+- A component or screen that is not there after `UiOperations.waitMs` (5 s; every wait ends as soon as it can) is
+  `ExpectedMissing`: an expected failure, so a screen nobody built is a valid red. A name with no entry is `NotMapped`, a test
+  defect.
+- `{component} showing:` takes the columns `text`, `value`, `enabled`, `checked` and `visible`, or one `item` column with a row
+  per entry of a list, or a doc string for the text.
+- `the application state is:` and `the application state includes:` go through `Seams.setApplicationState` and
+  `Seams.applicationState` (expected failures until the project implements them in `ProjectSeams`).
+- In an application module the tests run inside the app's process, so the driver never stops the app under test; it goes to the
+  home screen after each scenario, and opening a screen starts a fresh task. Other apps a scenario opened are stopped.
+- There is one device, so every actor shares it. `uploads` is an expected failure.
+
 ## Quality checks (optional)
 
 Name your own tools in `[adapters.quality.NAME]` tables; none is forced:
@@ -225,8 +260,9 @@ enforce; the `kotlin` practice card lists the usual commands.
 
 ## What this adapter does not do
 
-- It does not drive screens: no step taps, types or reads a Compose or View UI, so the `ui` profile is not declared. On a
-  device the scenarios exercise the same logic with the real framework underneath.
+- It drives a screen only on a device (see *Driving screens*): the local JVM run has no screen to drive, so a scenario that
+  uses a screen step carries the tag `@ui` and is left out of that run. A feature whose scenarios are all `@ui` has nothing for
+  the JVM side: run it with `bdd run FEAT-n --adapter kotlin-android-device`.
 - The module's `build.gradle.kts` is the project's, so it is not bound by default. A build setting that skips the tests
   makes the scenarios `not-run`, which blocks the gates rather than faking a pass. Add it to `support` in
   `.bdd/config.toml` once the dependencies are final, and review changes to it.

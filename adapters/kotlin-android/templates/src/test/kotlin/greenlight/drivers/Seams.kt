@@ -18,6 +18,9 @@ open class Seams(protected val world: World) {
 
     open fun setFlag(flag: String, enabled: Boolean): Unit = throw ExpectedMissing("the $flag feature flag")
 
+    /** Put the application's client-side state (preferences, a store) in the state the scenario starts from. */
+    open fun setApplicationState(entries: Map<String, Any?>): Unit = throw ExpectedMissing("a way to set the application state")
+
     // -- When -------------------------------------------------------------------------------------------------
     open fun deliverEvent(event: String, payload: Any?): Unit = throw ExpectedMissing("a way to deliver the $event event")
 
@@ -36,6 +39,9 @@ open class Seams(protected val world: World) {
         if (!counter.attached) throw ExpectedMissing("a database whose statements can be counted")
         return counter.count
     }
+
+    /** The application's client-side state, as the screen steps check it (`the application state includes:`). */
+    open fun applicationState(): Map<String, Any?> = throw ExpectedMissing("a way to read the application state")
 
     /** The payloads of [event] that the code under test published (a test double of the bus). */
     open fun published(event: String): List<Any?> = throw ExpectedMissing("a captured $event event")

@@ -1,6 +1,6 @@
 name = "kotlin-android"
 version = 1
-profiles = ["base", "lib", "data"]            # every instruction of these profiles is bound in src/test/kotlin/greenlight/steps/CoreSteps.kt
+profiles = ["base", "lib", "data", "ui"]      # bound in src/test/kotlin/greenlight/steps/CoreSteps.kt; the ui ones, which need a device, in src/device-ui/kotlin/greenlight/steps/UiSteps.kt
 
 [detect]                                      # `init` suggests this adapter when a file matches and contains a word
 files = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
@@ -15,7 +15,8 @@ features = "src/test/resources/features"
 steps = "src/test/kotlin/greenlight/steps"
 drivers = "src/test/kotlin/greenlight/drivers"
 support = ["greenlight.gradle.kts", "src/test/resources/junit-platform.properties", "src/test/kotlin/greenlight/RunCucumberTest.kt",
-           "greenlight-device.gradle.kts", "src/device/kotlin/greenlight/RunCucumberOnDevice.kt"]   # the last two: for a device, see the guide
+           "greenlight-device.gradle.kts", "src/device/kotlin/greenlight/RunCucumberOnDevice.kt",
+           "src/device-ui/kotlin/greenlight/steps/UiSteps.kt", "src/device-ui/kotlin/greenlight/drivers/UiDriver.kt"]   # the last four: for a device (the last two: for screens), see the guide
 
 [run]
 # Gradle runs the one suite class, RunCucumberTest, as a local JVM unit test (no emulator or device). Cucumber's own
@@ -23,7 +24,7 @@ support = ["greenlight.gradle.kts", "src/test/resources/junit-platform.propertie
 # greenlight.gradle.kts forwards them to the test JVM. For a plain Kotlin/JVM module replace testDebugUnitTest with test.
 # The module's build.gradle.kts is the project's build file: once its dependencies are final, add it to `support` in
 # .bdd/config.toml so that a build setting cannot skip the tests.
-by_tag = './gradlew -q testDebugUnitTest --tests greenlight.RunCucumberTest -Pcucumber.filter.tags=@{tag}'
+by_tag = './gradlew -q testDebugUnitTest --tests greenlight.RunCucumberTest -Pcucumber.filter.tags="@{tag} and not @ui"'     # screen scenarios (@ui) run on a device only
 report = '-Pcucumber.plugin=junit:{out}'
 shuffle = '-Pcucumber.execution.order=random -Pcucumber.execution.order.random.seed={seed}'
 isolated = "-Pcucumber.filter.name='\\A{scenario:regex}\\z'"           # the name, escaped, as a whole-name pattern

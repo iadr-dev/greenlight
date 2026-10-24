@@ -188,12 +188,14 @@ class PackageTest(unittest.TestCase):
     def test_the_profiles_and_run_tables_say_what_the_guides_say(self):
         spring, kotlin = adapter.load(SPRING), adapter.load(KOTLIN)
         self.assertEqual(spring["profiles"], ["base", "api", "data"])
-        self.assertEqual(kotlin["profiles"], ["base", "lib", "data"])
+        self.assertEqual(kotlin["profiles"], ["base", "lib", "data", "ui"])
         for name, config in (("java-cucumber-spring", tool_free_config("java-cucumber-spring")),
                              ("kotlin-android", tool_free_config("kotlin-android"))):
             with self.subTest(adapter=name):
                 (run,) = config.runs
-                self.assertIn("cucumber.filter.tags=@{tag}", run.by_tag)
+                # Spring has no screens; Kotlin leaves the scenarios that drive one (@ui) to the device run
+                wanted = 'cucumber.filter.tags="@{tag} and not @ui"' if name == "kotlin-android" else "cucumber.filter.tags=@{tag}"
+                self.assertIn(wanted, run.by_tag)
                 self.assertIn("cucumber.plugin=junit:{out}", run.report)
                 self.assertIn("cucumber.execution.order=random", run.shuffle)
                 self.assertIn("cucumber.execution.order.random.seed={seed}", run.shuffle)
