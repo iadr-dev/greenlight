@@ -25,6 +25,10 @@ GRANDCHILD = (
     "    beat.write_text(str(time.time()))\n"
     "    time.sleep(0.2)\n"
 )
+# The time the child is given before it is stopped. The grandchild must have written its first heartbeat by then, or the test
+# would find nothing to check (it failed that way on a loaded macOS runner with 3 s: Python had not started yet), so it is
+# generous; the tests take this long only because they test a timeout.
+SLOW_START = 10
 START = "subprocess.Popen([sys.executable, '-c', " + repr(GRANDCHILD) + ", sys.argv[1]])\n"
 CHILD = "import subprocess, sys, time\nprint('before the hang', flush=True)\n" + START + "time.sleep(120)\n"
 # The same, but the child ends at once and only the grandchild keeps the pipes.
@@ -77,7 +81,7 @@ class RunTreeTest(TreeCase):
     def test_a_timeout_stops_the_grandchildren_and_does_not_wait_for_them(self):
         started = time.perf_counter()
         with self.assertRaises(proctree.TimedOut) as caught:
-            proctree.run([sys.executable, "-c", CHILD, str(self.beat.path)], timeout=3)
+            proctree.run([sys.executable, "-c", CHILD, str(self.beat.path)], timeout=SLOW_START)
         self.assertLess(time.perf_counter() - started, 30, "the call waited for the grandchild's pipes")
         self.assertIn("before the hang", caught.exception.stdout)
         self.beat.wait_until_alive()
@@ -105,9 +109,9 @@ class ExecuteTest(TreeCase):
     def test_a_run_that_times_out_ends_and_leaves_no_process_behind(self):
         started = time.perf_counter()
         with self.assertRaises(UsageError) as caught:
-            runner.execute([sys.executable, "-c", CHILD, str(self.beat.path)], Path(self.folder), 3)
+            runner.execute([sys.executable, "-c", CHILD, str(self.beat.path)], Path(self.folder), SLOW_START)
         self.assertLess(time.perf_counter() - started, 30)
-        self.assertIn("took longer than 3 s", str(caught.exception))
+        self.assertIn(f"took longer than {SLOW_START} s", str(caught.exception))
         self.beat.wait_until_alive()
         self.assertFalse(self.beat.is_alive())
 
