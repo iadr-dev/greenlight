@@ -5,6 +5,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
 }
 
+// the versions the dependencies below are locked to (gradle.lockfile holds what they resolve to)
+val composeBom = "2026.09.00"
+val activityCompose = "1.13.0"
+val cucumberBom = "8.0.4"
+val cucumberAndroid = "7.19.0"
+val cucumberJvmLine = "7.34.9"           // the Cucumber-JVM line Cucumber-Android is built on
+val uiAutomator = "2.4.0"
+
 apply(from = "greenlight.gradle.kts")
 apply(from = "greenlight-device.gradle.kts")
 
@@ -18,6 +26,13 @@ android {
         targetSdk = 37
         testInstrumentationRunner = "io.cucumber.android.runner.CucumberAndroidJUnitRunner"
         testInstrumentationRunnerArguments["optionsAnnotationPackage"] = "greenlight"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true                      // the release build is shrunk and obfuscated (it is never built by the tests)
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
     }
 
     buildFeatures {
@@ -40,18 +55,18 @@ dependencyLocking {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation(platform("androidx.compose:compose-bom:$composeBom"))
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.activity:activity-compose:$activityCompose")
 
-    testImplementation(platform("io.cucumber:cucumber-bom:8.0.4"))
+    testImplementation(platform("io.cucumber:cucumber-bom:$cucumberBom"))
     testImplementation("io.cucumber:cucumber-java")
     testImplementation("io.cucumber:cucumber-picocontainer")
     testImplementation("io.cucumber:cucumber-junit-platform-engine")
     testImplementation("org.junit.platform:junit-platform-suite")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    androidTestImplementation("io.cucumber:cucumber-android:7.19.0")
+    androidTestImplementation("io.cucumber:cucumber-android:$cucumberAndroid")
     androidTestImplementation("io.cucumber:cucumber-picocontainer:7.34.9")
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")   // the screen steps
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:$uiAutomator")   // the screen steps
 }

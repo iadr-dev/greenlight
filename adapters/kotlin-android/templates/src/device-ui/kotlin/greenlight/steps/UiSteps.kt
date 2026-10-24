@@ -37,8 +37,13 @@ class UiSteps(private val world: World) {
     // The step with data is a method of its own: Cucumber needs one more parameter when a table or doc string follows.
     @When("^([\\w.-]+) (clicks|fills|selects|uploads|types|toggles) ([^:\\n]+?) with:$") // C.UI.ACT
     fun actsWith(actor: String, action: String, target: String, payload: Payload) {
-        val given = payload.data()
-        act(action, target, (if (given is Map<*, *>) given["value"] ?: given.values.firstOrNull() else given)?.toString())
+        act(action, target, valueOf(payload.data()))
+    }
+
+    /** The value an action carries: the `value` cell of a table, its only cell, or a doc string. */
+    private fun valueOf(given: Any?): String? = when (given) {
+        is Map<*, *> -> (given["value"] ?: given.values.firstOrNull())?.toString()
+        else -> given?.toString()
     }
 
     private fun act(action: String, target: String, value: String?) {
