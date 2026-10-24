@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import unittest
 
 from bddlib import cli, pr, state
@@ -88,6 +89,12 @@ class DescriptionTest(PrHelpers, ProjectCase):
         self.assertEqual((code, facts["feature"], facts["trace"]["totals"]["rules"] >= 1), (0, "FEAT-007", True))
         self.assertEqual(facts["assumptions"][0]["id"], "A-007.1")
         self.assertEqual(facts["cost"]["discover"]["tokens"], 1200)
+
+    def test_a_brand_new_feature_whose_feature_folder_is_not_made_yet_still_has_a_description(self):
+        shutil.rmtree(self.root / "features")
+        code, out, err = self.cli()
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("# FEAT-007: Order discounts", out)
 
     def test_an_unknown_feature_is_refused(self):
         self.assertEqual(self.cli(feature="FEAT-999")[0], 2)

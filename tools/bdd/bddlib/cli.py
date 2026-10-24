@@ -27,6 +27,7 @@ COMMANDS = {
     "scan": ("reportcmd", "run_scan"),
     "design": ("design", "run"),
     "pr": ("pr", "run"),
+    "report": ("htmlreport", "run"),
     "vocabulary": ("vocabcmd", "run"),
     "codex-hook": ("codexhook", "main"),
     "install-hooks": ("installhooks", "run"),

@@ -94,6 +94,9 @@ run without hooks, so enforcement is soft; see [concepts](concepts.md). `bdd ins
 `bdd pr FEAT-001 --write` saves a pull-request description from the recorded facts (rules, examples, evidence,
 assumptions, the auditor's verdict). Paste it into the pull request; see [concepts](concepts.md).
 
+`bdd report FEAT-001 --out reports/FEAT-001.html` saves the same facts as one readable HTML page, with what every scenario did,
+for a product owner or a reviewer who will not use a terminal.
+
 ## Starting from existing code
 
 To put code that already exists under greenlight before you change it, describe one area first:
