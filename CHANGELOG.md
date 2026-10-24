@@ -6,6 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `dart-flutter-test`, a first-class adapter for Flutter apps and Dart libraries: scenarios run as widget tests with `flutter test` (no emulator), driving real widgets through a `WidgetTester`, with the official Dart Gherkin parser, pinned and hashed packages, profiles `base`, `ui` and `lib`, detection from `pubspec.yaml`, a runner card and a Dart practice card, a contract test on Linux, Windows and macOS in CI, and a gates workflow. Swipes, scrolling and device-only behaviour are not covered. Decision D52, platform note P39.
 - `ts-cucumber-js`, a first-class adapter for Node and TypeScript services, libraries and command-line tools (and the logic of Expo and
   React Native apps): cucumber-js with the `tsx` loader, pinned tooling in `tests/`, profiles `base`, `api`, `cli`, `lib` and `data`, detection from `package.json`, a contract test (green, shuffled and isolated runs, every core step, red classification, accented and Chinese titles, type check) on Linux, Windows and macOS in CI, and a gates workflow. Web UIs stay with `ts-playwright-bdd`. Decision D51, platform note P38.
 

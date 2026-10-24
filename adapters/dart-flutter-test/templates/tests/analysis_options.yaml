@@ -1,0 +1,9 @@
+# The analysis rules of the test code. Deprecated members are errors, so the tests stay on current Flutter APIs.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    deprecated_member_use: error
+    deprecated_member_use_from_same_package: error
+  exclude:
+    - build/**
