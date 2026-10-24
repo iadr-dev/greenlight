@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The process-tree timeout tests sometimes failed on macOS with "the grandchild never started" and said nothing more. They now report what the run printed and whether the heartbeat file exists, so the next failure explains itself.
+
 ### Added
 - The `kotlin-android` adapter drives screens on a device or emulator: a `ui` profile with steps to open a screen, tap, type, toggle and read what a component shows, through UI Automator (Compose and View screens alike), a `UiOperations.kt` map of logical screens and components, and the `@ui` tag that leaves such scenarios out of the local JVM run. Proven on an emulator with a Compose app; swipes, scrolling and going back are not covered. Decision D53, platform note P40.
 - `bdd report FEAT-n [--out PATH]`: one self-contained HTML page of a feature for readers who do not use a terminal: the rules and examples with what every scenario did in the red run and the latest run, traceability gaps, gates, approvals, locks, quality, mutation and stability checks, assumptions, the auditor's verdict and the cost. Built from the same records as `bdd pr`; escapes everything it shows and writes only outside `.bdd/`. Decision D54.

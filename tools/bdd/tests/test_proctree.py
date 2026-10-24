@@ -40,13 +40,14 @@ class Heartbeat:
         self.path = Path(folder) / "beat"
         self.stop = Path(folder) / "beat.stop"
 
-    def wait_until_alive(self, seconds: float = 20.0) -> None:
+    def wait_until_alive(self, seen: str = "", seconds: float = 20.0) -> None:
+        """Wait for the first heartbeat. ``seen`` is what the run printed: a grandchild that fails to start says why there."""
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             if self.path.is_file() and self.path.read_text(encoding="utf-8"):
                 return
             time.sleep(0.05)
-        raise AssertionError("the grandchild never started")
+        raise AssertionError(f"the grandchild never started (the heartbeat file exists: {self.path.exists()}); the run printed {seen!r}")
 
     def is_alive(self) -> bool:
         before = self.path.read_text(encoding="utf-8")
@@ -80,7 +81,7 @@ class RunTreeTest(TreeCase):
             proctree.run([sys.executable, "-c", CHILD, str(self.beat.path)], timeout=3)
         self.assertLess(time.perf_counter() - started, 30, "the call waited for the grandchild's pipes")
         self.assertIn("before the hang", caught.exception.stdout)
-        self.beat.wait_until_alive()
+        self.beat.wait_until_alive(caught.exception.stdout + caught.exception.stderr)
         self.assertFalse(self.beat.is_alive(), "the grandchild survived the timeout")
 
     def test_a_command_that_has_finished_is_not_held_by_a_grandchild_that_keeps_the_pipes(self):
@@ -88,7 +89,7 @@ class RunTreeTest(TreeCase):
         done = proctree.run([sys.executable, "-c", LEAVER, str(self.beat.path)], timeout=60, grace=1)
         self.assertLess(time.perf_counter() - started, 30)
         self.assertEqual((done.returncode, done.stdout.split()), (0, ["before", "the", "hang", "done"]))
-        self.beat.wait_until_alive()
+        self.beat.wait_until_alive(done.stdout + done.stderr)
         self.assertTrue(self.beat.is_alive(), "a finished command's background process is not ours to stop")
 
     @unittest.skipIf(os.name == "nt", "a child cannot leave a Windows job unless it asks to")
@@ -108,7 +109,7 @@ class ExecuteTest(TreeCase):
             runner.execute([sys.executable, "-c", CHILD, str(self.beat.path)], Path(self.folder), 3)
         self.assertLess(time.perf_counter() - started, 30)
         self.assertIn("took longer than 3 s", str(caught.exception))
-        self.beat.wait_until_alive()
+        self.beat.wait_until_alive(str(caught.exception))
         self.assertFalse(self.beat.is_alive())
 
 
