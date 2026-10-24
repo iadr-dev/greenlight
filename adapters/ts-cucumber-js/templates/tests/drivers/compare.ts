@@ -99,7 +99,7 @@ const SECONDS_PER_UNIT: Record<string, number> = {
   d: 86_400, day: 86_400, days: 86_400,
   w: 604_800, week: 604_800, weeks: 604_800,
 };
-const AMOUNT = /(\d+(?:\.\d+)?)\s*([a-z]+)/g;
+const AMOUNT = /(\d+(?:\.\d+)?)\s?([a-z]+)/g;      // one optional space keeps the match linear
 
 /** '2 days', '30 minutes', '1h 30m' as milliseconds. An amount is a number and a unit; "and" and commas are ignored. */
 export function durationMs(text: string): number {
