@@ -10,8 +10,8 @@ class ExpectedMissing(what: String) : AssertionError("$MARKER: $what does not ex
 class UnstubbedCall(message: String) : AssertionError(message)
 
 /**
- * A logical name in a feature has no entry in Operations.kt. This is a defect of the test, not a missing feature, and the
+ * A logical name in a feature has no entry in Operations.kt or UiOperations.kt. This is a defect of the test, not a missing feature, and the
  * run classifies it as one.
  */
 class NotMapped(kind: String, name: String, known: Collection<String>) :
-    RuntimeException("NotMapped: no $kind named '$name' in Operations.kt (known: ${known.sorted()})")
+    RuntimeException("NotMapped: no $kind named '$name' in Operations.kt or UiOperations.kt (known: ${known.sorted()})")
