@@ -217,6 +217,36 @@ class OutputTest(ReportHelpers, ProjectCase):
         self.assertIn("holds the records", err)
         self.assertFalse((self.root / ".bdd" / "features" / "report.html").exists())
 
+    def test_the_records_folder_is_not_reached_by_another_spelling(self):
+        self.prepare()
+        spellings = ["reports/../.bdd/features/report.html", "./.bdd/report.html"]
+        if os.path.normcase("A") == "a":                  # a file system that ignores case
+            spellings.append(".BDD/features/report.html")
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                code, _, err = self.cli("--out", spelling)
+                self.assertEqual(code, 2)
+                self.assertIn("holds the records", err)
+        self.assertEqual(list((self.root / ".bdd").rglob("*.html")), [])
+
+    def test_a_leftover_part_file_that_is_a_link_is_not_written_through(self):
+        """The page is made in a new temporary file next to the target, never in a name an attacker could have prepared."""
+        self.prepare()
+        target = self.write("elsewhere.html", "<p>keep</p>")
+        try:
+            (self.root / "report.html.part").symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest("this system cannot make a symbolic link")
+        code, _, _ = self.cli("--out", "report.html")
+        self.assertEqual(code, 0)
+        self.assertEqual(target.read_text(encoding="utf-8"), "<p>keep</p>")
+        self.assertIn(htmlreport.MARKER, (self.root / "report.html").read_text(encoding="utf-8"))
+
+    def test_no_temporary_file_is_left_behind(self):
+        self.prepare()
+        self.cli("--out", "reports/FEAT-007.html")
+        self.assertEqual(sorted(p.name for p in (self.root / "reports").iterdir()), ["FEAT-007.html"])
+
     def test_a_folder_in_the_way_is_not_written_over(self):
         self.prepare()
         (self.root / "report.html").mkdir()
