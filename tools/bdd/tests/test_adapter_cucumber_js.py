@@ -131,11 +131,48 @@ class ContractTest(support.ContractSteps, unittest.TestCase):
                 encoding="utf-8", newline="\n")
             (features / "orders.feature").write_text(support.ORDERS, encoding="utf-8", newline="\n")
 
+    def test_the_network_guard_refuses_outside_hosts_in_every_form_and_lets_loopback_through(self):
+        """``connect`` is called as ``connect(options)``, ``connect(port, host)`` and through the agent of ``http.get`` and ``fetch``;
+        each of them to a public address is refused, and a local server is reached by address and by the name ``localhost``."""
+        self.use_system(full=False)
+        probe = self.root / "guard_probe.mjs"
+        probe.write_text(GUARD_PROBE, encoding="utf-8", newline="\n")
+        done = subprocess.run(["node", "--import", "./tests/node_modules/tsx/dist/loader.mjs", "guard_probe.mjs"], cwd=self.root,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        blocked = "OutboundNetworkBlocked"
+        self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]),
+                         {"netObject": blocked, "netPortHost": blocked, "httpGet": blocked, "fetch": blocked,
+                          "loopbackFetch": "ok", "localhostFetch": "ok"})
+
     def test_type_check_passes_on_the_scaffold(self):
         self.use_system(full=False)
         done = subprocess.run(["node", "tests/node_modules/typescript/bin/tsc", "-p", "tests/tsconfig.json"], cwd=self.root,
                               capture_output=True, text=True, timeout=300)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+
+GUARD_PROBE = r"""
+import net from 'node:net';
+import http from 'node:http';
+const { blockNetwork } = await import('./tests/drivers/network.ts');
+blockNetwork();
+const name = (e) => (e?.cause?.name ?? e?.name ?? String(e));
+const attempts = {
+  netObject: () => new Promise((res) => { try { const s = net.connect({ host: '93.184.216.34', port: 80 }); s.on('error', (e) => res(name(e))); } catch (e) { res(name(e)); } }),
+  netPortHost: () => new Promise((res) => { try { const s = net.connect(80, 'example.org'); s.on('error', (e) => res(name(e))); } catch (e) { res(name(e)); } }),
+  httpGet: () => new Promise((res) => { try { http.get('http://93.184.216.34/').on('error', (e) => res(name(e))); } catch (e) { res(name(e)); } }),
+  fetch: async () => { try { await fetch('http://93.184.216.34/'); return 'connected'; } catch (e) { return name(e); } },
+};
+const out = {};
+for (const [k, f] of Object.entries(attempts)) out[k] = await f();
+const server = http.createServer((_q, r) => r.end('ok')).listen(0, '127.0.0.1');
+await new Promise((r) => server.once('listening', r));
+const port = server.address().port;
+out.loopbackFetch = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+out.localhostFetch = await (await fetch(`http://localhost:${port}/`).catch((e) => ({ text: async () => name(e) }))).text();
+server.close();
+console.log(JSON.stringify(out));"""
 
 
 if __name__ == "__main__":

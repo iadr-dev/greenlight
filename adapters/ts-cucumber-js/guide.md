@@ -81,7 +81,8 @@ The run is `node --import ./tests/node_modules/tsx/dist/loader.mjs tests/node_mo
 - Count queries with `QueryCounter` from `drivers/queries.ts`: call `record(sql)` from the data layer's query hook and
   return `count` from `System.queriesExecuted`.
 - The network is blocked through `net.Socket.prototype.connect` (loopback is allowed), which covers `fetch`, `http` and
-  `https`. A client that opens sockets in native code is not covered: stub the dependency, and run the tests without
+  `https`. The guard fails closed: a connection whose target it cannot read is refused, and `localhost` must resolve to
+  this machine. A client that opens sockets in native code is not covered: stub the dependency, and run the tests without
   network access in CI.
 - For a test of an HTTP service, either start it in `System` (listening on a free port) and return
   `httpClient('http://127.0.0.1:PORT')` from `System.http`, or wrap the framework's in-process test client (`supertest`,
