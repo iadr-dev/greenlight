@@ -17,6 +17,7 @@ versions follow [SemVer](https://semver.org/).
   React Native apps): cucumber-js with the `tsx` loader, pinned tooling in `tests/`, profiles `base`, `api`, `cli`, `lib` and `data`, detection from `package.json`, a contract test (green, shuffled and isolated runs, every core step, red classification, accented and Chinese titles, type check) on Linux, Windows and macOS in CI, and a gates workflow. Web UIs stay with `ts-playwright-bdd`. Decision D51, platform note P38.
 
 ### Changed
+- The templates no longer assume a web or server project: `templates/system.md` shows a screen and a component row and has an *Application state* section for client-side state, `templates/standards.md` gains mobile guidance (supported OS versions, permissions, back navigation, state restoration, offline) and the widget and device test layers, the system-map phase asks for screens and the state they start from, and the `AGENTS.md` template lists the `greenlight-adopt` skill. The standards template stays a draft the person approves. The README says nine test stacks.
 - `.gitignore` ignores `.codegraph/`, the local index of the CodeGraph code-intelligence tool.
 
 ## [1.0.1] - 2026-10-23
