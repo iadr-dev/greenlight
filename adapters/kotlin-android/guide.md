@@ -12,7 +12,7 @@ Nothing is overwritten.
 
 | Covered (local JVM, and on a device when opted in) | Not covered by this adapter |
 |---|---|
-| use cases, repositories, view models and other logic; Kotlin libraries | swipes, scrolling and going back: the `ui` instruction `{actor} {action} {target}` has the actions clicks, fills, selects, uploads, types and toggles, and no more |
+| use cases, repositories, view models and other logic; Kotlin libraries | gestures other than a tap, a swipe and a scroll: pinch, long press, multi-touch (the `ui` actions are clicks, fills, selects, uploads, types, toggles, swipes and scrolls, and going back) |
 | Room or SQLite access, with the query counter attached | uploading a file: a device's file picker is another app, so `uploads` is an expected failure by design |
 | screens, on a device only: opening a screen, tapping, typing, toggling and reading what a component shows, through UI Automator (see *Driving screens*) | on the JVM only: code that calls `android.*` classes, because the unit-test `android.jar` throws "Method ... not mocked"; on a device those calls are real |
 
@@ -208,8 +208,8 @@ How it works, and what to know:
 
 ## Driving screens (the `ui` profile)
 
-The steps `{actor} opens the {screen} page`, `{actor} clicks|fills|selects|uploads|types|toggles {component}`,
-`{actor} sees {component} showing:`, `{actor} does not see {component}` and the two application-state steps are bound in
+The steps `{actor} opens the {screen} page`, `{actor} clicks|fills|selects|uploads|types|toggles|swipes|scrolls {component}`,
+`{actor} goes back`, `{actor} sees {component} showing:`, `{actor} does not see {component}` and the two application-state steps are bound in
 `src/device-ui/kotlin/greenlight/steps/UiSteps.kt` (bound) on top of `UiDriver.kt` (bound), which uses
 [UI Automator](https://developer.android.com/training/testing/other-components/ui-automator): it reads the device's
 accessibility tree, so one driver serves Compose and View screens. They are compiled into the instrumented tests only, and only

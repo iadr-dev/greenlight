@@ -37,9 +37,13 @@ final coreSteps = <StepDefinition>[
     await world.act();
     await ui.open(world, words[1]);
   }),
-  when(r'^([\w.-]+) (clicks|fills|selects|uploads|types|toggles) ([^:\n]+?)(?: with:)?$', (world, words, argument) async { // C.UI.ACT
+  when(r'^([\w.-]+) (clicks|fills|selects|uploads|types|toggles|swipes|scrolls) ([^:\n]+?)(?: with:)?$', (world, words, argument) async { // C.UI.ACT
     await world.act();
     await ui.act(world, ui.Action.values.byName(words[1]), words[2], argument);
+  }),
+  when(r'^([\w.-]+) goes back$', (world, words, argument) async { // C.UI.BACK
+    await world.act();
+    await ui.back(world);
   }),
   when(r'^the (.+) event is received with:$', (world, words, argument) async { // C.EVENT.RECEIVE
     await world.act();

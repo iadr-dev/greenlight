@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "profiles": {
     "base": "every project",
     "api": "HTTP/RPC services",
@@ -167,11 +167,28 @@
         "ui"
       ],
       "patterns": [
-        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target}",
-        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target} with:"
+        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles,swipes,scrolls)} {target}",
+        "{actor} {action:enum(clicks,fills,selects,uploads,types,toggles,swipes,scrolls)} {target} with:"
       ],
       "requires": "table_or_docstring_optional",
-      "semantics": "Perform a user action on a logical component. Selectors live in drivers, never in features."
+      "semantics": "Perform a user action on a logical component. Selectors live in drivers, never in features. A swipe or a scroll carries its direction (up, down, left or right) in a `direction` cell."
+    },
+    {
+      "id": "C.UI.BACK",
+      "kind": "when",
+      "profiles": [
+        "ui"
+      ],
+      "patterns": [
+        "{actor} goes back"
+      ],
+      "i18n": {
+        "zh-TW": [
+          "{actor}回到上一頁"
+        ]
+      },
+      "requires": "none",
+      "semantics": "Return to the previous screen, the way the platform's back action does."
     },
     {
       "id": "C.EVENT.RECEIVE",

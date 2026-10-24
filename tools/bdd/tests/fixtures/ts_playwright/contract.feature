@@ -100,3 +100,35 @@ Feature: Core steps of the Playwright adapter
         | 1  | placed |
       When the reporting job runs
       Then no order records changed
+
+  @R-010.5
+  Rule: A user can scroll, swipe and go back
+
+    @EX-010.5.1
+    Scenario: A list is scrolled down
+      When alice opens the gestures page
+      And alice scrolls feed with:
+        | direction |
+        | down      |
+      Then alice sees scroll state showing:
+        | text     |
+        | scrolled |
+
+    @EX-010.5.2
+    Scenario: A card is swiped to the left
+      When alice opens the gestures page
+      And alice swipes deck with:
+        | direction |
+        | left      |
+      Then alice sees swipe state showing:
+        | text |
+        | left |
+
+    @EX-010.5.3
+    Scenario: Going back returns to the page that was left
+      When alice opens the gestures page
+      And alice clicks next link
+      And alice goes back
+      Then alice sees page title showing:
+        | text     |
+        | Gestures |

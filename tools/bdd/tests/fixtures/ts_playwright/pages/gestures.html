@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Gestures</title></head>
+  <body>
+    <h1 data-testid="title">Gestures</h1>
+    <div data-testid="feed" style="height: 80px; overflow: auto; border: 1px solid #999">
+      <p>one</p><p>two</p><p>three</p><p>four</p><p>five</p><p>six</p><p>seven</p><p>eight</p><p>nine</p><p>ten</p>
+    </div>
+    <p data-testid="scrolled">top</p>
+    <div data-testid="deck" style="width: 200px; height: 100px; border: 1px solid #999; touch-action: none">deck</div>
+    <p data-testid="swiped">none</p>
+    <a href="gestures-next.html">Next</a>
+    <script>
+      const feed = document.querySelector('[data-testid="feed"]');
+      feed.addEventListener('scroll', () => {
+        document.querySelector('[data-testid="scrolled"]').textContent = feed.scrollTop > 0 ? 'scrolled' : 'top';
+      });
+      const deck = document.querySelector('[data-testid="deck"]');
+      let from = null;
+      deck.addEventListener('pointerdown', (event) => { from = { x: event.clientX, y: event.clientY }; });
+      deck.addEventListener('pointerup', (event) => {
+        if (!from) return;
+        const dx = event.clientX - from.x;
+        const dy = event.clientY - from.y;
+        const [distance, negative, positive] = Math.abs(dx) >= Math.abs(dy) ? [dx, 'left', 'right'] : [dy, 'up', 'down'];
+        document.querySelector('[data-testid="swiped"]').textContent = distance < 0 ? negative : positive;
+        from = null;
+      });
+    </script>
+  </body>
+</html>

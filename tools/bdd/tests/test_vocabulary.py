@@ -83,11 +83,11 @@ class CoreVocabularyTest(unittest.TestCase):
         cls.entries = v.load_core()
         cls.vocab = v.Vocabulary(cls.entries)
 
-    def test_there_are_29_instructions_with_the_documented_split(self):
-        self.assertEqual(len(self.entries), 29)
-        self.assertEqual(Counter(e.kind for e in self.entries), {"given": 7, "when": 8, "then": 14})
+    def test_there_are_30_instructions_with_the_documented_split(self):
+        self.assertEqual(len(self.entries), 30)
+        self.assertEqual(Counter(e.kind for e in self.entries), {"given": 7, "when": 9, "then": 14})
         profiles = Counter(p for e in self.entries for p in e.profiles)
-        self.assertEqual(dict(profiles), {"base": 12, "api": 3, "ui": 6, "cli": 5, "lib": 4, "data": 1})
+        self.assertEqual(dict(profiles), {"base": 12, "api": 3, "ui": 7, "cli": 5, "lib": 4, "data": 1})
         self.assertTrue(all(e.id.startswith("C.") for e in self.entries))
         self.assertTrue(all(e.source == "core" for e in self.entries))
 
@@ -152,7 +152,7 @@ maps_to = { operation = "quote.create" }
 
     def test_loads_and_resolves_domain_steps(self):
         vocab = v.load(self.write(self.VALID))
-        self.assertEqual(len(vocab.entries), 31)
+        self.assertEqual(len(vocab.entries), 32)
         (m,) = vocab.resolve("given", "Alice has a cart worth 999")
         self.assertEqual((m.entry.id, m.params), ("D.CART.WORTH", {"actor": "Alice", "amount": "999"}))
         self.assertEqual(m.entry.owner, "FEAT-007")
@@ -160,7 +160,7 @@ maps_to = { operation = "quote.create" }
         self.assertEqual(m.entry.maps_to, {"operation": "quote.create"})
 
     def test_missing_file_means_core_only(self):
-        self.assertEqual(len(v.load(Path(tempfile.gettempdir()) / "no-such-vocabulary.toml").entries), 29)
+        self.assertEqual(len(v.load(Path(tempfile.gettempdir()) / "no-such-vocabulary.toml").entries), 30)
 
     def test_validation_errors(self):
         step = '[[steps]]\nid = "{id}"\nkind = "{kind}"\npattern = "x {{a:int}}"\ncomposes = {composes}\n'

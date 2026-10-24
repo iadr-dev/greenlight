@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
@@ -18,7 +19,10 @@ import java.util.regex.Pattern
  * A component or screen that is not there is [ExpectedMissing]: the feature is not built yet, which is a valid red.
  */
 object UiDriver {
-    enum class Action { CLICKS, FILLS, SELECTS, UPLOADS, TYPES, TOGGLES }
+    enum class Action { CLICKS, FILLS, SELECTS, UPLOADS, TYPES, TOGGLES, SWIPES, SCROLLS }
+
+    /** How much of the component a swipe or a scroll covers. */
+    private const val GESTURE_SHARE = 0.6f
 
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val device: UiDevice get() = UiDevice.getInstance(instrumentation)
@@ -51,6 +55,20 @@ object UiDriver {
         opened += screen.packageName
     }
 
+    private fun directionOf(value: String?): Direction = when (value?.trim()?.lowercase()) {
+        "up" -> Direction.UP
+        "down" -> Direction.DOWN
+        "left" -> Direction.LEFT
+        "right" -> Direction.RIGHT
+        else -> throw AssertionError("give a direction in a table (| direction |): up, down, left or right, not '$value'")
+    }
+
+    /** Go back, the way the platform does (the system back action or gesture). */
+    fun back() {
+        device.pressBack()
+        device.waitForIdle()
+    }
+
     fun act(action: Action, target: String, value: String?) {
         val component = present(target)
         when (action) {
@@ -62,6 +80,8 @@ object UiDriver {
                 (device.wait(Until.findObject(By.text(option)), UiOperations.waitMs)
                     ?: throw ExpectedMissing("the option '$option' of $target")).click()
             }
+            Action.SWIPES -> component.swipe(directionOf(value), GESTURE_SHARE)       // the finger moves in the direction
+            Action.SCROLLS -> component.scroll(directionOf(value), GESTURE_SHARE)     // the view moves in the direction
             Action.UPLOADS -> throw ExpectedMissing(
                 "a way to hand a file to the screen (the device's file picker is another app: give the app a seam)",
             )
