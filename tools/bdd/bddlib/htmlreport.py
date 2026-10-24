@@ -192,12 +192,22 @@ def rules_section(facts: dict, results: dict[str, dict[str, str]]) -> list[str]:
     return section("rules", title, body)
 
 
-def approval_row(approval: dict) -> list[str]:
-    approved = approval["decision"] == "approve"
+def decision_badge(approval: dict) -> str:
     word = pr.DECISION_WORD.get(approval["decision"], approval["decision"])
-    now = badge("valid", GOOD) if approval["valid"] else badge("not valid now", BAD) if approved else ""
-    return [esc(approval["gate"]), badge(word, GOOD if approval["valid"] else WARN if not approved else BAD), esc(approval["origin"]), now,
-            esc(approval["reason"])]
+    if approval["valid"]:
+        return badge(word, GOOD)
+    return badge(word, BAD if approval["decision"] == "approve" else WARN)       # a rejection is a decision, a stale approval a fault
+
+
+def standing_badge(approval: dict) -> str:
+    """Whether an approval still holds now: only an approval can be valid or stale."""
+    if approval["decision"] != "approve":
+        return ""
+    return badge("valid", GOOD) if approval["valid"] else badge("not valid now", BAD)
+
+
+def approval_row(approval: dict) -> list[str]:
+    return [esc(approval["gate"]), decision_badge(approval), esc(approval["origin"]), standing_badge(approval), esc(approval["reason"])]
 
 
 def lock_badge(locks: dict) -> str:
