@@ -99,14 +99,19 @@ const SECONDS_PER_UNIT: Record<string, number> = {
   d: 86_400, day: 86_400, days: 86_400,
   w: 604_800, week: 604_800, weeks: 604_800,
 };
-const AMOUNT = /(\d+(?:\.\d+)?)\s?([a-z]+)/g;      // one optional space keeps the match linear
+const TOKEN = /[a-z]+|[0-9.]+/g;      // a word or a number: no overlap, so the match time is linear
 
-/** '2 days', '30 minutes', '1h 30m' as milliseconds. An amount is a number and a unit; "and" and commas are ignored. */
+/** '2 days', '30 minutes', '1h 30m' as milliseconds: pairs of a number and a unit; "and" and commas are ignored. */
 export function durationMs(text: string): number {
   const lower = text.toLowerCase();
-  const amounts = [...lower.matchAll(AMOUNT)];
-  const leftover = lower.replace(AMOUNT, '').replace(/\band\b|[\s,]/g, '');
-  const seconds = amounts.map(([, amount, unit]) => Number(amount) * (SECONDS_PER_UNIT[unit as string] ?? Number.NaN));
-  assert.ok(amounts.length > 0 && leftover === '' && seconds.every(Number.isFinite), `cannot read the duration '${text}'`);
-  return seconds.reduce((sum, value) => sum + value, 0) * 1000;
+  const words = (lower.match(TOKEN) ?? []).filter((word) => word !== 'and');
+  const separators = lower.replace(TOKEN, '').replace(/[\s,]/g, '');
+  assert.ok(words.length > 0 && words.length % 2 === 0 && separators === '', `cannot read the duration '${text}'`);
+  let seconds = 0;
+  for (let at = 0; at < words.length; at += 2) {
+    const [amount, unit] = [Number(words[at]), SECONDS_PER_UNIT[words[at + 1] as string]];
+    assert.ok(Number.isFinite(amount) && unit !== undefined, `cannot read the duration '${text}'`);
+    seconds += amount * unit;
+  }
+  return seconds * 1000;
 }
