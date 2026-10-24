@@ -25,10 +25,6 @@ GRANDCHILD = (
     "    beat.write_text(str(time.time()))\n"
     "    time.sleep(0.2)\n"
 )
-# The time the child is given before it is stopped. The grandchild must have written its first heartbeat by then, or the test
-# would find nothing to check (it failed that way on a loaded macOS runner with 3 s: Python had not started yet), so it is
-# generous; the tests take this long only because they test a timeout.
-SLOW_START = 10
 START = "subprocess.Popen([sys.executable, '-c', " + repr(GRANDCHILD) + ", sys.argv[1]])\n"
 CHILD = "import subprocess, sys, time\nprint('before the hang', flush=True)\n" + START + "time.sleep(120)\n"
 # The same, but the child ends at once and only the grandchild keeps the pipes.
@@ -44,13 +40,14 @@ class Heartbeat:
         self.path = Path(folder) / "beat"
         self.stop = Path(folder) / "beat.stop"
 
-    def wait_until_alive(self, seconds: float = 20.0) -> None:
+    def wait_until_alive(self, seen: str = "", seconds: float = 20.0) -> None:
+        """Wait for the first heartbeat. ``seen`` is what the run printed: a grandchild that fails to start says why there."""
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             if self.path.is_file() and self.path.read_text(encoding="utf-8"):
                 return
             time.sleep(0.05)
-        raise AssertionError("the grandchild never started")
+        raise AssertionError(f"the grandchild never started (the heartbeat file exists: {self.path.exists()}); the run printed {seen!r}")
 
     def is_alive(self) -> bool:
         before = self.path.read_text(encoding="utf-8")
@@ -81,10 +78,10 @@ class RunTreeTest(TreeCase):
     def test_a_timeout_stops_the_grandchildren_and_does_not_wait_for_them(self):
         started = time.perf_counter()
         with self.assertRaises(proctree.TimedOut) as caught:
-            proctree.run([sys.executable, "-c", CHILD, str(self.beat.path)], timeout=SLOW_START)
+            proctree.run([sys.executable, "-c", CHILD, str(self.beat.path)], timeout=3)
         self.assertLess(time.perf_counter() - started, 30, "the call waited for the grandchild's pipes")
         self.assertIn("before the hang", caught.exception.stdout)
-        self.beat.wait_until_alive()
+        self.beat.wait_until_alive(caught.exception.stdout + caught.exception.stderr)
         self.assertFalse(self.beat.is_alive(), "the grandchild survived the timeout")
 
     def test_a_command_that_has_finished_is_not_held_by_a_grandchild_that_keeps_the_pipes(self):
@@ -92,7 +89,7 @@ class RunTreeTest(TreeCase):
         done = proctree.run([sys.executable, "-c", LEAVER, str(self.beat.path)], timeout=60, grace=1)
         self.assertLess(time.perf_counter() - started, 30)
         self.assertEqual((done.returncode, done.stdout.split()), (0, ["before", "the", "hang", "done"]))
-        self.beat.wait_until_alive()
+        self.beat.wait_until_alive(done.stdout + done.stderr)
         self.assertTrue(self.beat.is_alive(), "a finished command's background process is not ours to stop")
 
     @unittest.skipIf(os.name == "nt", "a child cannot leave a Windows job unless it asks to")
@@ -109,10 +106,10 @@ class ExecuteTest(TreeCase):
     def test_a_run_that_times_out_ends_and_leaves_no_process_behind(self):
         started = time.perf_counter()
         with self.assertRaises(UsageError) as caught:
-            runner.execute([sys.executable, "-c", CHILD, str(self.beat.path)], Path(self.folder), SLOW_START)
+            runner.execute([sys.executable, "-c", CHILD, str(self.beat.path)], Path(self.folder), 3)
         self.assertLess(time.perf_counter() - started, 30)
-        self.assertIn(f"took longer than {SLOW_START} s", str(caught.exception))
-        self.beat.wait_until_alive()
+        self.assertIn("took longer than 3 s", str(caught.exception))
+        self.beat.wait_until_alive(str(caught.exception))
         self.assertFalse(self.beat.is_alive())
 
 

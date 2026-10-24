@@ -6,7 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- The process-tree timeout tests gave the child 3 seconds to start its grandchild, which a loaded macOS runner sometimes did not manage, so they failed with "the grandchild never started" while checking nothing. They give it 10 seconds; the assertions are unchanged.
+- The process-tree timeout tests sometimes failed on macOS with "the grandchild never started" and said nothing more. They now report what the run printed and whether the heartbeat file exists, so the next failure explains itself.
 
 ### Added
 - `dart-flutter-test`, a first-class adapter for Flutter apps and Dart libraries: scenarios run as widget tests with `flutter test` (no emulator), driving real widgets through a `WidgetTester`, with the official Dart Gherkin parser, pinned and hashed packages, profiles `base`, `ui` and `lib`, detection from `pubspec.yaml`, a runner card and a Dart practice card, a contract test on Linux, Windows and macOS in CI, and a gates workflow. Swipes, scrolling and device-only behaviour are not covered. Decision D52, platform note P39.
