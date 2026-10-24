@@ -11,6 +11,8 @@
 | place order | API operation | POST /orders |
 | export report | command | python -m app export |
 | round money | library function | app.money:round_money |
+| orders | screen | the `/orders` page; the deep link `shop://orders`; the route `/orders` of a Flutter app |
+| checkout button | component | a button named "Check out"; the test tag `checkout`; the widget key `checkout` |
 
 ## Data
 
@@ -25,13 +27,20 @@
 
 <how time reaches the code: a clock seam, or the process clock frozen by the test tools>
 
+## Application state
+
+<!-- Only for a user interface that keeps state on the client (local storage, preferences, a store). How a test sets
+     it before a screen opens and reads it afterwards. Delete the section when there is none. -->
+- <state key>: <where it lives, and how a test sets and reads it>
+
 ## Events and jobs
 
 - <event or job, and how a test delivers it or runs it>
 
 ## Seams that do not exist yet
 
-<!-- These stay as ExpectedMissing in tests/drivers/system.py until the implementer builds them -->
+<!-- These stay as ExpectedMissing in the adapter's seams file (tests/drivers/system.*, or ProjectSeams for the JVM
+     adapters) until the implementer builds them -->
 - <seam>: <what it must do>
 
 ## Contracts

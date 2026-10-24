@@ -34,7 +34,7 @@ so when you report. The person must set `enforcement = "soft"` in `.bdd/config.t
 ### Skills
 
 The greenlight skills (`greenlight-feature`, `greenlight-status`, `greenlight-change`, `greenlight-init`,
-`greenlight-approve`) are installed under `.agents/skills` when `bdd install-skills codex` was run. Where a skill expects a
+`greenlight-approve`, `greenlight-adopt`) are installed under `.agents/skills` when `bdd install-skills codex` was run. Where a skill expects a
 `greenlight approval:` line from a hook, there is none in this tool: use the soft-mode steps above.
 
 ### In CI (the check that does not depend on a session)

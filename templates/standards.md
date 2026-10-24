@@ -19,7 +19,7 @@ Status: DRAFT
      you decide to upgrade (an agent never upgrades a toolchain, framework or dependency on its own). -->
 - Language and version: <the exact version, for example "Python 3.14", "Go 1.27", "Java 25 (LTS) with Kotlin 2.4", ".NET 10 (LTS)">
 - Build and package tool: <uv, Gradle, SwiftPM, pnpm, go modules, cargo>; where the project is free to choose, a fast tool that installs from a lock file (uv for Python, pnpm for JavaScript and TypeScript, cargo, go modules, Gradle with its build cache) rather than a slower default.
-- Frameworks: <for example FastAPI, Expo SDK n, Next.js n (app router)>
+- Frameworks: <for example FastAPI, Expo SDK n, Flutter n, Jetpack Compose n, Next.js n (app router)>
 - Project type: <new | existing>; an existing project keeps its conventions unless this file says otherwise.
 
 ## Style
@@ -68,7 +68,7 @@ Status: DRAFT
 ## Folder and file structure
 
 - Organised by <feature | layer>. Where the framework requires a layout (Next.js and Expo Router `app/`, Go `cmd/` and `internal/`,
-  Android Gradle modules, Spring packages), the framework's layout wins and the layers below live inside it. Otherwise, recommended: by
+  Android Gradle modules, Flutter `lib/` and `test/`, Spring packages), the framework's layout wins and the layers below live inside it. Otherwise, recommended: by
   feature at the top, layers inside:
   ```
   src/
@@ -105,7 +105,7 @@ Status: DRAFT
 - Lint suppressions (`noqa`, `@SuppressWarnings`, `eslint-disable`, `// nolint`) need an inline reason and are named in the report. [review]
 - No unused code, no new global state, no hidden singletons. [tool/review]
 - Every behaviour change has a test; every bug fix has a regression test that fails without the fix. [review]
-- Test layers: unit (fast, no network, no real clock, no real database), integration (real database or service on the production engine), and <end-to-end, if any>. Tests are deterministic and independent of order. [review]
+- Test layers: unit (fast, no network, no real clock, no real database), integration (real database or service on the production engine), and <end-to-end, if any>; for a mobile app also widget or screen tests (no device) and device tests (an emulator or a phone), and say which scenarios need a device. Tests are deterministic and independent of order. [review]
 - Test names state the behaviour (`rejects_expired_token`), and tests assert outcomes, not implementation details. [review]
 - Coverage: <for example at least 80% lines on changed code; domain code at least 90%>. Coverage is a floor, not the goal. [tool]
 - Security: parameterised queries only, no string-built SQL; no secrets in the repository, checked by a secret scanner (<gitleaks, trufflehog>); dependencies scanned for known vulnerabilities (<npm audit, pip-audit, cargo audit, govulncheck, OWASP dependency-check>). [tool]
@@ -139,6 +139,11 @@ Status: DRAFT
 - Accessibility: <for example WCAG 2.2 AA>; every control has an accessible name, works from the keyboard (or screen reader on mobile), and contrast meets the level. [tool where an accessibility checker runs, else review]
 - No user-facing text is hard-coded in components; it comes from <the translation files>, even if only one language ships today. [review]
 - Loading, empty and error states are designed for every screen that fetches data. [review]
+- Mobile app (delete this and the next four lines for a web-only project): minimum supported OS versions are <iOS n, Android API n>; text scales with the system setting; the layout works in portrait and landscape, or the app says it is portrait-only. [review]
+- Permissions are asked for at the moment the feature needs them, with a reason shown first, and a refusal leaves the app usable. [review]
+- Back navigation follows the platform (the system back action or gesture closes the top screen, a form keeps what was typed when the person returns), and a screen can be reached by a deep link where it is meant to be shared. [review]
+- State survives what the system does to the app: rotation, a low-memory restart, and a return from the background. [review]
+- Offline: <what works without a network, what is queued and retried, and what the person is told>. [review]
 
 ## Deprecation policy
 

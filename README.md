@@ -30,8 +30,9 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
 - **Your engineering standards are part of the gate.** `.bdd/standards.md` (language and toolchain, clean code,
   architecture, API and data rules, deprecation policy) is approved by you; your own formatter, linter and type checker
   run as `bdd check`; optional mutation and stability checks (`bdd mutate`, `bdd stability`) test the tests.
-- **Seven test stacks.** Python (pytest-bdd), TypeScript web UIs (Playwright), Go (godog), .NET (Reqnroll), Spring Boot
-  and Kotlin/Android (Cucumber-JVM, also on a real device), and any runner that writes a JUnit report.
+- **Nine test stacks.** Python (pytest-bdd), TypeScript web UIs (Playwright), Node and TypeScript services
+  (cucumber-js), Go (godog), .NET (Reqnroll), Spring Boot, Kotlin/Android (Cucumber-JVM, also on a device or emulator),
+  Flutter and Dart (widget tests), and any runner that writes a JUnit report.
 - **Other agent tools too.** `bdd install-skills claude|codex|agents-md` installs the instructions for Claude Code
   without the plugin, for Codex, and for anything that reads `AGENTS.md`, in soft mode (detected, not prevented), with
   the same `bdd` checks; `bdd install-hooks codex` adds best-effort blocking through Codex's own hooks. Work done in

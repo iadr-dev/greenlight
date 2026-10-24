@@ -13,7 +13,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 ## Steps
 
 1. For every step of every scenario, find the interface it exercises in this code base: the API operation, the
-   command, the library function, the entity and how a test seeds and reads it, the event or job.
+   command, the library function, the entity and how a test seeds and reads it, the event or job, the screen and
+   the components on it, the client-side state a screen starts from.
 2. Write `system.md` from `templates/system.md`: a table of logical names to where they live, the data, the
    **Dependencies** (every external system a test may stub, one per line), how time reaches the code, events
    and jobs.
