@@ -6,7 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- The process-tree timeout tests sometimes failed on macOS with "the grandchild never started" and said nothing more. They now report what the run printed and whether the heartbeat file exists, so the next failure explains itself.
+- The process-tree timeout tests sometimes failed on slow CI machines (macOS and Linux) with "the grandchild never started". The cause was in the test, not in greenlight: when two Python start-ups took most of the 3-second limit, the timeout stopped the grandchild, correctly, in the middle of its first write, and the test then waited for a heartbeat in a file left empty. The grandchild now writes its heartbeat by renaming a new file over the old one, its parent says "the grandchild is alive" only after the first heartbeat, and the limit is 10 seconds.
 
 ### Added
 - Core vocabulary version 3: the screen action `{actor} {action} {target}` gains `swipes` and `scrolls` (the direction in a `direction` cell), and there is a new instruction `{actor} goes back`. Bound in `ts-playwright-bdd` (scroll, a pointer drag, the browser's back), `kotlin-android` (UI Automator, the system back action) and `dart-flutter-test` (fling, drag, the engine's pop-route message); proven in a real browser, on an emulator and in widget tests. Features written for version 2 mean the same. Decision D55, platform note P41.
