@@ -1,0 +1,19 @@
+name: greenlight_tests
+description: Test tooling of the dart-flutter-test adapter, kept apart from the application's own pubspec.yaml
+publish_to: none
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+# To test your own application, add it here as a path dependency (`my_app: {path: ../}`) and import it from
+# drivers/operations.dart and drivers/system.dart. The test tooling below is pinned exactly; pubspec.lock holds the hashes.
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  cucumber_gherkin: 42.0.1
+  cucumber_messages: 34.2.1
+  flutter_lints: 6.0.0

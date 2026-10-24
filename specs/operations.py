@@ -58,6 +58,7 @@ FILES: dict[str, str] = {
     "step file": "steps/steps.py",
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",
     "package manifest": "package.json",
+    "pubspec manifest": "pubspec.yaml",
 }
 
 ERRORS: dict[str, ErrorRule] = {

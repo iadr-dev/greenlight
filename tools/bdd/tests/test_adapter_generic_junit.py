@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[3]
 ADAPTER = REPO / "adapters" / "generic-junit"
 TEMPLATES = ADAPTER / "templates"
 RUNNER_CARDS = {"junit-gradle", "junit-maven", "pytest", "jest", "go-test", "dotnet-test", "godog", "cucumber-js", "cucumber-jvm",
-                "behave", "reqnroll"}
+                "behave", "reqnroll", "flutter-test"}
 
 ORDERS = """@FEAT-001
 Feature: Orders

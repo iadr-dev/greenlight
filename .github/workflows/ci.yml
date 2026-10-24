@@ -186,6 +186,29 @@ jobs:
       - name: Fresh scaffold runs green, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_cucumber_js.py" -v
 
+  adapter-dart-flutter-test:
+    name: adapter contract (dart-flutter-test, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      GREENLIGHT_FLUTTER_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
+        with:
+          channel: stable
+          cache: true
+          cache-dependency-path: adapters/dart-flutter-test/templates/tests/pubspec.lock
+      - name: Fresh scaffold runs green in the widget-test environment, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_flutter.py" -v
+
   adapter-go-godog:
     name: adapter contract (go-godog, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

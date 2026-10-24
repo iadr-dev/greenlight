@@ -32,6 +32,25 @@ Feature: Setup suggests the adapter that fits the repository
         ts-cucumber-js: package.json mentions commander
         """
 
+  @R-103.3
+  Rule: A pubspec that names Flutter suggests the Flutter adapter
+
+    @EX-103.3.1
+    Scenario: A Flutter app
+      Given the input file pubspec manifest contains:
+        """
+        name: shop
+        dependencies:
+          flutter:
+            sdk: flutter
+        """
+      When alice runs detect adapters
+      Then the command succeeds
+      And the stdout output contains:
+        """
+        dart-flutter-test: pubspec.yaml mentions flutter
+        """
+
   @R-103.2
   Rule: A repository with nothing to recognise gets no suggestion
 

@@ -1,0 +1,111 @@
+/// A complete map for the contract test: a page, a component and a library function for every kind of step.
+library;
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../sample/domain.dart';
+import 'system.dart';
+
+typedef PageBuilder = Widget Function(Map<String, Object?> state);
+typedef TargetFinder = Finder Function();
+
+class ErrorRule {
+  const ErrorRule({this.exception, this.text});
+
+  final String? exception;
+  final String? text;
+}
+
+class OrdersPage extends StatefulWidget {
+  const OrdersPage({super.key});
+
+  @override
+  State<OrdersPage> createState() => _OrdersPageState();
+}
+
+class _OrdersPageState extends State<OrdersPage> {
+  @override
+  Widget build(BuildContext context) {
+    final orders = store.rows['order'] ?? [];
+    return Scaffold(
+      body: ListView(key: const Key('orders'), children: [for (final order in orders) Text('${order['id']} ${order['status']}')]),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('place'),
+        onPressed: () => setState(() {
+          store.stubs!.call('payments', 'charge', {'amount': 900});
+          (store.rows['order'] ??= []).add({'id': orders.length + 7, 'status': 'placed'});
+        }),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class FormPage extends StatefulWidget {
+  const FormPage({super.key});
+
+  @override
+  State<FormPage> createState() => _FormPageState();
+}
+
+class _FormPageState extends State<FormPage> {
+  bool agreed = false;
+  String size = 'Small';
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Column(children: [
+          const TextField(key: Key('name')),
+          Checkbox(key: const Key('agree'), value: agreed, onChanged: (value) => setState(() => agreed = value ?? false)),
+          ElevatedButton(key: const Key('submit'), onPressed: agreed ? () {} : null, child: const Text('Send')),
+          if (!agreed) const Text('Agree first', key: Key('error')),
+          DropdownButton<String>(
+            key: const Key('size'),
+            value: size,
+            items: [for (final option in const ['Small', 'Large']) DropdownMenuItem(value: option, child: Text(option))],
+            onChanged: (value) => setState(() => size = value ?? size),
+          ),
+        ]),
+      );
+}
+
+Widget _app(Widget home) => MaterialApp(home: home);
+
+final pages = <String, PageBuilder>{
+  'orders': (state) => _app(const OrdersPage()),
+  'clock': (state) => _app(Scaffold(body: Text(store.now!.toUtc().toIso8601String().replaceFirst('.000Z', 'Z'), key: const Key('time')))),
+  'form': (state) => _app(const FormPage()),
+  'settings': (state) {
+    store.state.addAll(state);
+    return _app(Scaffold(body: Text('${state['theme']}', key: const Key('theme'))));
+  },
+};
+
+final targets = <String, TargetFinder>{
+  'order list': () => find.byKey(const Key('orders')),
+  'place order button': () => find.byKey(const Key('place')),
+  'time': () => find.byKey(const Key('time')),
+  'name field': () => find.byKey(const Key('name')),
+  'agree box': () => find.byKey(const Key('agree')),
+  'submit button': () => find.byKey(const Key('submit')),
+  'error message': () => find.byKey(const Key('error')),
+  'size menu': () => find.byKey(const Key('size')),
+  'theme label': () => find.byKey(const Key('theme')),
+};
+
+final lib = <String, FutureOr<Object?> Function(Object? input)>{
+  'add': (input) {
+    final arguments = input! as Map<String, Object?>;
+    return add(arguments['a']! as int, arguments['b']! as int);
+  },
+  'describe': (input) => {'name': (input! as Map<String, Object?>)['name'], 'lines': [{'sku': 'a1'}]},
+  'refuse': (input) => throw StateError('refused: $input'),
+};
+
+final errors = <String, ErrorRule>{
+  'negative input': const ErrorRule(exception: 'ArgumentError'),
+  'refusal': const ErrorRule(text: 'refused'),
+};

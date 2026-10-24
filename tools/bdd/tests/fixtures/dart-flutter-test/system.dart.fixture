@@ -1,0 +1,69 @@
+/// A complete in-memory system for the contract test: every seam is implemented, so every core step can run.
+library;
+
+import 'clock.dart';
+import 'compare.dart';
+import 'errors.dart';
+import 'stubs.dart';
+
+export 'compare.dart' show Row;
+
+/// The application's data, shared by the System and by the screens of the fixture.
+class Store {
+  final rows = <String, List<Row>>{};
+  final received = <String, List<Object?>>{};
+  final emitted = <String, List<Object?>>{};
+  final flags = <String, bool>{};
+  final state = <String, Object?>{};
+  DateTime? now;
+  Stubs? stubs;
+
+  void clear() {
+    rows.clear();
+    received.clear();
+    emitted.clear();
+    flags.clear();
+    state.clear();
+    now = null;
+  }
+}
+
+final store = Store();
+
+class System {
+  System(this.clock, this.stubs) {
+    store
+      ..clear()
+      ..stubs = stubs;
+  }
+
+  final Clock clock;
+  final Stubs stubs;
+
+  Future<void> start() async {}
+
+  Future<void> reset() async => store.clear();
+
+  Future<void> setTime(DateTime moment) async => store.now = moment;
+
+  Future<void> seed(String entity, List<Row> rows) async => (store.rows[entity] ??= []).addAll(rows);
+
+  Future<Object?> authenticate(String actor, String role) async => {'authorization': 'Bearer $actor:$role'};
+
+  Future<void> setFlag(String flag, {required bool enabled}) async => store.flags[flag] = enabled;
+
+  Future<void> deliverEvent(String event, Object? payload) async => (store.received[event] ??= []).add(payload);
+
+  Future<void> runJob(String job) async {
+    if (job != 'receipts') {
+      throw ExpectedMissing('the $job job');
+    }
+    (store.emitted['receipt'] ??= []).addAll(store.received['payment'] ?? []);
+  }
+
+  Future<List<Row>> records(String entity) async => store.rows[entity] ?? [];
+
+  Future<List<Object?>> published(String event) async => store.emitted[event] ?? [];
+
+  Future<Map<String, Object?>> applicationState() async => {...store.state};
+}

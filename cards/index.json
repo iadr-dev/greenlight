@@ -263,6 +263,17 @@
       "phase": "examples"
     },
     {
+      "apply_when": "the project is a Dart or Flutter app and production code is written or judged",
+      "id": "language-dart",
+      "kind": "practice",
+      "output": "code that matches the Dart and Flutter versions the project declares, passes the analyzer and the formatter, and uses no deprecated API",
+      "pairs_with": [
+        "mutation-check"
+      ],
+      "path": "practices/language-dart.md",
+      "phase": "implement"
+    },
+    {
       "apply_when": "the project is an Expo or React Native app and production code is written or judged",
       "id": "language-expo",
       "kind": "practice",
@@ -445,6 +456,12 @@
       "id": "dotnet-test",
       "kind": "runner",
       "path": "runners/dotnet-test.md"
+    },
+    {
+      "apply_when": "a Flutter or Dart project whose scenarios run as widget tests with flutter test (the dart-flutter-test adapter)",
+      "id": "flutter-test",
+      "kind": "runner",
+      "path": "runners/flutter-test.md"
     },
     {
       "apply_when": "a Go project tested with go test (the generic-junit adapter), including godog features",

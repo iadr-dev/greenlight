@@ -12,6 +12,7 @@ broken test.
 | `go-godog` | available | Go services, libraries and command-line tools with godog (Cucumber for Go); profiles `base`, `api`, `cli`, `lib`, `data` |
 | `dotnet-reqnroll` | available | .NET services, libraries and command-line tools with Reqnroll and xUnit; profiles `base`, `api`, `cli`, `lib`, `data` |
 | `ts-cucumber-js` | available | Node and TypeScript services, libraries and command-line tools (and the logic of Expo and React Native apps) with cucumber-js and `tsx`; profiles `base`, `api`, `cli`, `lib`, `data` |
+| `dart-flutter-test` | available | Flutter apps and Dart libraries as widget tests with `flutter test` and the official Dart Gherkin parser; profiles `base`, `ui`, `lib` |
 | `ts-playwright-bdd` | available | web UIs in a real browser with Playwright and playwright-bdd (TypeScript); profiles `base`, `ui` |
 | `java-cucumber-spring` | available | Spring Boot services tested with Cucumber-JVM through `MockMvc`; profiles `base`, `api`, `data` |
 | `kotlin-android` | available | Android apps and Kotlin libraries tested with Cucumber-JVM as local JVM unit tests, and (opt-in) the same scenarios on a device through Cucumber-Android; profiles `base`, `lib`, `data` |
@@ -37,7 +38,12 @@ from the first run.
   with `npm ci`), loads the TypeScript steps through `tsx` and lets cucumber-js's JUnit formatter write the report. It has no
   `ui` profile: a web UI is `ts-playwright-bdd`'s job, and the two can share a repository. See `adapters/ts-cucumber-js/guide.md`.
 
-Detection suggests them from `go.mod`, from `*.csproj`/`*.sln` and, for `ts-cucumber-js`, from a `package.json` that names a Node
+- `dart-flutter-test` puts the test code in its own Dart package in `tests/` (packages pinned in `pubspec.yaml` and hashed in `pubspec.lock`,
+  fetched with `flutter pub get --enforce-lockfile`), reads the feature files at run time with `cucumber_gherkin` and runs each scenario as a
+  widget test, driving real widgets through a `WidgetTester` with no emulator. `tests/run_flutter.py` turns Flutter's JSON events into the one JUnit
+  report. Screens that need a device (platform plugins, swipes, scrolling) are outside it. See `adapters/dart-flutter-test/guide.md`.
+
+Detection suggests them from `go.mod`, from `*.csproj`/`*.sln` for `dart-flutter-test`, from a `pubspec.yaml` that names Flutter, and, for `ts-cucumber-js`, from a `package.json` that names a Node
 framework (`express`, `fastify`, `koa`, `@nestjs`, `hono`), a command-line library (`commander`, `yargs`) or `@cucumber/cucumber`. In CI, each adapter has a job that scaffolds it into a
 temporary project and runs the sample feature, every core step and a red phase for real, on Linux, Windows and macOS.
 
