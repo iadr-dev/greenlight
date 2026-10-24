@@ -149,7 +149,8 @@ why), the assumptions, the cost per phase and anything the auditor marked as mus
 `autopilot`, say plainly that it is UNREVIEWED and list the assumptions first. Then stop; do not start the next
 feature on your own. Offer `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" pr FEAT-n` (add `--write` to save `PULL_REQUEST.md` in the
 project): it prints a pull-request description from the recorded facts, with the UNREVIEWED notice first under
-autopilot. It never contacts a git host; the person pastes it.
+autopilot. It never contacts a git host; the person pastes it. For a reader who will not use a terminal, offer
+`"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" report FEAT-n --out reports/FEAT-n.html`: one self-contained HTML page of the same records.
 
 ## Files to read when
 

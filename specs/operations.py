@@ -44,6 +44,7 @@ COMMANDS: dict[str, list[str]] = {
     "gate": [*BDD, "gate"],
     "create feature": [*BDD, "state", "init"],
     "detect adapters": [*BDD, "init", "--detect"],
+    "report": [*BDD, "report"],
 }
 
 LIB: dict[str, str] = {}

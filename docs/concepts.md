@@ -239,6 +239,10 @@ autopilot starts with an UNREVIEWED notice. Nothing is sent anywhere, no command
 identifiers are printed, and `--write` saves it as `PULL_REQUEST.md` in the project root (for another name, redirect the output with `>`). Paste it into the pull request; the
 description is only as current as the records, so run it after the verify phase.
 
+## The readable report
+
+`bdd report FEAT-n` builds one HTML page from the same records, for the people who do not read a terminal: a product owner, a reviewer, an auditor. It shows the rules and their examples with what every scenario did in the red run and in the latest run, the traceability gaps, the gates, approvals and locks, the quality, mutation and stability checks, the assumptions, the auditor's verdict and the cost. `bdd report FEAT-n --out reports/FEAT-n.html` writes it (folders are created); without `--out` the page goes to stdout. The page is self-contained (no script, no network, no external file), escapes every text it shows, and prints only counts, short digests and project-relative names, as `bdd pr` does. It is written only outside `.bdd/`, never through a link, and a file that `bdd report` did not write is never replaced. In CI, upload it as an artifact after the gates so a reviewer can open it from the run.
+
 ## Shared vocabularies
 
 A team can share domain steps between projects by including a vendored file or submodule in `.bdd/vocabulary.toml`. The

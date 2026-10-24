@@ -103,6 +103,7 @@ delete those folders; `bdd install-skills ... --uninstall` removes the skills it
 /greenlight:change FEAT-001 "what changes, why"   # change approved work, keeping the history
 bdd check FEAT-001                                # your formatter, linter and type checker
 bdd pr FEAT-001                                   # a pull-request description from the recorded facts
+bdd report FEAT-001 --out reports/FEAT-001.html   # a readable HTML report of the feature, for non-developers
 ```
 
 ## Known limits

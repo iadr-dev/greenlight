@@ -101,11 +101,19 @@ def member_rows(members: tuple, feature_id: str) -> tuple[list[dict], list[Gap]]
     return rows, gaps
 
 
+def spec_files_so_far(root: Path, feature_id: str) -> list[Path]:
+    """The feature files of the feature; none yet when a configured feature folder has not been made (a brand-new feature)."""
+    try:
+        return featurefiles.spec_files(root, feature_id)
+    except FileNotFoundError:
+        return []
+
+
 def build(root: Path, feature_dir: Path, feature_id: str, members: tuple = ()) -> dict:
     rules = read_ids(feature_dir / "rules.md", RULE_LINE)
     designed = read_ids(feature_dir / "test-design.md", EXAMPLE_LINE)
     tasks = read_tasks(feature_dir / "tasks.md")
-    scenarios, gaps = scenario_rows(root, featurefiles.spec_files(root, feature_id))
+    scenarios, gaps = scenario_rows(root, spec_files_so_far(root, feature_id))
     more, member_gaps = member_rows(members, feature_id)
     scenarios, gaps = scenarios + more, gaps + member_gaps
     by_example: dict[str, list[dict]] = {}

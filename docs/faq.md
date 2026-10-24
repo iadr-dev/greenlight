@@ -94,6 +94,9 @@ implementation of the checks is easier to trust than prompts that re-derive them
 Yes: `bdd pr FEAT-n` (add `--write` to save `PULL_REQUEST.md`, or `--json`). It is built from the records, never contacts a git host and is safe to
 paste. See [concepts](concepts.md).
 
+**Can I give someone a report they can open in a browser?**
+Yes: `bdd report FEAT-n --out reports/FEAT-n.html` writes one self-contained HTML page (rules, examples, what each scenario did, evidence, checks, audit, cost). See [concepts](concepts.md).
+
 **Can several projects share the same domain steps?**
 Yes. Put the shared vocabulary file in each project (vendored or as a submodule), include it in `.bdd/vocabulary.toml` and
 pin it with `bdd vocabulary pin` after reading it. A change to the file is reported until a person pins it again. See
