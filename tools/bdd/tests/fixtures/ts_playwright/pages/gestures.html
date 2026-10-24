@@ -22,8 +22,8 @@
         if (!from) return;
         const dx = event.clientX - from.x;
         const dy = event.clientY - from.y;
-        const horizontal = Math.abs(dx) >= Math.abs(dy);
-        document.querySelector('[data-testid="swiped"]').textContent = horizontal ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
+        const [distance, negative, positive] = Math.abs(dx) >= Math.abs(dy) ? [dx, 'left', 'right'] : [dy, 'up', 'down'];
+        document.querySelector('[data-testid="swiped"]').textContent = distance < 0 ? negative : positive;
         from = null;
       });
     </script>
