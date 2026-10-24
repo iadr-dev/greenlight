@@ -52,7 +52,7 @@ leave surviving mutants. The Python adapter ships a wrapper for mutmut and the P
 turning the check on is an install and a few lines of configuration. See [adapters](adapters.md).
 
 **Does greenlight enforce a language standard, a style, or "the latest version, nothing deprecated"?**
-It enforces what the project declares. `.bdd/standards.md` (written and approved by you) states the language and
+It enforces what the project declares. `.bdd/standards.md` (greenlight's defaults, in force without approval; only you can change them) states the language and
 toolchain version, style, quality rules and deprecation policy; `[adapters.quality.NAME]` tables name your own formatter,
 linter, type checker and deprecation check, which `bdd check` runs and the gates require. A new project should start on
 the current stable release; an existing one keeps its version until you decide to upgrade, and no agent upgrades or adds a

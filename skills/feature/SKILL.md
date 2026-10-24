@@ -19,9 +19,9 @@ Arguments: `$ARGUMENTS`
   If the arguments name a `FEAT-n`, continue that feature from its current phase (step 3). Otherwise it is a new
   request.
 - `--phase PHASE FEAT-n` runs a single phase (for debugging); `--quick` uses `phases/quick.md`.
-- Look at `.bdd/standards.md`: if it is missing or still says `Status: DRAFT`,
-  tell the person once that the language, style and deprecation rules are not stated (`bdd init --standards` adds the
-  template; only they can edit and approve it) and go on; the agents then follow the code base's own conventions.
+- Look at `.bdd/standards.md`: it is in force as it is, with no approval. If it is missing, tell the person once that
+  the language, style and deprecation rules are not stated (`bdd init --standards` adds greenlight's defaults; only they
+  can run it or edit the file) and go on; the agents then follow the code base's own conventions.
 
 ## 1. Settle the autonomy level (once, before discover)
 

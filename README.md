@@ -28,7 +28,8 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
 - **Evidence is bound.** Approved specs, steps, drivers and the test runner's own settings are locked; the interpreter,
   environment and recorded runs are checked; a tripwire notices tampering whatever command caused it.
 - **Your engineering standards are part of the gate.** `.bdd/standards.md` (language and toolchain, clean code,
-  architecture, API and data rules, deprecation policy) is approved by you; your own formatter, linter and type checker
+  architecture, security, API and data rules, deprecation policy) starts as greenlight's defaults and is in force
+  without approval; only you can change it; your own formatter, linter and type checker
   run as `bdd check`; optional mutation and stability checks (`bdd mutate`, `bdd stability`) test the tests.
 - **Nine test stacks.** Python (pytest-bdd), TypeScript web UIs (Playwright), Node and TypeScript services
   (cucumber-js), Go (godog), .NET (Reqnroll), Spring Boot, Kotlin/Android (Cucumber-JVM, also on a device or emulator),
@@ -48,8 +49,8 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
 
 ## How it works
 
-1. **Set up once.** `/greenlight:init` checks the machine, picks a test adapter and proves a sample feature runs. You
-   describe and approve your engineering standards in `.bdd/standards.md`.
+1. **Set up once.** `/greenlight:init` checks the machine, picks a test adapter and proves a sample feature runs. It
+   writes greenlight's default engineering standards to `.bdd/standards.md`; they apply at once, and you may edit them.
 2. **Ask for a feature.** `/greenlight:feature "what you want"` runs the phases: discover, specify (rules), test design,
    examples (Gherkin scenarios), system map and design, then refine and bind.
 3. **Approve the contract.** You read `rules.md` and the scenarios and approve each by typing

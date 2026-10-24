@@ -178,20 +178,18 @@ def project_codex_hooks(project: Path) -> Check | None:
 
 
 def check_standards(root: Path) -> Check:
-    """Are the project's engineering standards written and approved? Only the person can edit the file."""
+    """Are the project's engineering standards in place? They are in force as soon as the file exists; only the person
+    can edit it."""
     path = root / cfg.BDD_DIR / "standards.md"
-    fix = ("Run `bdd init --standards` to add the template, edit it to describe how this project's code is written, and "
-           "change its `Status: DRAFT` line to `Status: APPROVED`. Agents cannot write this file.")
     if not path.is_file():
-        return Check(STANDARDS, "warn", ".bdd/standards.md does not exist: no language, style or deprecation rules are stated", fix)
-    text = path.read_text(encoding="utf-8-sig", errors="replace")
-    if not any(line.strip().casefold() == "status: approved" for line in text.splitlines()):
-        return Check(STANDARDS, "warn", ".bdd/standards.md is still a draft", fix)
-    left = unfilled_placeholders(text)
+        return Check(STANDARDS, "warn", ".bdd/standards.md does not exist: no language, style or deprecation rules are stated",
+                     "Run `bdd init --standards` to add greenlight's default standards; the agents follow them from then on. "
+                     "You may edit the file; agents cannot write it.")
+    left = unfilled_placeholders(path.read_text(encoding="utf-8-sig", errors="replace"))
     if left:
-        return Check(STANDARDS, "warn", f".bdd/standards.md is approved but {len(left)} placeholder(s) are not filled in, "
-                     f"for example {left[0]}", "Fill each one in or delete its line; the agents treat a placeholder as no rule.")
-    return Check(STANDARDS, "ok", ".bdd/standards.md is approved")
+        return Check(STANDARDS, "ok", f".bdd/standards.md is in force; {len(left)} placeholder(s) mean what the project "
+                     f"already uses, for example {left[0]}")
+    return Check(STANDARDS, "ok", ".bdd/standards.md is in force")
 
 
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)

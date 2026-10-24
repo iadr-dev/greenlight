@@ -7,7 +7,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 ## Inputs
 
 - `tasks.md`, `system.md` (the seams to build), `design.md`, the red record.
-- `.bdd/standards.md`: the declared language and toolchain, style, quality rules and deprecation policy. The practice card of the
+- `.bdd/standards.md`: the declared language and toolchain, style, quality rules and deprecation policy, in force as
+  written; a placeholder left in it means what the project already uses, never a tool to add. The practice card of the
   project's language (`cards/practices`) lists the toolchain commands and the usual pitfalls.
 - The locked feature files and bound steps.
 

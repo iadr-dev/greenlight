@@ -4,7 +4,7 @@
     bdd init [--adapter NAME] [--autonomy LEVEL]
                                             create .bdd/ (config, glossary, ignore file) and apply the adapter
     bdd init --smoke                        prove the adapter's sample feature runs green, leaving nothing behind
-    bdd init --standards                    add .bdd/standards.md (engineering standards) to a project that has none
+    bdd init --standards                    add .bdd/standards.md (greenlight's default engineering standards) to a project that has none
 
 Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none).
 """
@@ -58,7 +58,7 @@ def config_text(autonomy: str, profiles: list[str] | None, python: str | None = 
 
 
 def add_standards(root: Path) -> str | None:
-    """Copy the standards template to .bdd/standards.md unless the file exists. Returns the path made, or None."""
+    """Copy greenlight's default standards to .bdd/standards.md unless the file exists. Returns the path made, or None."""
     target = root / cfg.BDD_DIR / "standards.md"
     if target.exists():
         return None
@@ -162,7 +162,7 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--shared-vocabulary", action="append", metavar="FILE",
                     help="include a shared vocabulary file (inside the project) in .bdd/vocabulary.toml and pin it; repeatable")
     ap.add_argument("--standards", action="store_true",
-                    help="add .bdd/standards.md (the engineering standards template) to a project that has none")
+                    help="add .bdd/standards.md (greenlight's default engineering standards) to a project that has none")
     args = ap.parse_args(argv)
 
     def action() -> int:
