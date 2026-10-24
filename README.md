@@ -44,7 +44,7 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
   (Python 3.11+, standard library only).
 - **Traceable.** `@FEAT-n`, `@R-n.m` and `@EX-n.m.k` tags tie every rule to its examples, tests and code.
 
-> Status: 1.0. Measured results and the known limits are in the [CHANGELOG](CHANGELOG.md); the evaluation harness is
+> Status: 1.1. Measured results and the known limits are in the [CHANGELOG](CHANGELOG.md); the evaluation harness is
 > described in [evals/README.md](evals/README.md).
 
 ## How it works
