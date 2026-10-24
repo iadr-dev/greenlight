@@ -43,6 +43,7 @@ COMMANDS: dict[str, list[str]] = {
     "migrate": [*BDD, "migrate"],
     "gate": [*BDD, "gate"],
     "create feature": [*BDD, "state", "init"],
+    "detect adapters": [*BDD, "init", "--detect"],
 }
 
 LIB: dict[str, str] = {}
@@ -56,6 +57,7 @@ FILES: dict[str, str] = {
     "feature file": "features/discounts.feature",
     "step file": "steps/steps.py",
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",
+    "package manifest": "package.json",
 }
 
 ERRORS: dict[str, ErrorRule] = {

@@ -1,0 +1,53 @@
+name = "ts-cucumber-js"
+version = 1
+profiles = ["base", "api", "cli", "lib", "data"]   # every instruction of these profiles is bound in tests/steps/core_steps.ts
+
+[detect]                                      # `init` suggests this adapter when a file matches and contains a word
+files = ["package.json"]
+contains = ["@cucumber/cucumber", "express", "fastify", "koa", "@nestjs", "hono", "commander", "yargs", "\"bin\""]
+
+[requires]
+packages = ["@cucumber/cucumber", "tsx", "typescript", "@types/node"]   # pinned in tests/package.json and tests/package-lock.json
+optional = []
+
+[paths]
+features = "tests/features"
+steps = "tests/steps"
+drivers = "tests/drivers"
+support = ["tests/cucumber.mjs", "tests/package.json", "tests/package-lock.json", "tests/tsconfig.json"]
+
+[run]
+# cucumber-js runs from the test tooling in tests/node_modules (installed with `npm ci --prefix tests`), loads the TypeScript
+# steps through tsx, reads its settings only from tests/cucumber.mjs (--config) and writes the JUnit report itself. No shell is
+# involved. Variables that change what node loads or how it runs (NODE_*) and the tsx and cucumber settings (TSX_*, CUCUMBER_*)
+# are not passed on.
+by_tag = 'node --import ./tests/node_modules/tsx/dist/loader.mjs tests/node_modules/@cucumber/cucumber/bin/cucumber.js --config tests/cucumber.mjs --tags @{tag}'
+scrub_env = ["NODE_", "TSX_", "CUCUMBER_"]
+report = "--format 'junit:\"{out}\"'"       # cucumber-js splits a format at its colon: a Windows path (C:\...) must be in double quotes
+shuffle = '--order random:{seed}'
+isolated = '--name "^{scenario:js}$"'
+timeout = 900
+
+[classify]                                    # ordered; defects first; applied to the failure text
+test_defect = [
+  'NotMapped',
+  '\.\s*undefined\b',                         # cucumber-js prints "step ... undefined" in the output of a step nobody defined
+  'Multiple step definitions match|multiple asynchronous interfaces',
+  'Cannot find module|ERR_MODULE_NOT_FOUND',
+  'SyntaxError|ReferenceError|TypeError: .* is not a (function|constructor)',
+  'UnstubbedCall|OutboundNetworkBlocked',
+]
+expected_fail = [
+  'BDD_EXPECTED_MISSING',
+  'AssertionError',
+  'status (404|405|501)',
+]
+
+# Quality checks are opt-in and are not copied into .bdd/config.toml: see "Quality checks" in guide.md for the
+# [adapters.quality.NAME] tables (tsc, eslint) to add to your own configuration.
+
+[scan]                                        # used by `bdd scan`
+step_start = '^\s*(?P<kind>Given|When|Then)\('
+assert_patterns = ['\bassert', '\bexpect\(']
+sleep_patterns = ['setTimeout\(', '\bsleep\(']
+stub_patterns = ['\.respond\(\s*[^\w.]([\w.]+)']

@@ -163,6 +163,29 @@ jobs:
           GREENLIGHT_NODE_MUTATION_TESTS: "1"
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_mutation_wrapper_ts.py" -v
 
+  adapter-ts-cucumber-js:
+    name: adapter contract (ts-cucumber-js, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      GREENLIGHT_NODE_ADAPTER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: adapters/ts-cucumber-js/templates/tests/package-lock.json
+      - name: Fresh scaffold runs green, every core step works, red looks like red
+        run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_cucumber_js.py" -v
+
   adapter-go-godog:
     name: adapter contract (go-godog, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

@@ -1,0 +1,62 @@
+# greenlight gates for a Node or TypeScript project (ts-cucumber-js), as a GitHub Actions workflow.
+# Copy to .github/workflows/greenlight.yml. Every action is pinned to a commit; update them on purpose, not by accident.
+#
+# Per finished feature it checks what a session cannot be trusted to: the approvals in the committed record, the locks,
+# a fresh run that is green, the traceability, and (when the project asks for them) stability, quality and mutation.
+# The test code is tests/ (package.json and package-lock.json are bound; the tooling is installed with `npm ci`).
+name: greenlight
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GREENLIGHT_REF: v1.0.1          # a release tag of https://github.com/iadr-dev/greenlight
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0          # the mutation check compares with the commit at which the red was proven
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"     # runs the bdd command line only
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+      - name: Get greenlight
+        run: git clone --depth 1 --branch "$GREENLIGHT_REF" https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
+      - name: Install the test tooling from the lockfile
+        run: npm ci --ignore-scripts --prefix tests --no-audit --no-fund
+      - name: Feature files follow the vocabulary
+        run: |
+          bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
+          "$bdd" lint tests/features
+      - name: Gates for every finished feature
+        run: |
+          bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
+          ids=$("$bdd" status --done)   # an assignment: a failing status stops the job instead of looping over nothing
+          for id in $ids; do
+            "$bdd" approve "$id" --check
+            "$bdd" lock "$id" --check --require
+            "$bdd" run "$id"
+            "$bdd" classify "$id" --expect green
+            "$bdd" trace "$id"
+            if grep -q '^\[stability\]' .bdd/config.toml; then "$bdd" stability "$id"; fi
+            if grep -q '^\[adapters.quality' .bdd/config.toml; then "$bdd" check "$id"; fi
+            if grep -q '^\[adapters.mutation\]' .bdd/config.toml; then "$bdd" mutate "$id"; fi
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: bdd-runs
+          path: .bdd/.runs/
+          include-hidden-files: true
