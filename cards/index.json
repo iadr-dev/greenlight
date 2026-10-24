@@ -151,10 +151,16 @@
       "path": "instructions/C.STUB.RESPOND.md"
     },
     {
-      "apply_when": "a person does something on a page such as clicking, typing, choosing or uploading",
+      "apply_when": "a person does something on a page or a screen such as clicking, typing, choosing, uploading, swiping or scrolling",
       "id": "C.UI.ACT",
       "kind": "instruction",
       "path": "instructions/C.UI.ACT.md"
+    },
+    {
+      "apply_when": "a person returns to the previous screen, with the back button, the back gesture or the browser's back",
+      "id": "C.UI.BACK",
+      "kind": "instruction",
+      "path": "instructions/C.UI.BACK.md"
     },
     {
       "apply_when": "something must be hidden, removed or withheld from a person",

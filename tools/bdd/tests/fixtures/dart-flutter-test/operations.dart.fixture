@@ -44,6 +44,55 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 }
 
+class GesturesPage extends StatefulWidget {
+  const GesturesPage({super.key});
+
+  @override
+  State<GesturesPage> createState() => _GesturesPageState();
+}
+
+class _GesturesPageState extends State<GesturesPage> {
+  final feed = ScrollController();
+  String swiped = 'none';
+
+  @override
+  void initState() {
+    super.initState();
+    feed.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    feed.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Column(children: [
+          const Text('Gestures', key: Key('title')),
+          SizedBox(
+            height: 120,
+            child: ListView(key: const Key('feed'), controller: feed, children: [for (var i = 0; i < 30; i++) Text('Item $i')]),
+          ),
+          Text(feed.hasClients && feed.offset > 0 ? 'scrolled' : 'top', key: const Key('scrolled')),
+          GestureDetector(
+            key: const Key('deck'),
+            onHorizontalDragEnd: (details) => setState(() => swiped = (details.primaryVelocity ?? 0) < 0 ? 'left' : 'right'),
+            child: const SizedBox(height: 100, width: 200, child: Text('deck')),
+          ),
+          Text(swiped, key: const Key('swiped')),
+          ElevatedButton(
+            key: const Key('next'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: Text('Next page', key: Key('title'))),
+            )),
+            child: const Text('Next'),
+          ),
+        ]),
+      );
+}
+
 class FormPage extends StatefulWidget {
   const FormPage({super.key});
 
@@ -78,6 +127,7 @@ final pages = <String, PageBuilder>{
   'orders': (state) => _app(const OrdersPage()),
   'clock': (state) => _app(Scaffold(body: Text(store.now!.toUtc().toIso8601String().replaceFirst('.000Z', 'Z'), key: const Key('time')))),
   'form': (state) => _app(const FormPage()),
+  'gestures': (state) => _app(const GesturesPage()),
   'settings': (state) {
     store.state.addAll(state);
     return _app(Scaffold(body: Text('${state['theme']}', key: const Key('theme'))));
@@ -94,6 +144,12 @@ final targets = <String, TargetFinder>{
   'error message': () => find.byKey(const Key('error')),
   'size menu': () => find.byKey(const Key('size')),
   'theme label': () => find.byKey(const Key('theme')),
+  'feed': () => find.byKey(const Key('feed')),
+  'scroll state': () => find.byKey(const Key('scrolled')),
+  'deck': () => find.byKey(const Key('deck')),
+  'swipe state': () => find.byKey(const Key('swiped')),
+  'next button': () => find.byKey(const Key('next')),
+  'page title': () => find.byKey(const Key('title')),
 };
 
 final lib = <String, FutureOr<Object?> Function(Object? input)>{

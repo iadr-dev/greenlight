@@ -305,7 +305,8 @@ class ContractTest(unittest.TestCase):
         code, out, err = self.bdd("run", "FEAT-002")
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.results("FEAT-002"), {"EX-002.1.1": "pass", "EX-002.1.2": "pass", "EX-002.1.3": "pass", "EX-002.1.4": "pass",
-                                                   "EX-002.2.1": "pass", "EX-002.2.2": "pass", "EX-002.3.1": "pass", "EX-002.4.1": "pass"})
+                                                   "EX-002.2.1": "pass", "EX-002.2.2": "pass", "EX-002.3.1": "pass", "EX-002.4.1": "pass",
+                                                   "EX-002.5.1": "pass", "EX-002.5.2": "pass", "EX-002.5.3": "pass"})
         self.assertEqual(self.bdd("classify", "FEAT-002", "--expect", "green")[0], 0)
 
     def test_4_the_scaffold_passes_the_scan_the_lint_and_the_analyzer(self):

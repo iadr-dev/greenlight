@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'compare.dart';
@@ -10,7 +11,7 @@ import 'errors.dart';
 import 'operations.dart';
 import 'world.dart';
 
-enum Action { clicks, fills, selects, uploads, types, toggles }
+enum Action { clicks, fills, selects, uploads, types, toggles, swipes, scrolls }
 
 Finder locate(String name) {
   final finder = targets[name];
@@ -38,7 +39,7 @@ Future<void> open(World world, String name) async {
   await world.tester.pumpAndSettle();
 }
 
-/// The value a step carries for an action: a `value` cell, a doc string, or the only cell.
+/// The value a step carries for an action: the cell of that column, a doc string, or the only cell.
 String _valueOf(Argument? argument, String column) {
   final given = payload(argument);
   final found = given is Map ? (given[column] ?? given.values.firstOrNull) : given;
@@ -46,6 +47,29 @@ String _valueOf(Argument? argument, String column) {
     throw TestFailure('give the $column in a table (| $column |) or a doc string');
   }
   return '$found';
+}
+
+/// The unit step (x, y) a direction moves along; y grows downwards.
+const _directions = <String, Offset>{'up': Offset(0, -1), 'down': Offset(0, 1), 'left': Offset(-1, 0), 'right': Offset(1, 0)};
+
+/// How much of the component a swipe or a scroll covers.
+const _gestureShare = 0.6;
+
+Offset _directionOf(Argument? argument) {
+  final name = _valueOf(argument, 'direction').trim().toLowerCase();
+  final direction = _directions[name];
+  if (direction == null) {
+    throw TestFailure("give a direction in a table (| direction |): up, down, left or right, not '$name'");
+  }
+  return direction;
+}
+
+/// Go back the way the platform does: the engine's "pop route" message, which is what the system back action sends.
+Future<void> back(World world) async {
+  const codec = JSONMethodCodec();
+  final pop = codec.encodeMethodCall(const MethodCall('popRoute'));
+  await world.tester.binding.defaultBinaryMessenger.handlePlatformMessage('flutter/navigation', pop, (_) {});
+  await world.tester.pumpAndSettle();
 }
 
 Future<void> act(World world, Action action, String target, Argument? argument) async {
@@ -60,6 +84,14 @@ Future<void> act(World world, Action action, String target, Argument? argument) 
       await tester.tap(finder);
       await tester.pumpAndSettle();
       await tester.tap(find.text(_valueOf(argument, 'value')).last);
+    case Action.swipes: // the finger moves in the direction
+      final swipe = _directionOf(argument);
+      final size = tester.getSize(finder);
+      await tester.fling(finder, Offset(swipe.dx * size.width, swipe.dy * size.height) * _gestureShare, 1000);
+    case Action.scrolls: // the view moves in the direction, so the finger moves the other way
+      final scroll = _directionOf(argument);
+      final size = tester.getSize(finder);
+      await tester.drag(finder, Offset(-scroll.dx * size.width, -scroll.dy * size.height) * _gestureShare);
     case Action.uploads:
       throw ExpectedMissing('a way to hand a file to the screen (a widget test has no file picker; give the app a seam)');
   }

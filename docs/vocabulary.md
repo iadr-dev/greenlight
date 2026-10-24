@@ -52,7 +52,7 @@ An adapter declares the profiles it supports; a project uses the instructions of
 | `lib` | libraries, SDKs and pure domain modules (shares the file instructions with cli) |
 | `data` | services that store data in a database whose queries can be counted |
 
-## Core instructions (version 2)
+## Core instructions (version 3)
 
 | ID | Kind | Profiles | Pattern | What it does |
 |---|---|---|---|---|
@@ -65,7 +65,8 @@ An adapter declares the profiles it supports; a project uses the instructions of
 | `C.FILE.GIVEN` | given | cli, lib | `the input file {file} contains:` | Create an input file in an isolated temporary workspace. {file} is a logical name; the real path is mapped in the system map. |
 | `C.API.CALL` | when | api | `{actor} calls {operation} with:` | Invoke an API operation by logical name (mapped in the driver) and store the response. |
 | `C.UI.OPEN` | when | ui | `{actor} opens the {page} page` | Navigate to a logical page. |
-| `C.UI.ACT` | when | ui | `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target}` | Perform a user action on a logical component. Selectors live in drivers, never in features. |
+| `C.UI.ACT` | when | ui | `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles,swipes,scrolls)} {target}` | Perform a user action on a logical component. Selectors live in drivers, never in features. A swipe or a scroll carries its direction (up, down, left or right) in a `direction` cell. |
+| `C.UI.BACK` | when | ui | `{actor} goes back` | Return to the previous screen, the way the platform's back action does. |
 | `C.EVENT.RECEIVE` | when | base | `the {event} event is received with:` | Deliver an inbound message or webhook. |
 | `C.JOB.RUN` | when | base | `the {job} job runs` | Execute a scheduled or background job synchronously. |
 | `C.CLOCK.ADVANCE` | when | base | `{duration} passes` | Advance the injected clock. |

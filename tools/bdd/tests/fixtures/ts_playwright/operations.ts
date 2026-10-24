@@ -16,6 +16,7 @@ export const PAGES: Record<string, string> = {
   leak: page('leak.html'),
   clock: page('clock.html'),
   form: page('form.html'),
+  gestures: page('gestures.html'),
   orders: '/orders',
 };
 
@@ -34,6 +35,12 @@ export const TARGETS: Record<string, Target> = {
   'saved note': { testId: 'saved' },
   secret: { testId: 'secret' },
   steps: { role: 'listitem' },
+  feed: { testId: 'feed' },
+  'scroll state': { testId: 'scrolled' },
+  deck: { testId: 'deck' },
+  'swipe state': { testId: 'swiped' },
+  'next link': { role: 'link', name: 'Next' },
+  'page title': { testId: 'title' },
 };
 
 export interface Endpoint {

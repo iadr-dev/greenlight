@@ -9,7 +9,7 @@ import type { StorageItem, World } from './world';
 
 const ABSOLUTE = /^[a-z][a-z0-9+.-]*:/i;
 
-export type Action = 'clicks' | 'fills' | 'selects' | 'uploads' | 'types' | 'toggles';
+export type Action = 'clicks' | 'fills' | 'selects' | 'uploads' | 'types' | 'toggles' | 'swipes' | 'scrolls';
 
 export function locate(page: Page, name: string): Locator {
   const target = TARGETS[name];
@@ -58,8 +58,43 @@ function valueOf(data: Data, column: string): string {
   return String(found);
 }
 
+/** Direction names as the unit vector the finger (a swipe) or the view (a scroll) moves in; y grows downwards. */
+const DIRECTIONS: Record<string, readonly [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+const GESTURE_SHARE = 0.6;            // how much of the component a swipe or a scroll covers
+
+function directionOf(data: Data): readonly [number, number] {
+  const name = valueOf(data, 'direction').trim().toLowerCase();
+  const vector = DIRECTIONS[name];
+  assert.ok(vector, `give a direction in a table (| direction |): up, down, left or right, not '${name}'`);
+  return vector;
+}
+
+/** The view moves in the direction: scrolling down shows what is below. */
+async function scrollBy(locator: Locator, [x, y]: readonly [number, number]): Promise<void> {
+  await locator.evaluate((element, [dx, dy, share]) => {
+    element.scrollBy({ left: (dx ?? 0) * element.clientWidth * (share ?? 1), top: (dy ?? 0) * element.clientHeight * (share ?? 1) });
+  }, [x, y, GESTURE_SHARE]);
+}
+
+/** The finger moves in the direction: swiping left drags from the right of the component towards its left. */
+async function swipe(page: Page, locator: Locator, [x, y]: readonly [number, number]): Promise<void> {
+  const box = await locator.boundingBox();
+  assert.ok(box, 'the component to swipe is not on the screen');
+  const reach = { x: box.width * GESTURE_SHARE / 2, y: box.height * GESTURE_SHARE / 2 };
+  const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(middle.x - x * reach.x, middle.y - y * reach.y);
+  await page.mouse.down();
+  await page.mouse.move(middle.x + x * reach.x, middle.y + y * reach.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+export async function back(world: World, actor: string): Promise<void> {
+  await (await world.page(actor)).goBack();
+}
+
 export async function act(world: World, actor: string, action: Action, target: string, data: Data): Promise<void> {
-  const locator = locate(await world.page(actor), target);
+  const page = await world.page(actor);
+  const locator = locate(page, target);
   switch (action) {
     case 'clicks':
       await locator.click();
@@ -78,6 +113,12 @@ export async function act(world: World, actor: string, action: Action, target: s
       break;
     case 'toggles':
       await locator.setChecked(!(await locator.isChecked()));
+      break;
+    case 'swipes':
+      await swipe(page, locator, directionOf(data));
+      break;
+    case 'scrolls':
+      await scrollBy(locator, directionOf(data));
       break;
   }
 }

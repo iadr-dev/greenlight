@@ -54,6 +54,11 @@ When('{actor} {action} {target} with:', async ({ world }, actor: string, action:
   await ui.act(world, actor, action as ui.Action, target, data);
 });
 
+When('{actor} goes back', async ({ world }, actor: string) => { // C.UI.BACK
+  await world.act();
+  await ui.back(world, actor);
+});
+
 When('the {event} event is received with:', async ({ world }, event: string, data: Data) => { // C.EVENT.RECEIVE
   await world.act();
   await world.system.deliverEvent(event, payload(data));

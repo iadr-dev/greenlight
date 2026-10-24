@@ -11,9 +11,9 @@ the project and registers the adapter in `.bdd/config.toml`. Nothing is overwrit
 
 | Covered | Not covered by this adapter |
 |---|---|
-| screens and their widgets: opening a page, tapping, entering text, what a component shows, whether it is enabled, checked or on the screen | anything that needs a real device or platform plugin: camera, push notifications, platform views, the real keyboard, gestures other than a tap |
+| screens and their widgets: opening a page, tapping, entering text, swiping, scrolling, going back, what a component shows, whether it is enabled, checked or on the screen | anything that needs a real device or platform plugin: camera, push notifications, platform views, the real keyboard, gestures other than a tap |
 | use cases, repositories, view models and Dart libraries, called by name | `integration_test` on a device or emulator (a second adapter block could run it; this one does not) |
-| the clock, stubbed dependencies, feature flags, events and jobs through seams of your own | swipes, scrolling and going back: the `ui` instruction `{actor} {action} {target}` has the actions clicks, fills, selects, uploads, types and toggles, and no more |
+| the clock, stubbed dependencies, feature flags, events and jobs through seams of your own | gestures other than a tap, a fling or a drag: pinch, long press, multi-touch (the `ui` actions are clicks, fills, selects, uploads, types, toggles, swipes and scrolls, and going back) |
 
 A widget test runs on the Dart VM with Flutter's test binding, so what it proves is what the widgets do, not how the app looks
 or behaves on a phone. `uploads` is an expected failure by design (a widget test has no file picker): give the app a seam

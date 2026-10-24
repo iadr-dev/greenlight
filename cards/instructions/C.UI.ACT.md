@@ -1,7 +1,7 @@
 ---
 id: C.UI.ACT
 kind: instruction
-apply_when: a person does something on a page such as clicking, typing, choosing or uploading
+apply_when: a person does something on a page or a screen such as clicking, typing, choosing, uploading, swiping or scrolling
 ---
 ## Semantics
 
@@ -11,12 +11,12 @@ Kind: **when**. Profile: ui. Carries: table or docstring (optional).
 
 ## In practice
 
-One action on one named component: clicks, fills, selects, uploads, types or toggles. Components are named the way a person would say it ("the save button", "the email field"). When the action needs data, give it in a table with a `value` column (a `file` column for uploads) or in a doc string.
+One action on one named component: clicks, fills, selects, uploads, types, toggles, swipes or scrolls. Components are named the way a person would say it ("the save button", "the email field"). When the action needs data, give it in a table with a `value` column (a `file` column for uploads, a `direction` column for a swipe or a scroll) or in a doc string. A swipe is the finger's direction (swiping left moves the finger to the left, as a person turns a card away); a scroll is the view's direction (scrolling down shows what is below). The direction is up, down, left or right.
 
 ## Patterns
 
-- `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target}`
-- `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles)} {target} with:`
+- `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles,swipes,scrolls)} {target}`
+- `{actor} {action:enum(clicks,fills,selects,uploads,types,toggles,swipes,scrolls)} {target} with:`
 
 ## Good and bad Gherkin
 
@@ -27,6 +27,12 @@ When alice fills email field with:
   | value           |
   | alice@mail.test |
 And alice clicks save button
+When alice scrolls order list with:
+  | direction |
+  | down      |
+And alice swipes first order card with:
+  | direction |
+  | left      |
 ```
 
 Bad:

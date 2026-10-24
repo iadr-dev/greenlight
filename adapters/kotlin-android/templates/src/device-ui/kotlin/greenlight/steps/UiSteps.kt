@@ -29,26 +29,32 @@ class UiSteps(private val world: World) {
         UiDriver.open(page)
     }
 
-    @When("^([\\w.-]+) (clicks|fills|selects|uploads|types|toggles) ([^:\\n]+?)$") // C.UI.ACT
+    @When("^([\\w.-]+) (clicks|fills|selects|uploads|types|toggles|swipes|scrolls) ([^:\\n]+?)$") // C.UI.ACT
     fun acts(actor: String, action: String, target: String) {
         act(action, target, null)
     }
 
     // The step with data is a method of its own: Cucumber needs one more parameter when a table or doc string follows.
-    @When("^([\\w.-]+) (clicks|fills|selects|uploads|types|toggles) ([^:\\n]+?) with:$") // C.UI.ACT
+    @When("^([\\w.-]+) (clicks|fills|selects|uploads|types|toggles|swipes|scrolls) ([^:\\n]+?) with:$") // C.UI.ACT
     fun actsWith(actor: String, action: String, target: String, payload: Payload) {
         act(action, target, valueOf(payload.data()))
     }
 
-    /** The value an action carries: the `value` cell of a table, its only cell, or a doc string. */
+    /** The value an action carries: the `value` or `direction` cell of a table, its only cell, or a doc string. */
     private fun valueOf(given: Any?): String? {
-        val cell = if (given is Map<*, *>) given["value"] ?: given.values.firstOrNull() else given
+        val cell = if (given is Map<*, *>) given["value"] ?: given["direction"] ?: given.values.firstOrNull() else given
         return if (cell == null) null else cell.toString()
     }
 
     private fun act(action: String, target: String, value: String?) {
         world.act()
         UiDriver.act(UiDriver.Action.valueOf(action.uppercase()), target, value)
+    }
+
+    @When("^([\\w.-]+) goes back$") // C.UI.BACK
+    fun goesBack(actor: String) {
+        world.act()
+        UiDriver.back()
     }
 
     @Then("^([\\w.-]+) sees ([^:\\n]+) showing:$") // C.UI.SEE

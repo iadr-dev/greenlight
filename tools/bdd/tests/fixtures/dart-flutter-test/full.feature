@@ -130,3 +130,35 @@ Feature: Every core step
         | name |
         | tea  |
       Then the call fails with refusal
+
+  @R-002.5
+  Rule: A person can scroll, swipe and go back
+
+    @EX-002.5.1
+    Scenario: A list is scrolled down
+      When alice opens the gestures page
+      And alice scrolls feed with:
+        | direction |
+        | down      |
+      Then alice sees scroll state showing:
+        | text     |
+        | scrolled |
+
+    @EX-002.5.2
+    Scenario: A card is swiped to the left
+      When alice opens the gestures page
+      And alice swipes deck with:
+        | direction |
+        | left      |
+      Then alice sees swipe state showing:
+        | text |
+        | left |
+
+    @EX-002.5.3
+    Scenario: Going back returns to the first screen
+      When alice opens the gestures page
+      And alice clicks next button
+      And alice goes back
+      Then alice sees page title showing:
+        | text     |
+        | Gestures |

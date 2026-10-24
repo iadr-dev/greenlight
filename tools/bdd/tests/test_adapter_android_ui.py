@@ -94,6 +94,42 @@ Feature: Checkout screen
 """
 RED_RESULTS = {"EX-006.1.1": "expected-fail", "EX-006.1.2": "test-defect", "EX-006.1.3": "expected-fail", "EX-006.1.4": "expected-fail"}
 
+GESTURES = """@FEAT-008
+Feature: Gestures
+
+  @R-008.1
+  Rule: A person can scroll, swipe and go back
+
+    @EX-008.1.1 @ui
+    Scenario: A list is scrolled down
+      When alice opens the counter page
+      And alice scrolls feed with:
+        | direction |
+        | down      |
+      Then alice sees scroll state showing:
+        | text     |
+        | scrolled |
+
+    @EX-008.1.2 @ui
+    Scenario: A card is swiped to the left
+      When alice opens the counter page
+      And alice swipes deck with:
+        | direction |
+        | left      |
+      Then alice sees swipe state showing:
+        | text |
+        | left |
+
+    @EX-008.1.3 @ui
+    Scenario: Going back returns to the first screen
+      When alice opens the counter page
+      And alice clicks next button
+      And alice goes back
+      Then alice sees page title showing:
+        | text       |
+        | First page |
+"""
+
 STATE = """@FEAT-007
 Feature: Application state
 
@@ -143,12 +179,12 @@ class ScreenStepsTest(unittest.TestCase):
         self.assertIsNotNone(device)
         self.assertNotIn("not @ui", device.group(1))              # the device runs every scenario, the screen ones included
 
-    def test_all_six_screen_instructions_are_bound_and_the_two_phrases_with_data_are_methods_of_their_own(self):
+    def test_all_seven_screen_instructions_are_bound_and_the_action_with_data_is_a_method_of_its_own(self):
         source = UI_STEPS.read_text(encoding="utf-8")
         bound = set(re.findall(r"// (C\.[A-Z_.]+)", source))
-        self.assertEqual(bound, {"C.STATE.GLOBAL", "C.UI.OPEN", "C.UI.ACT", "C.UI.SEE", "C.UI.NOT_SEE", "C.STATE.VERIFY"})
+        self.assertEqual(bound, {"C.STATE.GLOBAL", "C.UI.OPEN", "C.UI.ACT", "C.UI.BACK", "C.UI.SEE", "C.UI.NOT_SEE", "C.STATE.VERIFY"})
         patterns = re.findall(r'@(?:Given|When|Then)\("(.+?)"\)', source)
-        self.assertEqual(len(patterns), 7)                     # clicks and the others come with data and without
+        self.assertEqual(len(patterns), 8)                     # the actions come with data and without
         for pattern in patterns:
             self.assertTrue(pattern.startswith("^") and pattern.endswith("$"), pattern)
 
@@ -184,7 +220,9 @@ class ScreenContractTest(jvm.ScaffoldCase):
         text = text.replace('        // "checkout button" to Target.Id("checkout"),',
                             '        "count" to Target.Id("count"),\n        "add button" to Target.Id("add"),\n        "name field" to Target.Id("name"),\n'
                             '        "agree box" to Target.Id("agree"),\n        "error message" to Target.Id("error"),\n'
-                            '        "checkout button" to Target.Id("checkout"),')
+                            '        "checkout button" to Target.Id("checkout"),\n        "feed" to Target.Id("feed"),\n'
+                            '        "scroll state" to Target.Id("scrolled"),\n        "deck" to Target.Id("deck"),\n        "swipe state" to Target.Id("swiped"),\n'
+                            '        "next button" to Target.Id("next"),\n        "page title" to Target.Id("title"),')
         operations.write_text(text, encoding="utf-8", newline="\n")
         jvm.make_gradle_wrapper(cls.root)
 
@@ -219,6 +257,11 @@ class ScreenContractTest(jvm.ScaffoldCase):
             self.assertEqual(self.results("FEAT-007"), {"EX-007.1.1": "pass"})
         finally:
             seams.write_text(original, encoding="utf-8", newline="\n")
+
+    def test_5_a_list_is_scrolled_a_card_swiped_and_the_back_action_returns_to_the_first_screen(self):
+        self.add_feature("src/test/resources/features/gestures.feature", GESTURES, "FEAT-008")
+        self.assertEqual(self.run_on_device("FEAT-008"), 0)
+        self.assertEqual(self.results("FEAT-008"), {"EX-008.1.1": "pass", "EX-008.1.2": "pass", "EX-008.1.3": "pass"})
 
     def test_4_the_jvm_side_still_runs_the_other_scenarios_and_leaves_the_screen_ones_out(self):
         code, out, err = self.bdd("run", "FEAT-000", "--adapter", "kotlin-android")
