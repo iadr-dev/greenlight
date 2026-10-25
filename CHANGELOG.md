@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-25
+
+A patch release: a new logo and README, and four more security rules in the default engineering standards. Nothing in the
+tool or in the `.bdd/` file formats changed (`bdd migrate` still reports schema 1), and projects made with 1.1.0 keep
+working. An existing `.bdd/standards.md` is never overwritten; a project that wants the four new rules copies them from
+`templates/standards.md`.
+
 ### Changed
 - The README opens with a centered logo and title instead of the ASCII-art block, and a row of links to the main docs. The logo (`docs/assets/logo.svg`) is a traffic light with the green lamp lit and a check mark. A new *See it work* section has two side-by-side video slots (setting up and asking for a feature; approving, proving and shipping), made from one real run of greenlight on its demo shop app.
 - The default engineering standards (`templates/standards.md`) gain four security rules they lacked: protection of data-changing browser requests against cross-site requests, rate limiting of public endpoints, sign-in and anything that sends messages or costs money, no stack traces or internal detail in what a caller or a screen is told about an error, and secrets checked at startup and rotated (not only deleted) when exposed.

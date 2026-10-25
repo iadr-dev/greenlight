@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  GREENLIGHT_REF: v1.1.0          # a release tag of https://github.com/iadr-dev/greenlight
+  GREENLIGHT_REF: v1.1.1          # a release tag of https://github.com/iadr-dev/greenlight
 
 jobs:
   gates:

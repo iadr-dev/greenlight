@@ -13,7 +13,7 @@ plugin's wrapper (Python 3.11 or newer, nothing to install):
 - uses: actions/setup-python@v5
   with:
     python-version: "3.12"
-- run: git clone --depth 1 --branch v1.1.0 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
+- run: git clone --depth 1 --branch v1.1.1 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
 - name: Check every finished feature
   run: |
     bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
