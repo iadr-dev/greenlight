@@ -68,7 +68,7 @@ Two short videos, made from one real run of greenlight on its demo shop app (`ev
 
 Install the plugin, run `/greenlight:init`, and ask for a feature. The phases are drawn, and two of them are yours to approve.
 
-[https://github.com/user-attachments/assets/098018a6-49bc-4d83-8cff-00001503e350](https://github.com/user-attachments/assets/098018a6-49bc-4d83-8cff-00001503e350)
+<video src="https://github.com/user-attachments/assets/098018a6-49bc-4d83-8cff-00001503e350" controls></video>
 
 </td>
 <td width="50%" valign="top">
@@ -77,7 +77,7 @@ Install the plugin, run `/greenlight:init`, and ask for a feature. The phases ar
 
 Read the rules and examples, approve and lock them, watch every example fail and then pass, and read the report.
 
-[https://github.com/user-attachments/assets/1e2f0245-adcb-4051-b947-e193cdf63dbe](https://github.com/user-attachments/assets/1e2f0245-adcb-4051-b947-e193cdf63dbe)
+<video src="https://github.com/user-attachments/assets/1e2f0245-adcb-4051-b947-e193cdf63dbe" controls></video>
 
 </td>
 </tr>
