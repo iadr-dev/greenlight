@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The default engineering standards (`templates/standards.md`) gain four security rules they lacked: protection of data-changing browser requests against cross-site requests, rate limiting of public endpoints, sign-in and anything that sends messages or costs money, no stack traces or internal detail in what a caller or a screen is told about an error, and secrets checked at startup and rotated (not only deleted) when exposed.
+
 ## [1.1.0] - 2026-10-24
 
 A minor release: three adapters (Node and TypeScript logic, Flutter, Android screens), `bdd report`, swipes, scrolls
