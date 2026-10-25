@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `docs/assets/social-preview.svg` and `.png`: the 1280×640 image for the repository's social preview (the logo, the name, the tagline and the approve, red, green, evidence flow), for link previews on GitHub and social sites.
+
 ## [1.1.1] - 2026-10-25
 
 A patch release: a new logo and README, and four more security rules in the default engineering standards. Nothing in the
