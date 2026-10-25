@@ -6,7 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
-- The README opens with a centered logo and title instead of the ASCII-art block, and a row of links to the main docs. The logo (`docs/assets/logo.svg`) is a traffic light with the green lamp lit and a check mark. A new *See it work* section has two side-by-side video slots (setting up and asking for a feature; approving, proving and shipping), made from one real run of greenlight on its demo shop app. The video URLs are placeholders until the videos are uploaded.
+- The README opens with a centered logo and title instead of the ASCII-art block, and a row of links to the main docs. The logo (`docs/assets/logo.svg`) is a traffic light with the green lamp lit and a check mark. A new *See it work* section has two side-by-side video slots (setting up and asking for a feature; approving, proving and shipping), made from one real run of greenlight on its demo shop app.
 
 ## [1.1.0] - 2026-10-24
 
