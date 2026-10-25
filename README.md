@@ -69,7 +69,7 @@ Two short videos, made from one real run of greenlight on its demo shop app (`ev
 Install the plugin, run `/greenlight:init`, and ask for a feature. The phases are drawn, and two of them are yours to approve.
 
 <!-- TODO: upload greenlight-1-setup-and-ask.mp4 in the GitHub editor (drag it into this file or a comment), then paste the URL it gives you as the src below. -->
-<video src="https://github.com/user-attachments/assets/REPLACE-WITH-VIDEO-1" controls muted></video>
+<video src="[https://github.com/user-attachments/assets/REPLACE-WITH-VIDEO-1](https://github.com/user-attachments/assets/44946a1a-45d9-495e-ae5a-12125f00dd7a)" controls muted></video>
 
 </td>
 <td width="50%" valign="top">
@@ -79,7 +79,7 @@ Install the plugin, run `/greenlight:init`, and ask for a feature. The phases ar
 Read the rules and examples, approve and lock them, watch every example fail and then pass, and read the report.
 
 <!-- TODO: upload greenlight-2-approve-prove-ship.mp4 the same way, then paste its URL as the src below. -->
-<video src="https://github.com/user-attachments/assets/REPLACE-WITH-VIDEO-2" controls muted></video>
+<video src="[https://github.com/user-attachments/assets/REPLACE-WITH-VIDEO-2](https://github.com/user-attachments/assets/4c345ed1-61c8-4865-83ac-1bd08507467c)" controls muted></video>
 
 </td>
 </tr>
