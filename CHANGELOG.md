@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The README's two videos play. They are written as a bare `github.com/user-attachments/assets/...` URL on a line of their own, which GitHub turns into a player with a signed address. The `<video src=...>` form that 1.1.2 used keeps the unsigned address, which visitors cannot load, and GitHub also forces it muted.
+
 ## [1.1.2] - 2026-10-25
 
 A patch release: a social preview image for the repository and the two new demo videos in the README. Nothing in the tool
