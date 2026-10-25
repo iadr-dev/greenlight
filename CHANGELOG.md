@@ -5,6 +5,14 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-25
+
+A patch release: a social preview image for the repository and the two new demo videos in the README. Nothing in the tool
+or in the `.bdd/` file formats changed (`bdd migrate` still reports schema 1), and projects made with 1.1.1 keep working.
+
+### Fixed
+- The README's two videos are the new uploads, written as `<video>` tags again (the web editor had turned them into links, which show as text in a table cell and do not play).
+
 ### Added
 - `docs/assets/social-preview.svg` and `.png`: the 1280×640 image for the repository's social preview (the logo, the name, the tagline and the approve, red, green, evidence flow), for link previews on GitHub and social sites.
 
