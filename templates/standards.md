@@ -97,6 +97,7 @@
 - No silent exception handling: never swallow an error, never use an empty `catch`. Handle it, or translate it and rethrow with context. [tool]
 - Use specific error types from the domain (`OrderNotFound`, not a generic `Error`). Errors are translated at the edge only: to the API error shape for a caller, to a message the person can act on for a screen. [review]
 - Validate input at the boundary and trust validated data inside. Fail fast on invalid state. [review]
+- What a caller or a screen is told about an error never contains a stack trace, a query, a file path, an internal name or a secret; that detail goes to the log. [review]
 - Logging uses levels (`error`, `warn`, `info`, `debug`) with structured fields. No secrets, tokens or personal data in logs. [review]
 - An error is logged once, where it is finally handled; code that translates and rethrows it adds context but does not log it. [review]
 
@@ -118,6 +119,9 @@
 - Who may do what is decided on the server for every request, never only by hiding a button; every such rule has a test that a caller without the right is refused. [review]
 - Output is escaped for where it goes (HTML, a URL, a log line); user input is never rendered as markup or run as code. [review]
 - A URL or host taken from input is checked against an allowed list before the server calls it. [review]
+- A request that changes data and can be sent by a browser is protected against cross-site requests (a token, or same-site cookies plus an origin check). [review]
+- Public endpoints, sign-in and anything that sends a message or costs money are rate limited. [review]
+- Required secrets are checked when the program starts, so a missing one fails at once and not on the first request; a secret that was ever exposed is rotated, not only deleted from the code. [review]
 - No cryptography of our own: the platform's or a maintained library's, with its current recommended settings. Passwords are stored only as a slow salted hash. [review]
 - On a device, tokens and keys live in the platform's secure store (Keychain, Keystore), never in plain preferences or files; every network call uses TLS. [review]
 
