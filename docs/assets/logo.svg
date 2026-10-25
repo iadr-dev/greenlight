@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-labelledby="t">
+  <title id="t">greenlight</title>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2536"/>
+      <stop offset="1" stop-color="#13161e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4cc36d" stop-opacity=".6"/>
+      <stop offset=".55" stop-color="#4cc36d" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#4cc36d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="green" cx="36%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#a6f2bb"/>
+      <stop offset=".42" stop-color="#4cc36d"/>
+      <stop offset="1" stop-color="#2a8f4a"/>
+    </radialGradient>
+    <clipPath id="badge"><rect width="128" height="128" rx="30"/></clipPath>
+  </defs>
+
+  <!-- the badge: greenlight's own dark -->
+  <rect width="128" height="128" rx="30" fill="url(#body)"/>
+  <g clip-path="url(#badge)">
+    <circle cx="64" cy="98" r="62" fill="url(#glow)"/>
+  </g>
+  <rect x=".75" y=".75" width="126.5" height="126.5" rx="29.25" fill="none" stroke="#2b3140" stroke-width="1.5"/>
+
+  <!-- the signal: red and amber are off, green is lit -->
+  <circle cx="64" cy="30" r="15.5" fill="#0d0f15"/>
+  <circle cx="64" cy="30" r="12" fill="#ff6b6b" fill-opacity=".22"/>
+  <circle cx="64" cy="64" r="15.5" fill="#0d0f15"/>
+  <circle cx="64" cy="64" r="12" fill="#e3b341" fill-opacity=".22"/>
+  <circle cx="64" cy="98" r="15.5" fill="#0d0f15"/>
+  <circle cx="64" cy="98" r="13.5" fill="url(#green)"/>
+  <ellipse cx="58.5" cy="91.5" rx="5" ry="3" fill="#fff" fill-opacity=".3"/>
+
+  <!-- approved -->
+  <path d="M57 98.5l5.2 5.2 9.6-10.6" fill="none" stroke="#0b1d12" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

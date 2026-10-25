@@ -1,15 +1,23 @@
-# greenlight
+<p align="center">
+  <img src="docs/assets/logo.svg" width="128" height="128" alt="greenlight logo: a traffic light with the green lamp lit and a check mark">
+</p>
 
-```text
-                               ___       __    __
-   ____ _________  ___  ____  / (_)___ _/ /_  / /_
-  / __ `/ ___/ _ \/ _ \/ __ \/ / / __ `/ __ \/ __/
- / /_/ / /  /  __/  __/ / / / / / /_/ / / / / /_
- \__, /_/   \___/\___/_/ /_/_/_/\__, /_/ /_/\__/
-/____/                         /____/
-```
+<h1 align="center">greenlight</h1>
 
-**AI × BDD spec-driven development for Claude Code.** greenlight turns a feature request into human-approved,
+<p align="center">
+  <b>AI × BDD spec-driven development for Claude Code</b><br>
+  You approve the contract. The AI does the rest.
+</p>
+
+<p align="center">
+  <a href="docs/quickstart.md">Quickstart</a> ·
+  <a href="docs/concepts.md">Concepts</a> ·
+  <a href="docs/adapters.md">Adapters</a> ·
+  <a href="docs/faq.md">FAQ</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+greenlight turns a feature request into human-approved,
 executable specifications, and then into working code. People approve the contract (rules and examples); the AI does
 the mechanical work in between, under gates it cannot talk its way past (with the plugin's hooks; without them, in
 soft mode, a violation is detected after the fact, not prevented).
@@ -46,6 +54,37 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
 
 > Status: 1.1. Measured results and the known limits are in the [CHANGELOG](CHANGELOG.md); the evaluation harness is
 > described in [evals/README.md](evals/README.md).
+
+## See it work
+
+Two short videos, made from one real run of greenlight on its demo shop app (`evals/apps/shop-api`, the request
+"Give big orders a discount"). The rules, scenarios, failures and report on screen are that run's own records.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**1 · Set up and ask for a feature** · 28 s
+
+Install the plugin, run `/greenlight:init`, and ask for a feature. The phases are drawn, and two of them are yours to approve.
+
+<video src="https://github.com/user-attachments/assets/44946a1a-45d9-495e-ae5a-12125f00dd7a" controls></video>
+
+</td>
+<td width="50%" valign="top">
+
+**2 · Approve, prove, ship** · 40 s
+
+Read the rules and examples, approve and lock them, watch every example fail and then pass, and read the report.
+
+<video src="https://github.com/user-attachments/assets/4c345ed1-61c8-4865-83ac-1bd08507467c" controls></video>
+
+</td>
+</tr>
+</table>
+
+In the videos the approval step is re-enacted (the sample run used automatic approvals), and the run stops before the
+independent audit, so the report shows what was recorded up to the green run.
 
 ## How it works
 
