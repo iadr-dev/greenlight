@@ -35,7 +35,7 @@ WINDOWS_MESSAGE = """mutate_python: mutmut does not run natively on Windows. Run
   wsl
   cd /mnt/c/<path to the project>
   uv venv venv          # a Linux environment beside the Windows .venv; each side finds its own
-  uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.0"
+  uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.1"
   sh /mnt/c/<path to greenlight>/tools/bdd/bdd mutate FEAT-n
 WSL needs Python 3.11 or newer for bdd; a `python =` line in .bdd/config.toml that names a Windows path does not work there."""
 SKIPPED_FOLDERS = (".git", ".bdd", ".venv", "venv", "node_modules", "__pycache__", "mutants", ".mypy_cache",

@@ -4,17 +4,17 @@ The CI job installs the .NET SDK, restores the pinned packages from the lock fil
 the restore) and runs the suite the same way `bdd run` does. Pin the actions you use to a commit.
 
 ```yaml
-- uses: actions/setup-python@v5
+- uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
   with:
     python-version: "3.12"
-- uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+- uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
   with:
     dotnet-version: "10.0.x"
     cache: true
     cache-dependency-path: tests/packages.lock.json
 - run: dotnet restore tests --locked-mode
 - run: python -I tests/run_dotnet.py --tag FEAT-007 --out "$PWD/bdd-report.xml"
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
   if: always()
   with:
     name: bdd-report
