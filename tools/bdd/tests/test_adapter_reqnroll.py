@@ -55,7 +55,7 @@ class PackageTest(unittest.TestCase):
 
     def test_the_packages_are_pinned_and_locked(self):
         project = (TEMPLATES / "tests" / "GreenlightTests.csproj").read_text(encoding="utf-8")
-        locked = json.loads((TEMPLATES / "tests" / "packages.lock.json").read_text(encoding="utf-8"))
+        locked = json.loads((TEMPLATES / "tests" / "packages.lock.json.template").read_text(encoding="utf-8"))
         direct = {name: info["resolved"] for framework in locked["dependencies"].values() for name, info in framework.items()
                   if info["type"] == "Direct"}
         references = dict(re.findall(r'<PackageReference Include="([^"]+)" Version="([^"]+)"', project))
@@ -71,7 +71,7 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(sources.count("<add "), 1)
 
     def test_every_support_file_is_shipped_and_every_binding_has_its_expression_anchored(self):
-        shipped = {p.relative_to(TEMPLATES).as_posix() for p in adapter.template_files(ADAPTER)}
+        shipped = set(adapter.shipped(ADAPTER))
         for name in adapter.load(ADAPTER)["paths"]["support"]:
             self.assertIn(name, shipped)
         source = (TEMPLATES / "tests" / "steps" / "CoreSteps.cs").read_text(encoding="utf-8")

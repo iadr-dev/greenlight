@@ -21,6 +21,10 @@ the version `net10.0` is changed to in `tests/GreenlightTests.csproj`).
 | `tests/drivers/*.cs` (the rest) | the world of a scenario, the clock, the stubs, the network block, comparison helpers, the seeded orderer | nobody |
 | `tests/GreenlightTests.csproj`, `tests/packages.lock.json`, `tests/nuget.config`, `tests/.editorconfig`, `tests/run_dotnet.py` | the pinned test tooling and how scenarios are selected and reported | the person |
 
+greenlight ships the lock file as `templates/tests/packages.lock.json.template` and `bdd adapter apply` writes it as
+`tests/packages.lock.json`: company security tools can stop a program from touching a file with that name, which would
+block installing the plugin (decision D57).
+
 ## Setting up
 
 ```sh

@@ -256,9 +256,9 @@ jobs:
         with:
           dotnet-version: "10.0.x"
           cache: true
-          cache-dependency-path: adapters/dotnet-reqnroll/templates/tests/packages.lock.json
+          cache-dependency-path: adapters/dotnet-reqnroll/templates/tests/packages.lock.json.template
       - name: Packages come from the lock file (locked restore, hashed)
-        run: dotnet restore adapters/dotnet-reqnroll/templates/tests --locked-mode
+        run: dotnet restore adapters/dotnet-reqnroll/templates/tests --locked-mode -p:NuGetLockFilePath=packages.lock.json.template
       - name: Fresh scaffold runs green, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_reqnroll.py" -v
       - name: The shipped templates are format-clean and build without warnings

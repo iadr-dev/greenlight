@@ -73,7 +73,7 @@ class EveryAdapterTest(unittest.TestCase):
     def test_every_support_file_of_an_adapter_is_one_it_ships(self):
         for path in adapters_with_settings():
             with self.subTest(adapter=path.name):
-                shipped = {p.relative_to(path / "templates").as_posix() for p in adapter.template_files(path)}
+                shipped = set(adapter.shipped(path))
                 for name in adapter.load(path)["paths"].get("support", []):
                     if not any(c in name for c in "*?["):
                         self.assertIn(name, shipped, "a bound plumbing file the adapter does not provide")
@@ -85,6 +85,14 @@ class EveryAdapterTest(unittest.TestCase):
                 (base / rel).parent.mkdir(parents=True, exist_ok=True)
                 (base / rel).write_text("x", encoding="utf-8")
             self.assertEqual([p.relative_to(base).as_posix() for p in adapter.template_files(Path(tmp))], ["tests/a.ts"])
+
+    def test_a_template_ending_is_dropped_from_the_name_in_the_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "templates"
+            for rel in ("tests/packages.lock.json.template", "tests/a.ts", "tests/.template"):
+                (base / rel).parent.mkdir(parents=True, exist_ok=True)
+                (base / rel).write_text("x", encoding="utf-8")
+            self.assertEqual(adapter.shipped(Path(tmp)), ["tests/.template", "tests/a.ts", "tests/packages.lock.json"])
 
 
 if __name__ == "__main__":
