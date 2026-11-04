@@ -5,7 +5,8 @@
                                 copy the templates into the project (or into its folder DIR) and add the adapter
                                 to .bdd/config.toml
 
-``apply`` never overwrites a file that exists, and refuses an adapter the project already has in that folder.
+``apply`` never overwrites a file that exists, and refuses an adapter the project already has in that folder. A template
+whose name ends in ``.template`` is written without that ending.
 ``--into`` is for a repository with several adapters, for example a backend in ``api`` and a web front end in ``web``:
 the adapter's files and its run command then live under that folder, and ``bdd run`` runs every adapter.
 """
@@ -26,6 +27,7 @@ NAME_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
 ADAPTER_FILE = "adapter.toml"
 REQUIRED = (ADAPTER_FILE, "guide.md", "templates")
 SKIPPED_PARTS = {"__pycache__", "node_modules"}      # installed tooling and caches are never part of a template
+TEMPLATE_SUFFIX = ".template"                        # dropped from a file's name when it is copied into a project
 
 
 def adapters_dir() -> Path:
@@ -87,6 +89,19 @@ def template_files(path: Path) -> list[Path]:
     return sorted(p for p in base.rglob("*") if p.is_file() and p.name != ".gitkeep" and not SKIPPED_PARTS & set(p.parts))
 
 
+def installed_name(path: Path, source: Path) -> Path:
+    """Where a template goes, relative to the project. A name ending in ``.template`` loses that ending: a file such as
+    ``packages.lock.json`` is shipped under another name, because company security tools can block a program from
+    touching a file with that name, and gets its real name only in the project that needs it."""
+    rel = source.relative_to(path / "templates")
+    return rel.with_name(rel.name.removesuffix(TEMPLATE_SUFFIX)) if rel.name != TEMPLATE_SUFFIX else rel
+
+
+def shipped(path: Path) -> list[str]:
+    """The files the adapter writes into a project, by the names they have there."""
+    return sorted(installed_name(path, p).as_posix() for p in template_files(path))
+
+
 def destination(root: Path, into: str) -> str:
     """The folder ``--into`` names, checked to be a folder inside the project (blank: the project itself)."""
     base = cfg.adapter_base({"root": into}, root / cfg.BDD_DIR / "config.toml")
@@ -107,7 +122,7 @@ def apply(root: Path, name: str, into: str = "") -> tuple[list[str], list[str]]:
         raise UsageError(f"adapter {name} is already in .bdd/config.toml" + (f" for {base}" if base else ""))
     created, kept = [], []
     for source in template_files(path):
-        rel = Path(base) / source.relative_to(path / "templates") if base else source.relative_to(path / "templates")
+        rel = Path(base) / installed_name(path, source) if base else installed_name(path, source)
         target = root / rel
         if target.exists():
             kept.append(rel.as_posix())

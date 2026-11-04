@@ -45,6 +45,7 @@ COMMANDS: dict[str, list[str]] = {
     "create feature": [*BDD, "state", "init"],
     "detect adapters": [*BDD, "init", "--detect"],
     "report": [*BDD, "report"],
+    "add the .NET adapter": [*BDD, "adapter", "apply", "dotnet-reqnroll"],
 }
 
 LIB: dict[str, str] = {}
@@ -60,6 +61,7 @@ FILES: dict[str, str] = {
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",
     "package manifest": "package.json",
     "pubspec manifest": "pubspec.yaml",
+    ".NET lock file": "tests/packages.lock.json",
 }
 
 ERRORS: dict[str, ErrorRule] = {
