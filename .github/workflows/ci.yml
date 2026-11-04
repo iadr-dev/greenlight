@@ -190,6 +190,8 @@ jobs:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: adapters/ts-cucumber-js/templates/tests/pnpm-lock.yaml
+      - name: Install the pinned tooling from the lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir adapters/ts-cucumber-js/templates/tests
       - name: Fresh scaffold runs green, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_cucumber_js.py" -v
 
