@@ -19,10 +19,11 @@ standard. Write for them with their current APIs; the project's own tools say wh
    A new project may choose pnpm instead of npm: it installs faster, shares one package store between projects, keeps a
    package from importing what it does not declare, and (from version 10) runs no dependency install script unless
    the project allows it. Say so in `.bdd/standards.md` ("Build and package tool") and commit `pnpm-lock.yaml`. The
-   tooling the adapter puts in `tests/` keeps its own `package-lock.json` and `npm ci`, so the application's choice
-   does not change how the tests are installed or checked. This is a choice for the person, not for an agent; greenlight
-   has not run its adapters with pnpm or bun, so the first run in a project that chooses one should be read. Bun is
-   faster still, but it is a different runtime, and browser tooling is less proven on it.
+   tooling the adapters put in `tests/` is installed with pnpm whatever the application uses (`pnpm install
+   --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests`; `--ignore-workspace` keeps it apart from a pnpm
+   workspace the application may have), so the application's choice does not change how the tests are installed or
+   checked. Choosing the package manager of the application is a choice for the person, not for an agent. Bun is
+   faster still, but it is a different runtime, and greenlight has not run its adapters on it; browser tooling is less proven there.
 2. Commands:
    - types: `npx tsc --noEmit` (with `"strict": true` in `tsconfig.json`)
    - lint: `npx eslint .`, with the `@typescript-eslint/no-deprecated` rule set to `error` so a deprecated API fails the check (the rule needs type information: set `languageOptions.parserOptions.projectService: true`; `tsc --noEmit` does not report deprecations by itself)

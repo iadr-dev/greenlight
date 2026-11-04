@@ -81,20 +81,35 @@ def environment_files(root: Path) -> list[Path]:
 
 # The programs a test run starts and the manifests that name their versions, relative to node_modules. Whole packages are
 # thousands of files, too many to hash on every tool call within the hook's time budget.
-NODE_ENTRY_FILES = (".package-lock.json", "@playwright/test/package.json", "@playwright/test/cli.js", "playwright/package.json",
+NODE_ENTRY_FILES = (".package-lock.json", ".pnpm/lock.yaml", "@playwright/test/package.json", "@playwright/test/cli.js", "playwright/package.json",
                     "playwright/lib/program.js", "playwright-core/package.json", "playwright-bdd/package.json",
                     "playwright-bdd/dist/cli/index.js")
 
 
+def _node_entry_copies(modules: Path, entry: str) -> list[Path]:
+    """Where an entry point is installed. npm puts every package in ``node_modules``. pnpm links only the project's own
+    dependencies there and keeps all packages, the dependencies of dependencies included (``playwright`` under
+    ``@playwright/test``), in ``node_modules/.pnpm/<name>@<version>/node_modules/<name>``. Every installed copy is watched,
+    the one at the top (a link into the store, with pnpm) and each version or peer-dependency variant in the store: which
+    of them a run loads depends on who asks for it."""
+    parts = entry.split("/")
+    name = "/".join(parts[:2] if parts[0].startswith("@") else parts[:1])
+    stored = sorted((modules / ".pnpm").glob(f"{name.replace('/', '+')}@*/node_modules/{entry}"))
+    return [modules / entry, *stored]
+
+
 def node_environment_files(root: Path) -> list[Path]:
-    """The installed node tooling next to a bound ``package.json``: npm's record of the installed tree, the entry points the
-    run starts and the manifests of the test packages. Only the entry points: the rest of the packages is guarded against
-    writes by agents and covered by the bound lockfile, not watched."""
+    """The installed node tooling next to a bound ``package.json``: the package manager's record of the installed tree (npm's
+    ``.package-lock.json``, pnpm's ``.pnpm/lock.yaml``), the entry points the run starts and the manifests of the test packages,
+    wherever the package manager put them. Only the entry points: the rest of the packages is guarded against writes by agents
+    and covered by the bound lockfile, not watched. An entry point a project does not have (the Cucumber adapter has no
+    Playwright) is not watched; one that was watched and is gone is reported as a change."""
     found: list[Path] = []
     for manifest in cfg.load(root).support_files:
         modules = manifest.parent / "node_modules"
         if manifest.name == "package.json" and modules.is_dir():
-            found += [modules / entry for entry in NODE_ENTRY_FILES]
+            for entry in NODE_ENTRY_FILES:
+                found += _node_entry_copies(modules, entry)
     return [p for p in found if p.is_file()]
 
 

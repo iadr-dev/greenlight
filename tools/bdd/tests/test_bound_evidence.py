@@ -244,13 +244,42 @@ class EnvironmentWatchTest(ProjectCase):
         names = {"tests/package.json": "{}", "tests/node_modules/.package-lock.json": "{}",
                  "tests/node_modules/@playwright/test/cli.js": "x", "tests/node_modules/@playwright/test/package.json": "{}",
                  "tests/node_modules/playwright-bdd/dist/cli/index.js": "x", "tests/node_modules/playwright-bdd/dist/other.js": "x",
-                 "tests/node_modules/left-pad/index.js": "x"}
+                 "tests/node_modules/left-pad/index.js": "x", "tests/node_modules/.pnpm/lock.yaml": "lockfileVersion: '9.0'",
+                 "tests/node_modules/.pnpm/left-pad@1.3.0/node_modules/left-pad/index.js": "x"}
         for rel, content in names.items():
             self.write(rel, content)
         watched = {p.relative_to(self.root).as_posix() for p in tripwire.node_environment_files(self.root)}
-        self.assertEqual(watched, {"tests/node_modules/.package-lock.json", "tests/node_modules/@playwright/test/cli.js",
+        self.assertEqual(watched, {"tests/node_modules/.package-lock.json", "tests/node_modules/.pnpm/lock.yaml",
+                                   "tests/node_modules/@playwright/test/cli.js",
                                    "tests/node_modules/@playwright/test/package.json",
                                    "tests/node_modules/playwright-bdd/dist/cli/index.js"})
+
+    def test_the_entry_points_pnpm_keeps_out_of_the_top_folder_are_watched_where_they_are(self):
+        """pnpm links only the project's own packages into node_modules; playwright and playwright-core sit under .pnpm, and a
+        package that is linked at the top can have other copies there (a peer-dependency variant) that are watched too."""
+        self.config(tail='support = ["tests/package.json"]\n')
+        store = "tests/node_modules/.pnpm"
+        names = {"tests/package.json": "{}", f"{store}/lock.yaml": "x",
+                 "tests/node_modules/@playwright/test/cli.js": "x", "tests/node_modules/@playwright/test/package.json": "{}",
+                 "tests/node_modules/playwright-bdd/dist/cli/index.js": "x", "tests/node_modules/playwright-bdd/package.json": "{}",
+                 f"{store}/playwright@1.64.1/node_modules/playwright/package.json": "{}",
+                 f"{store}/playwright@1.64.1/node_modules/playwright/lib/program.js": "x",
+                 f"{store}/playwright@1.64.1/node_modules/playwright/lib/other.js": "x",
+                 f"{store}/playwright-core@1.64.1/node_modules/playwright-core/package.json": "{}",
+                 f"{store}/playwright-core@1.64.1/node_modules/playwright-core/lib/other.js": "x",
+                 f"{store}/playwright-bdd@9.2.1_@playwright+test@1.64.1/node_modules/playwright-bdd/package.json": "{}",
+                 f"{store}/playwright-extra@1.0.0/node_modules/playwright-extra/package.json": "{}",
+                 f"{store}/left-pad@1.3.0/node_modules/left-pad/index.js": "x"}
+        for rel, content in names.items():
+            self.write(rel, content)
+        watched = {p.relative_to(self.root).as_posix() for p in tripwire.node_environment_files(self.root)}
+        self.assertEqual(watched, {
+            f"{store}/lock.yaml", "tests/node_modules/@playwright/test/cli.js", "tests/node_modules/@playwright/test/package.json",
+            "tests/node_modules/playwright-bdd/dist/cli/index.js", "tests/node_modules/playwright-bdd/package.json",
+            f"{store}/playwright-bdd@9.2.1_@playwright+test@1.64.1/node_modules/playwright-bdd/package.json",
+            f"{store}/playwright@1.64.1/node_modules/playwright/package.json",
+            f"{store}/playwright@1.64.1/node_modules/playwright/lib/program.js",
+            f"{store}/playwright-core@1.64.1/node_modules/playwright-core/package.json"})
 
     def test_a_project_without_node_tooling_watches_nothing_of_it(self):
         self.assertEqual(tripwire.node_environment_files(self.root), [])

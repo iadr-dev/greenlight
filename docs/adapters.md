@@ -34,8 +34,8 @@ from the first run.
   `RestoreLockedMode`), runs `dotnet test` through a small bound wrapper and lets `JunitXml.TestLogger` write the report. See
   `adapters/dotnet-reqnroll/guide.md`.
 
-- `ts-cucumber-js` puts the test code in its own package in `tests/` (`package.json` and `package-lock.json` pinned, installed
-  with `npm ci`), loads the TypeScript steps through `tsx` and lets cucumber-js's JUnit formatter write the report. It has no
+- `ts-cucumber-js` puts the test code in its own package in `tests/` (`package.json` and `pnpm-lock.yaml` pinned, installed
+  with `pnpm install --frozen-lockfile`), loads the TypeScript steps through `tsx` and lets cucumber-js's JUnit formatter write the report. It has no
   `ui` profile: a web UI is `ts-playwright-bdd`'s job, and the two can share a repository. See `adapters/ts-cucumber-js/guide.md`.
 
 - `dart-flutter-test` puts the test code in its own Dart package in `tests/` (packages pinned in `pubspec.yaml` and hashed in `pubspec.lock`,

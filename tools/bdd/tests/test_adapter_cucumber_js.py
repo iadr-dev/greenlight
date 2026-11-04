@@ -1,7 +1,7 @@
 """The ts-cucumber-js adapter: its package is complete and pinned, the scaffold is wired the way `bdd` expects, and (where Node
 is installed and the network is allowed) a fresh scaffold really runs green, every core step works and red looks like red.
 
-The structural tests run everywhere. The contract tests need Node 22 or newer, npm, package downloads and
+The structural tests run everywhere. The contract tests need Node 22 or newer, pnpm, package downloads and
 GREENLIGHT_NODE_ADAPTER_TESTS=1; the CI job for the adapter sets it.
 """
 import json
@@ -17,12 +17,14 @@ from bddlib import adapter, initcmd, state
 from bddlib import config as cfg
 
 from tests import adapter_contract_support as support
+from tests import pnpm_lock
 
 REPO = Path(__file__).resolve().parents[3]
 ADAPTER = REPO / "adapters" / "ts-cucumber-js"
 TEMPLATES = ADAPTER / "templates"
 FIXTURES = Path(__file__).parent / "fixtures" / "ts-cucumber-js"
-RUN_CONTRACT = bool(shutil.which("node") and shutil.which("npm")) and os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1"
+PNPM = shutil.which("pnpm")
+RUN_CONTRACT = bool(shutil.which("node") and PNPM) and os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1"
 
 
 class PackageTest(unittest.TestCase):
@@ -50,13 +52,16 @@ class PackageTest(unittest.TestCase):
     def test_the_test_tooling_is_pinned_and_hashed(self):
         wanted = adapter.load(ADAPTER)["requires"]["packages"]
         package = json.loads((TEMPLATES / "tests" / "package.json").read_text(encoding="utf-8"))
-        lock = json.loads((TEMPLATES / "tests" / "package-lock.json").read_text(encoding="utf-8"))
+        lock = TEMPLATES / "tests" / "pnpm-lock.yaml"
+        locked = pnpm_lock.direct_dependencies(lock)
         self.assertEqual(sorted(package["devDependencies"]), sorted(wanted))
         for name, version in package["devDependencies"].items():
             self.assertRegex(version, r"^\d+\.\d+\.\d+$", f"{name} is pinned to one version")
-            self.assertEqual(lock["packages"][f"node_modules/{name}"]["version"], version)
-        entries = [entry for key, entry in lock["packages"].items() if key]
-        self.assertTrue(entries and all(entry.get("integrity", "").startswith("sha512-") for entry in entries), "every package is hashed")
+            self.assertEqual(locked[name], (version, version))
+        self.assertRegex(package["packageManager"], r"^pnpm@\d+\.\d+\.\d+$", "the package manager is pinned to one version")
+        self.assertFalse((TEMPLATES / "tests" / "package-lock.json").exists(), "one lock file, not two")
+        hashes = pnpm_lock.integrity(lock)
+        self.assertTrue(hashes and all(h.startswith("sha512-") for h in hashes.values()), "every package is hashed")
 
     def test_every_support_file_is_shipped_and_every_step_expression_is_an_anchored_regular_expression(self):
         shipped = {p.relative_to(TEMPLATES).as_posix() for p in adapter.template_files(ADAPTER)}
@@ -87,7 +92,7 @@ class PackageTest(unittest.TestCase):
             (root / ".bdd").mkdir()
             adapter.apply(root, "ts-cucumber-js")
             bound = {p.relative_to(root).as_posix() for p in cfg.load(root).support_files}
-            self.assertEqual(bound, {"tests/cucumber.mjs", "tests/package.json", "tests/package-lock.json", "tests/tsconfig.json"})
+            self.assertEqual(bound, {"tests/cucumber.mjs", "tests/package.json", "tests/pnpm-lock.yaml", "tests/tsconfig.json"})
 
     def test_the_fixture_features_name_only_core_instructions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -102,17 +107,17 @@ class PackageTest(unittest.TestCase):
             self.assertEqual(out.count("L002"), 1, out)
 
 
-@unittest.skipUnless(RUN_CONTRACT, "needs Node, npm, package downloads and GREENLIGHT_NODE_ADAPTER_TESTS=1")
+@unittest.skipUnless(RUN_CONTRACT, "needs Node, pnpm, package downloads and GREENLIGHT_NODE_ADAPTER_TESTS=1")
 class ContractTest(support.ContractSteps, unittest.TestCase):
     ADAPTER = "ts-cucumber-js"
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        done = subprocess.run(["npm", "ci", "--ignore-scripts", "--prefix", "tests", "--no-audit", "--no-fund"], cwd=cls.root,
-                              capture_output=True, text=True, shell=os.name == "nt", timeout=600)
+        done = subprocess.run([PNPM, "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace", "--dir", "tests"],
+                              cwd=cls.root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
         if done.returncode != 0:
-            raise RuntimeError(f"npm ci failed:\n{done.stdout}\n{done.stderr}")
+            raise RuntimeError(f"pnpm install failed:\n{done.stdout}\n{done.stderr}")
 
     def use_system(self, full: bool) -> None:
         drivers, features = self.root / "tests" / "drivers", self.root / "tests" / "features"
