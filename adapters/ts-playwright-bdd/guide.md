@@ -67,7 +67,7 @@ red is proven. `bdd lock FEAT-n --scope bind --bound` locks exactly these.
 change what node loads or how Playwright behaves (`NODE_*`, `PW_*`, `PLAYWRIGHT_*`) are not passed on.
 
 **Not covered.** The packages in `tests/node_modules` are not hashed as a whole. The tripwire watches the package manager's record of the
-installed tree (`.pnpm/lock.yaml`), the entry points the run starts and the manifests of the four test packages; agents
+installed tree (`.pnpm/lock.yaml`), the entry points the run starts (found where the package manager keeps them: pnpm links only the project's own packages into `node_modules`) and the manifests of the test packages; agents
 may neither write there nor install packages (the guard refuses it, for any `node_modules` folder, as a best-effort text
 check), and the lockfile is bound. Install from the lockfile with `pnpm install --frozen-lockfile` and do not run `pnpm add` or `pnpm update` in `tests/` during
 a feature. The node
