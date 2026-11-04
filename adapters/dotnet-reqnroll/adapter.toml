@@ -7,7 +7,7 @@ files = ["*.csproj", "*.sln", "*.slnx", "global.json"]
 contains = ["Sdk", "Project", "sdk"]
 
 [requires]
-packages = ["Reqnroll.xUnit 3.3.4", "xunit 2.9.3", "JunitXml.TestLogger 8.0.0"]   # pinned in tests/GreenlightTests.csproj and tests/packages.lock.json
+packages = ["Reqnroll.xUnit 3.3.4", "xunit 2.9.3", "JunitXml.TestLogger 8.1.0"]   # pinned in tests/GreenlightTests.csproj and tests/packages.lock.json
 optional = []
 
 [paths]

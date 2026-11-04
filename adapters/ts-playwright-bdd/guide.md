@@ -155,7 +155,7 @@ in the application code installs [Stryker](https://stryker-mutator.io) itself, p
 requirement of greenlight), and adds an `[adapters.mutation]` table to `.bdd/config.toml`:
 
 ```sh
-npm install --save-dev --save-exact @stryker-mutator/core@10.0.0     # the version this wrapper was run against
+npm install --save-dev --save-exact @stryker-mutator/core@10.1.1     # the version this wrapper was run against
 ```
 
 ```toml
@@ -174,7 +174,7 @@ and writes the counts to `{out}`. It exits 0 whenever Stryker ran to the end, su
 refused, 3 that Stryker could not run. A mutant no test reached (`NoCoverage`) counts as survived, a mutant that broke
 the run for another reason (`RuntimeError`) as suspicious, and neither is a kill.
 
-Verified with Stryker 10.0.0 and Node's test runner: boundary tests killed 7 of 7 mutants of a small discount function; a
+Verified with Stryker 10.1.1 and Node's test runner: boundary tests killed 7 of 7 mutants of a small discount function; a
 test that only checked for a result killed 1 and let 6 survive. It has not been run with the browser scenarios of this
 adapter as the test command.
 

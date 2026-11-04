@@ -177,7 +177,7 @@ in the code installs [mutmut](https://github.com/boxed/mutmut) itself (a develop
 greenlight) and adds an `[adapters.mutation]` table to `.bdd/config.toml`:
 
 ```sh
-uv pip install "mutmut==3.8.0"        # the version this wrapper was run against; Linux or macOS (on Windows use WSL)
+uv pip install "mutmut==3.8.1"        # the version this wrapper was run against; Linux or macOS (on Windows use WSL)
 ```
 
 ```toml
@@ -200,7 +200,7 @@ result that is current and at or above the threshold. The format and the placeho
 `docs/adapters.md`.
 
 Verified: a weak test (`assert discount(5000) is not None`) scored 0% killed (5 survived) and failed a 70% threshold; the
-boundary tests scored 80% (4 killed, 1 survived) and passed, on Linux and macOS with mutmut 3.8.0.
+boundary tests scored 80% (4 killed, 1 survived) and passed, on Linux and macOS with mutmut 3.8.1.
 
 ### On Windows: through WSL
 
@@ -211,7 +211,7 @@ same checkout:
 wsl
 cd /mnt/c/<path to the project>
 uv venv venv     # a Linux environment beside the Windows .venv
-uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.0"
+uv pip install --python venv/bin/python -r <the project's requirements> pytest pytest-bdd "mutmut==3.8.1"
 sh /mnt/c/<path to greenlight>/tools/bdd/bdd mutate FEAT-n
 ```
 

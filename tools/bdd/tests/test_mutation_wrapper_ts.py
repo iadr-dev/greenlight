@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[3]
 WRAPPER = REPO / "adapters" / "ts-playwright-bdd" / "templates" / "tests" / "tools" / "mutate-ts.mjs"
 NODE = shutil.which("node")
 NPM = shutil.which("npm")
-STRYKER = "@stryker-mutator/core@10.0.0"
+STRYKER = "@stryker-mutator/core@10.1.1"
 REAL = os.environ.get("GREENLIGHT_NODE_MUTATION_TESTS") == "1" and NODE and NPM
 
 PROBE = """
