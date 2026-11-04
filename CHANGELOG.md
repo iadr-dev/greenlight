@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-04
+
+A patch release: the plugin installs on machines whose security tools block programs from touching a file named
+`packages.lock.json`, and the README's videos play. Nothing in the `.bdd/` file formats changed (`bdd migrate` still
+reports schema 1), and projects made with 1.1.2 keep working; a .NET project still gets `tests/packages.lock.json`.
+
 ### Fixed
 - Installing the plugin no longer trips company security tools that block programs from touching a file named `packages.lock.json`. The `dotnet-reqnroll` adapter ships its lock file as `tests/packages.lock.json.template`, and `bdd adapter apply` writes any template whose name ends in `.template` without that ending, so a .NET project still gets `tests/packages.lock.json` and its locked, hash-checked restore. Decision D57.
 - The README's two videos play. They are written as a bare `github.com/user-attachments/assets/...` URL on a line of their own, which GitHub turns into a player with a signed address. The `<video src=...>` form that 1.1.2 used keeps the unsigned address, which visitors cannot load, and GitHub also forces it muted.
