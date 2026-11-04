@@ -10,7 +10,7 @@ you use to a commit.
     cache-dependency-path: tests/go.sum
 - run: go -C tests mod download
 - run: go -C tests test -mod=readonly -count=1 -run '^TestFeatures$' . -args -bdd.tag=FEAT-007 -bdd.out "$PWD/bdd-report.xml"
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
   if: always()
   with:
     name: bdd-report
