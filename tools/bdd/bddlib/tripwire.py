@@ -89,14 +89,13 @@ NODE_ENTRY_FILES = (".package-lock.json", ".pnpm/lock.yaml", "@playwright/test/p
 def _node_entry_copies(modules: Path, entry: str) -> list[Path]:
     """Where an entry point is installed. npm puts every package in ``node_modules``. pnpm links only the project's own
     dependencies there and keeps all packages, the dependencies of dependencies included (``playwright`` under
-    ``@playwright/test``), in ``node_modules/.pnpm/<name>@<version>/node_modules/<name>``, so a path that is not at the top
-    is looked up there, in every installed version."""
-    top = modules / entry
-    if top.is_file():
-        return [top]
+    ``@playwright/test``), in ``node_modules/.pnpm/<name>@<version>/node_modules/<name>``. Every installed copy is watched,
+    the one at the top (a link into the store, with pnpm) and each version or peer-dependency variant in the store: which
+    of them a run loads depends on who asks for it."""
     parts = entry.split("/")
     name = "/".join(parts[:2] if parts[0].startswith("@") else parts[:1])
-    return sorted((modules / ".pnpm").glob(f"{name.replace('/', '+')}@*/node_modules/{entry}"))
+    stored = sorted((modules / ".pnpm").glob(f"{name.replace('/', '+')}@*/node_modules/{entry}"))
+    return [modules / entry, *stored]
 
 
 def node_environment_files(root: Path) -> list[Path]:
