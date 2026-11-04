@@ -1,7 +1,7 @@
 """The shop-web reference app, and the ts-playwright-bdd adapter proved on a real Next.js application.
 
 The app's own checks are offline. The contract tests build the app, install the pinned test tooling and drive a real
-browser, so they need node, npm and network access and run only when GREENLIGHT_NODE_ADAPTER_TESTS=1 is set (the CI job
+browser, so they need node, npm, pnpm and network access and run only when GREENLIGHT_NODE_ADAPTER_TESTS=1 is set (the CI job
 for the reference apps sets it). The combined test also needs pytest and pytest-bdd in the interpreter that runs the tests.
 """
 import contextlib
@@ -21,8 +21,8 @@ from bddlib import config as cfg
 REPO = Path(__file__).resolve().parents[3]
 APP = REPO / "evals" / "apps" / "shop-web"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "shop_web"
-NODE, NPM = shutil.which("node"), shutil.which("npm")
-RUN_NODE = os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1" and bool(NODE and NPM)
+NODE, NPM, PNPM = shutil.which("node"), shutil.which("npm"), shutil.which("pnpm")
+RUN_NODE = os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1" and bool(NODE and NPM and PNPM)
 HAVE_PYTEST = all(importlib.util.find_spec(name) for name in ("pytest", "pytest_bdd"))
 PORT = "3107"
 START = ("  webServer: { command: 'node node_modules/next/dist/bin/next start -p " + PORT + "', cwd: '..', "
@@ -42,9 +42,9 @@ def copy_app(target: Path) -> None:
 
 
 def install_tooling(app: Path, tooling: Path) -> None:
-    """The app's packages and the test tooling, each from its own lockfile, and the browser."""
+    """The app's packages (npm) and the test tooling (pnpm), each from its own lockfile, and the browser."""
     sh([NPM, "ci", "--ignore-scripts", "--no-audit", "--no-fund"], app)
-    sh([NPM, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", str(tooling)], app)
+    sh([PNPM, "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace", "--dir", str(tooling)], app)
     sh([NODE, str(tooling / "node_modules" / "@playwright" / "test" / "cli.js"), "install", "chromium"], app)
 
 
@@ -113,7 +113,7 @@ class AppTest(unittest.TestCase):
             self.assertEqual(bdd(root, "scan", "FEAT-020")[0], 0)
 
 
-@unittest.skipUnless(RUN_NODE, "needs node, npm, network and GREENLIGHT_NODE_ADAPTER_TESTS=1")
+@unittest.skipUnless(RUN_NODE, "needs node, npm, pnpm, network and GREENLIGHT_NODE_ADAPTER_TESTS=1")
 class ShopWebContractTest(unittest.TestCase):
     """The adapter scaffolded into a copy of the Next.js app: the sample and the shop's own feature run green."""
 
@@ -189,7 +189,7 @@ Feature: Totals, in the backend and on the cart page
 """
 
 
-@unittest.skipUnless(RUN_NODE and HAVE_PYTEST, "needs node, npm, network, pytest and GREENLIGHT_NODE_ADAPTER_TESTS=1")
+@unittest.skipUnless(RUN_NODE and HAVE_PYTEST, "needs node, npm, pnpm, network, pytest and GREENLIGHT_NODE_ADAPTER_TESTS=1")
 class TwoAdaptersContractTest(unittest.TestCase):
     """A backend (python-pytest-bdd in api/) and a web front end (ts-playwright-bdd in web/) in one repository."""
 

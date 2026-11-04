@@ -146,15 +146,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: adapters/ts-playwright-bdd/templates/tests/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: adapters/ts-playwright-bdd/templates/tests/package-lock.json
+          cache: pnpm
+          cache-dependency-path: adapters/ts-playwright-bdd/templates/tests/pnpm-lock.yaml
+      - name: Install the pinned tooling from the lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir adapters/ts-playwright-bdd/templates/tests
       - name: Browser system libraries (Linux), from the pinned tooling
         if: runner.os == 'Linux'
         run: |
-          npm ci --ignore-scripts --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: Fresh scaffold runs green in a browser, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_playwright_bdd.py" -v
@@ -178,11 +182,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: adapters/ts-cucumber-js/templates/tests/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: adapters/ts-cucumber-js/templates/tests/package-lock.json
+          cache: pnpm
+          cache-dependency-path: adapters/ts-cucumber-js/templates/tests/pnpm-lock.yaml
       - name: Fresh scaffold runs green, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_cucumber_js.py" -v
 
@@ -483,24 +490,26 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       - name: Install the Python adapter's requirements (pinned, hashed, wheels only)
         run: uv pip install --system --require-hashes --no-build -r requirements-dev.txt
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: adapters/ts-playwright-bdd/templates/tests/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: |
-            evals/apps/shop-web/package-lock.json
-            adapters/ts-playwright-bdd/templates/tests/package-lock.json
+          cache-dependency-path: evals/apps/shop-web/package-lock.json
+      - name: Install the pinned test tooling from the lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir adapters/ts-playwright-bdd/templates/tests
       - name: Browser downloads, cached by the pinned tooling
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/ms-playwright
             ~/AppData/Local/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('adapters/ts-playwright-bdd/templates/tests/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('adapters/ts-playwright-bdd/templates/tests/pnpm-lock.yaml') }}
       - name: Browser system libraries (Linux), from the pinned tooling
         if: runner.os == 'Linux'
         run: |
-          npm ci --ignore-scripts --prefix adapters/ts-playwright-bdd/templates/tests --no-audit --no-fund
           sudo node adapters/ts-playwright-bdd/templates/tests/node_modules/@playwright/test/cli.js install-deps chromium
       - name: The app builds and its own checks pass
         working-directory: evals/apps/shop-web

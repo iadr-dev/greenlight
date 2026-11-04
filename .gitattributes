@@ -11,3 +11,7 @@ go.sum text eol=lf
 *.csproj text eol=lf
 packages.lock.json text eol=lf
 nuget.config text eol=lf
+packages.lock.json.template text eol=lf
+
+# Node adapter tooling: pnpm checks its lock file and writes it with LF endings on every OS.
+pnpm-lock.yaml text eol=lf

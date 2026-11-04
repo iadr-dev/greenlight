@@ -24,3 +24,23 @@ Feature: Adding an adapter writes its files under the names the project needs
         + tests/packages.lock.json
           + tests/run_dotnet.py
         """
+
+  @R-105.2
+  Rule: The Node adapters pin their tooling with pnpm
+
+    @EX-105.2.1
+    Scenario: The Node adapter brings a pnpm lock file
+      Given the input file project config contains:
+        """
+        # greenlight project settings
+        """
+      When alice runs add the Node adapter
+      Then the command succeeds
+      And the output file Node lock file contains:
+        """
+        lockfileVersion
+        """
+      And the stdout output contains:
+        """
+        + tests/pnpm-lock.yaml
+        """

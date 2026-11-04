@@ -1,6 +1,6 @@
 """The ts-playwright-bdd adapter: its package is complete and its settings sort failures the way the red gate needs.
 
-The contract tests run a real browser. They need node, npm and network access (they install the pinned tooling from
+The contract tests run a real browser. They need node, pnpm and network access (they install the pinned tooling from
 the adapter's lockfile), so they run only when GREENLIGHT_NODE_ADAPTER_TESTS=1 is set; the CI job for the adapter sets it.
 """
 import contextlib
@@ -16,12 +16,14 @@ from pathlib import Path
 from bddlib import adapter, classify, cli, initcmd, junit, state
 from bddlib import config as cfg
 
+from tests import pnpm_lock
+
 REPO = Path(__file__).resolve().parents[3]
 ADAPTER = REPO / "adapters" / "ts-playwright-bdd"
 TOOLING = ADAPTER / "templates" / "tests"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "ts_playwright"
-NODE, NPM = shutil.which("node"), shutil.which("npm")
-RUN_CONTRACT = os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1" and bool(NODE and NPM)
+NODE, PNPM = shutil.which("node"), shutil.which("pnpm")
+RUN_CONTRACT = os.environ.get("GREENLIGHT_NODE_ADAPTER_TESTS") == "1" and bool(NODE and PNPM)
 
 
 def rules_of(path: Path) -> cfg.RunRules:
@@ -45,11 +47,17 @@ class PackageTest(unittest.TestCase):
 
     def test_the_tooling_is_pinned_exactly_and_the_lockfile_agrees(self):
         package = json.loads((TOOLING / "package.json").read_text(encoding="utf-8"))
-        locked = json.loads((TOOLING / "package-lock.json").read_text(encoding="utf-8"))["packages"][""]
-        self.assertEqual(package["devDependencies"], locked["devDependencies"])
+        locked = pnpm_lock.direct_dependencies(TOOLING / "pnpm-lock.yaml")
+        self.assertEqual(sorted(package["devDependencies"]), sorted(locked))
         for name, version in package["devDependencies"].items():
             with self.subTest(package=name):
                 self.assertRegex(version, r"^\d+\.\d+\.\d+$", "a range lets a different version in")
+                self.assertEqual(locked[name][0], version)
+                self.assertTrue(locked[name][1].startswith(version), "the version that was locked is the one that was asked for")
+        self.assertRegex(package["packageManager"], r"^pnpm@\d+\.\d+\.\d+$", "the package manager is pinned to one version")
+        self.assertFalse((TOOLING / "package-lock.json").exists(), "one lock file, not two")
+        hashes = pnpm_lock.integrity(TOOLING / "pnpm-lock.yaml")
+        self.assertTrue(hashes and all(h.startswith("sha512-") for h in hashes.values()), "every package is hashed")
 
     def test_failures_are_sorted_the_way_the_red_gate_needs(self):
         rules = [rules_of(ADAPTER)]
@@ -98,7 +106,7 @@ class PackageTest(unittest.TestCase):
             adapter.apply(root, "ts-playwright-bdd")
             bound = {p.relative_to(root).as_posix() for p in cfg.load(root).support_files}
             self.assertEqual(bound, {"tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "tests/tsconfig.json",
-                                     "tests/package.json", "tests/package-lock.json", "tests/tools/mutate-ts.mjs"})
+                                     "tests/package.json", "tests/pnpm-lock.yaml", "tests/tools/mutate-ts.mjs"})
 
 
 class FixtureFeaturesTest(unittest.TestCase):
@@ -119,7 +127,7 @@ class FixtureFeaturesTest(unittest.TestCase):
                 os.chdir(here)
 
 
-@unittest.skipUnless(RUN_CONTRACT, "needs node, npm, network and GREENLIGHT_NODE_ADAPTER_TESTS=1")
+@unittest.skipUnless(RUN_CONTRACT, "needs node, pnpm, network and GREENLIGHT_NODE_ADAPTER_TESTS=1")
 class ContractTest(unittest.TestCase):
     """A fresh scaffold in a real browser: the sample is green, every core step works, failures look like red."""
 
@@ -141,7 +149,7 @@ class ContractTest(unittest.TestCase):
 
     @classmethod
     def install_tooling(cls):
-        for command in ([NPM, "ci", "--ignore-scripts", "--prefix", "tests", "--no-audit", "--no-fund"],
+        for command in ([PNPM, "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace", "--dir", "tests"],
                         [NODE, "tests/node_modules/@playwright/test/cli.js", "install", "chromium"]):
             done = subprocess.run(command, cwd=cls.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if done.returncode != 0:
@@ -194,7 +202,7 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(self.bdd("classify", "FEAT-011", "--expect", "red")[0], 1)
 
     def test_5_the_drivers_and_steps_type_check(self):
-        done = subprocess.run([NPM, "run", "typecheck", "--prefix", "tests"], cwd=self.root, capture_output=True, text=True,
+        done = subprocess.run([PNPM, "--dir", "tests", "run", "typecheck"], cwd=self.root, capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 

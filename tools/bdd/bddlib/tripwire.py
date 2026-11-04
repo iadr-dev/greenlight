@@ -81,14 +81,14 @@ def environment_files(root: Path) -> list[Path]:
 
 # The programs a test run starts and the manifests that name their versions, relative to node_modules. Whole packages are
 # thousands of files, too many to hash on every tool call within the hook's time budget.
-NODE_ENTRY_FILES = (".package-lock.json", "@playwright/test/package.json", "@playwright/test/cli.js", "playwright/package.json",
+NODE_ENTRY_FILES = (".package-lock.json", ".pnpm/lock.yaml", "@playwright/test/package.json", "@playwright/test/cli.js", "playwright/package.json",
                     "playwright/lib/program.js", "playwright-core/package.json", "playwright-bdd/package.json",
                     "playwright-bdd/dist/cli/index.js")
 
 
 def node_environment_files(root: Path) -> list[Path]:
-    """The installed node tooling next to a bound ``package.json``: npm's record of the installed tree, the entry points the
-    run starts and the manifests of the test packages. Only the entry points: the rest of the packages is guarded against
+    """The installed node tooling next to a bound ``package.json``: the package manager's record of the installed tree (npm's
+    ``.package-lock.json``, pnpm's ``.pnpm/lock.yaml``), the entry points the run starts and the manifests of the test packages. Only the entry points: the rest of the packages is guarded against
     writes by agents and covered by the bound lockfile, not watched."""
     found: list[Path] = []
     for manifest in cfg.load(root).support_files:

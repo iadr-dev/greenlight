@@ -244,11 +244,13 @@ class EnvironmentWatchTest(ProjectCase):
         names = {"tests/package.json": "{}", "tests/node_modules/.package-lock.json": "{}",
                  "tests/node_modules/@playwright/test/cli.js": "x", "tests/node_modules/@playwright/test/package.json": "{}",
                  "tests/node_modules/playwright-bdd/dist/cli/index.js": "x", "tests/node_modules/playwright-bdd/dist/other.js": "x",
-                 "tests/node_modules/left-pad/index.js": "x"}
+                 "tests/node_modules/left-pad/index.js": "x", "tests/node_modules/.pnpm/lock.yaml": "lockfileVersion: '9.0'",
+                 "tests/node_modules/.pnpm/left-pad@1.3.0/node_modules/left-pad/index.js": "x"}
         for rel, content in names.items():
             self.write(rel, content)
         watched = {p.relative_to(self.root).as_posix() for p in tripwire.node_environment_files(self.root)}
-        self.assertEqual(watched, {"tests/node_modules/.package-lock.json", "tests/node_modules/@playwright/test/cli.js",
+        self.assertEqual(watched, {"tests/node_modules/.package-lock.json", "tests/node_modules/.pnpm/lock.yaml",
+                                   "tests/node_modules/@playwright/test/cli.js",
                                    "tests/node_modules/@playwright/test/package.json",
                                    "tests/node_modules/playwright-bdd/dist/cli/index.js"})
 

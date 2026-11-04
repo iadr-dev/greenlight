@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The Node adapters (`ts-cucumber-js` and `ts-playwright-bdd`) install and pin their test tooling with pnpm instead of npm. `tests/pnpm-lock.yaml` replaces `tests/package-lock.json` as the bound lock file, `tests/package.json` names the pnpm version in `packageManager`, and the install is `pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests`. The CI templates in the adapters set up pnpm with a pinned `pnpm/action-setup`. The tripwire also watches pnpm's record of the installed tree (`node_modules/.pnpm/lock.yaml`). A project that already has these adapters keeps working with the lock file it has until it copies the new `tests/package.json` and `tests/pnpm-lock.yaml`; `bdd adapter apply` never overwrites a file. pnpm 12 or newer is needed on the machine and in CI. Decision D58, platform note P42.
+
 ## [1.1.3] - 2026-11-04
 
 A patch release: the plugin installs on machines whose security tools block programs from touching a file named

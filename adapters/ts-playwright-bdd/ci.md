@@ -1,16 +1,19 @@
 # Running the scenarios in CI
 
-The CI job installs the test tooling from the lockfile (`npm ci`), downloads the browser that matches the pinned
+The CI job installs the test tooling from the lockfile (`pnpm install --frozen-lockfile`), downloads the browser that matches the pinned
 Playwright version, and runs the suite the same way `bdd run` does. Pin the actions you use to a commit (the version is in
 the comment).
 
 ```yaml
+- uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+  with:
+    package_json_file: tests/package.json
 - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
   with:
     node-version: "22"
-    cache: npm
-    cache-dependency-path: tests/package-lock.json
-- run: npm ci --ignore-scripts --prefix tests
+    cache: pnpm
+    cache-dependency-path: tests/pnpm-lock.yaml
+- run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests
 - run: node tests/node_modules/@playwright/test/cli.js install --with-deps chromium
 - run: node tests/run.mjs --tag FEAT-007 --out bdd-report.xml
 - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

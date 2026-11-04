@@ -46,6 +46,7 @@ COMMANDS: dict[str, list[str]] = {
     "detect adapters": [*BDD, "init", "--detect"],
     "report": [*BDD, "report"],
     "add the .NET adapter": [*BDD, "adapter", "apply", "dotnet-reqnroll"],
+    "add the Node adapter": [*BDD, "adapter", "apply", "ts-cucumber-js"],
 }
 
 LIB: dict[str, str] = {}
@@ -62,6 +63,7 @@ FILES: dict[str, str] = {
     "package manifest": "package.json",
     "pubspec manifest": "pubspec.yaml",
     ".NET lock file": "tests/packages.lock.json",
+    "Node lock file": "tests/pnpm-lock.yaml",
 }
 
 ERRORS: dict[str, ErrorRule] = {

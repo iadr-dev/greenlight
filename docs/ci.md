@@ -12,7 +12,7 @@ Each adapter ships a complete GitHub Actions workflow. Copy it to `.github/workf
 | Adapter | Workflow |
 |---|---|
 | `python-pytest-bdd` | `adapters/python-pytest-bdd/ci/github-actions.yml` (uv installs the project and pytest into a `.venv`) |
-| `ts-playwright-bdd` | `adapters/ts-playwright-bdd/ci/github-actions.yml` (`npm ci` from the lockfile and the matching browser) |
+| `ts-playwright-bdd` | `adapters/ts-playwright-bdd/ci/github-actions.yml` (`pnpm install --frozen-lockfile` from the lockfile and the matching browser) |
 | `generic-junit` | `adapters/generic-junit/ci/github-actions.yml` (you add your runner's toolchain) |
 
 Every action in them is pinned to a commit, with its version in a comment, and the job asks for read access only. Update

@@ -23,13 +23,13 @@ newer.
 | `tests/drivers/operations.ts` | logical name → API route, command line, library function, file, error | step-engineer, from `system.md` |
 | `tests/drivers/*.ts` (the rest) | the world of a scenario, the clock, the stubs, the network block, comparison helpers | nobody |
 | `tests/cucumber.mjs` | the cucumber-js settings: where features and steps are | nobody |
-| `tests/package.json`, `tests/package-lock.json`, `tests/tsconfig.json` | the pinned test tooling | the person |
+| `tests/package.json`, `tests/pnpm-lock.yaml`, `tests/tsconfig.json` | the pinned test tooling | the person |
 
 ## Setting up
 
 ```sh
-npm ci --ignore-scripts --prefix tests      # installs the pinned tooling from the lockfile
-npm run typecheck --prefix tests            # optional: tsc over the steps and drivers
+pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests   # installs the pinned tooling from the lockfile
+pnpm --dir tests run typecheck                                                  # optional: tsc over the steps and drivers
 ```
 
 To test your own code, import it from `operations.ts` and `system.ts` with a relative path (`../../src/orders`), or add
@@ -56,7 +56,7 @@ A scenario must fail for the right reason before any production code exists:
 ## What is bound
 
 The bind lock covers `tests/steps/`, `tests/drivers/` and the plumbing files: `tests/cucumber.mjs`, `tests/package.json`,
-`tests/package-lock.json` and `tests/tsconfig.json`. A change to any of them makes a recorded run stale.
+`tests/pnpm-lock.yaml` and `tests/tsconfig.json`. A change to any of them makes a recorded run stale.
 
 The run is `node --import ./tests/node_modules/tsx/dist/loader.mjs tests/node_modules/@cucumber/cucumber/bin/cucumber.js
 --config tests/cucumber.mjs --tags @FEAT-n --format junit:REPORT`, started without a shell. `NODE_*` (for example

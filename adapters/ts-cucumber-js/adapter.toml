@@ -7,14 +7,14 @@ files = ["package.json"]
 contains = ["@cucumber/cucumber", "express", "fastify", "koa", "@nestjs", "hono", "commander", "yargs", "\"bin\""]
 
 [requires]
-packages = ["@cucumber/cucumber", "tsx", "typescript", "@types/node"]   # pinned in tests/package.json and tests/package-lock.json
+packages = ["@cucumber/cucumber", "tsx", "typescript", "@types/node"]   # pinned in tests/package.json and tests/pnpm-lock.yaml
 optional = []
 
 [paths]
 features = "tests/features"
 steps = "tests/steps"
 drivers = "tests/drivers"
-support = ["tests/cucumber.mjs", "tests/package.json", "tests/package-lock.json", "tests/tsconfig.json"]
+support = ["tests/cucumber.mjs", "tests/package.json", "tests/pnpm-lock.yaml", "tests/tsconfig.json"]
 
 [run]
 # cucumber-js runs from the test tooling in tests/node_modules (installed with `npm ci --prefix tests`), loads the TypeScript

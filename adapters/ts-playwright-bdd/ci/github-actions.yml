@@ -27,16 +27,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"     # runs the bdd command line only
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: tests/package.json     # its packageManager field names the pnpm version
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: tests/package-lock.json
+          cache: pnpm
+          cache-dependency-path: tests/pnpm-lock.yaml
       - name: Get greenlight
         run: git clone --depth 1 --branch "$GREENLIGHT_REF" https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
       - name: Install the test tooling from the lockfile and the browser that matches it
         run: |
-          npm ci --ignore-scripts --prefix tests --no-audit --no-fund
+          pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests
           node tests/node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Feature files follow the vocabulary
         run: |
