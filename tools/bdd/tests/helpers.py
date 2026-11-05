@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import approvals, claudepaths, enforcement, gates, lockfile, route, state
+from bddlib import approvals, claudepaths, docsrecord, enforcement, gates, lockfile, route, state
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 RULES = "# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n"
@@ -58,6 +58,7 @@ class ProjectCase(unittest.TestCase):
         real run, unless ``reviews`` is False."""
         if name == "implement" and result == "pass" and reviews:
             self.write_reviews()
+            self.write_docs()
         return gates.record_gate(self.root, self.feature_dir, name, result, detail or {}, red)
 
     def approve(self, gate: str, grade: str = "self-reported", decision: str = "approve", **extra) -> dict:
@@ -80,6 +81,11 @@ class ProjectCase(unittest.TestCase):
             if step == last:
                 return
         raise ValueError(f"unknown pipeline step {last}")
+
+    def write_docs(self) -> None:
+        """A record that every routed task calls no library, as the orchestrator leaves them before the implement gate."""
+        for found in route.routes(self.root, self.feature_dir, "FEAT-007"):
+            docsrecord.add(self.root, self.feature_dir, "FEAT-007", found.task, None, None, None, "this test calls no library")
 
     def write_reviews(self, verdict: str = "PASS") -> None:
         """A report from every reviewer the routing names, as the orchestrator leaves them before the implement gate."""

@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, againstred, approvals, classify, design, enforcement, featurefiles, lockfile, mutation, quality, route, runner, stability, state, store, tripwire, workspace
+from . import adopt, againstred, approvals, classify, design, docsrecord, enforcement, featurefiles, lockfile, mutation, quality, route, runner, stability, state, store, tripwire, workspace
 from . import config as cfg
 from .errors import StoreError, UsageError
 
@@ -163,6 +163,8 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     if gate in ("implement", "verify") and data.get("kind") != "adopt":      # the code of an adoption already exists: not judged
         problems += quality.problems(root, data["feature"])
         problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")))
+        if gate == "implement":
+            problems += docsrecord.problems(root, feature_dir, data["feature"])
     if gate == "verify":
         if data.get("kind") != "adopt":             # an adopted feature has no red to measure a change from
             problems += mutation.problems(root, data["feature"])

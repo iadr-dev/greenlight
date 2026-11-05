@@ -84,8 +84,10 @@ start the writer it names with the task id, the cards it lists and the commit of
 table; then start each reviewer it names with the same task id, cards and commit. A report with must-fix items goes
 back to the writer with the report's path, then the reviewer runs again; after two rounds a must-fix that is left goes
 in the final report under *Findings* and you move on. When the application can be started for a UI task, start it
-before the `ui-reviewer` and give it the address; when it cannot, say so in its task. Put the routing (`bdd route`'s
-output) and each review's verdict in the report.
+before the `ui-reviewer` and give it the address; when it cannot, say so in its task. Record what each writer says it read with `bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE`
+(or `--none "reason"`); the implement gate refuses a task with no record, and a source that is neither an https address nor
+a file that exists is refused. Put the routing (`bdd route`'s output), the documentation records and each review's
+verdict in the report.
 
 Rules for the loop:
 

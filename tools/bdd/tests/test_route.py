@@ -133,6 +133,7 @@ class GateTest(RouteCase):
 
     def test_with_every_review_in_place_the_gate_passes(self):
         self.write_reviews(verdict="FINDINGS")              # must-fix items left are for the auditor (Q6), not a gate deadlock
+        self.write_docs()
         self.assertEqual(self.problems(), [])
         self.gate("implement", reviews=False)
         self.assertEqual(self.data()["phase"], "verify")

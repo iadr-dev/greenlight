@@ -29,7 +29,9 @@ Per task, in order:
    scenario. The change flow unlocks, edits, gets approval and re-locks.
 4. Use the current API of every library you call, from its current documentation (the installed package's own docs and
    types, or a documentation tool such as context7 or Microsoft Learn when one is available), and fix a deprecation warning instead of
-   silencing it. Do not upgrade a toolchain or dependency and do not add one; return the question.
+   silencing it. Say in your return which documentation you read for each task (see *Return* of your agent file): the
+   orchestrator records it with `bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE`, or
+   `--none "reason"` for a task that calls no library, and the implement gate refuses a task with neither. Do not upgrade a toolchain or dependency and do not add one; return the question.
    When the code touches an API or a database, read the matching cards first: `api-design`, `database-schema`,
    `database-migrations`, `database-performance`, `database-engines`. Load related records together instead of
    one query per record, bound every result, and write a migration that can be undone. Do not edit a migration that
@@ -71,7 +73,7 @@ Production code. Nothing under the test directories.
 ## Gate
 
 The spec and bind locks must still be intact (`bdd lock FEAT-n --check --require`), no integrity violation
-may be open (`bdd status`), and every review `bdd route FEAT-n` asks for must be in `reviews/` with a verdict. When the project configured quality checks (`[adapters.quality.NAME]` in `.bdd/config.toml`),
+may be open (`bdd status`), every review `bdd route FEAT-n` asks for must be in `reviews/` with a verdict, and every task must have a documentation record (`bdd docs FEAT-n --list`). When the project configured quality checks (`[adapters.quality.NAME]` in `.bdd/config.toml`),
 the orchestrator runs `bdd check FEAT-n` after your last change and the result must pass and be current.
 
 ```sh

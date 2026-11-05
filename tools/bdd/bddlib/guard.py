@@ -66,7 +66,7 @@ AGENT_WRITES = {
 # gets: it may never write the feature files or the steps, whichever tests are locked yet.
 FOREIGN_AGENT = "another agent"
 FOREIGN_WRITES = {"data", "production"}
-MANAGED_NAMES = {"state.json", "lock.json", sharedvocab.LOCK_NAME}
+MANAGED_NAMES = {"state.json", "lock.json", "docs-consulted.json", sharedvocab.LOCK_NAME}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person

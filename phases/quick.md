@@ -18,7 +18,8 @@ For a change of one rule that touches one behaviour. The gates are the same; the
 3. Bind and run: `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, lock the bound files and record the bind
    gate with `--record-red`. Skip `system.md` and `tasks.md`: pass those gates with `--detail quick=true`.
 4. Implement, `bdd run FEAT-n`; then the reviews `bdd route FEAT-n` names for the whole feature (task `T-n.0`, since
-   the quick path has no `tasks.md`); then `bdd gate FEAT-n implement --result pass`.
+   the quick path has no `tasks.md`); then the documentation record (`bdd docs FEAT-n --task T-n.0 --library NAME --version V --source URL_OR_FILE`, or
+   `--none "reason"`); then `bdd gate FEAT-n implement --result pass`.
 5. Verify with the checklist items that apply and a short `report.md`.
 
 ## What does not change
