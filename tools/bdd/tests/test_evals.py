@@ -195,6 +195,18 @@ class HarnessHelpersTest(unittest.TestCase):
         self.assertEqual((merged["session_id"], merged["result"], merged["exit"]), ("s1", "ok", 0))
         self.assertEqual(run_e2e.tokens_reported(merged), 150)
 
+    def test_the_web_requests_install_the_adapters_tooling_the_way_the_adapter_ships_it(self):
+        """The web adapter pins its tooling with pnpm (D58); a harness that still ran `npm ci` there would fail at set-up."""
+        tooling = REPO / "adapters" / "ts-playwright-bdd" / "templates" / "tests"
+        self.assertTrue((tooling / "pnpm-lock.yaml").is_file())
+        self.assertFalse((tooling / "package-lock.json").exists())
+        self.assertEqual(run_e2e.PNPM_TOOLING[:3], ["pnpm", "install", "--frozen-lockfile"])
+        for name, kind in run_e2e.REQUEST_KINDS.items():
+            if kind["adapter"] == "ts-playwright-bdd":
+                with self.subTest(request=name):
+                    self.assertIn("pnpm", kind["tools"])
+        self.assertNotIn('"npm", *NPM_CI[1:], "--prefix", "tests"', (REPO / "evals" / "run_e2e.py").read_text(encoding="utf-8"))
+
     def test_the_waiting_command_is_found_in_the_status_text(self):
         self.assertEqual(run_e2e.WAITING.search("the person: /greenlight:approve FEAT-002 examples").groups(), ("FEAT-002", "examples"))
         self.assertIsNone(run_e2e.WAITING.search("the bind phase"))
