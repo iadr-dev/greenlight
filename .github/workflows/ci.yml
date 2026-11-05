@@ -436,16 +436,19 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: evals/apps/money-lib/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: evals/apps/money-lib/package-lock.json
+          cache: pnpm
+          cache-dependency-path: evals/apps/money-lib/pnpm-lock.yaml
       - name: Install from the lockfile and test the app
         working-directory: evals/apps/money-lib
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm test
+          pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
+          pnpm test
 
   adapter-generic-junit:
     name: adapter contract (generic-junit on the reference apps, ${{ matrix.os }})
@@ -466,6 +469,9 @@ jobs:
         with:
           go-version: "1.26"                 # gotestsum v1.13.0 needs Go 1.24 or newer; v1.12.1 does not build on 1.25+
           cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
+        with:
+          package_json_file: evals/apps/money-lib/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
@@ -498,8 +504,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: evals/apps/shop-web/package-lock.json
+          cache: pnpm
+          cache-dependency-path: |
+            evals/apps/shop-web/pnpm-lock.yaml
+            adapters/ts-playwright-bdd/templates/tests/pnpm-lock.yaml
       - name: Install the pinned test tooling from the lockfile
         run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir adapters/ts-playwright-bdd/templates/tests
       - name: Browser downloads, cached by the pinned tooling
@@ -516,8 +524,8 @@ jobs:
       - name: The app builds and its own checks pass
         working-directory: evals/apps/shop-web
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm test
-          npm run build
+          pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
+          pnpm test
+          pnpm run build
       - name: The adapter works on the real app, and a backend plus the web front end run as one feature
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_shop_web.py" -v

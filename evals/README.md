@@ -28,9 +28,9 @@ valid green, and git sees no production file touched (`adoption.production_files
 | `money-convert` | `evals/apps/money-lib` (TypeScript) | `generic-junit` | lib | `feature` |
 
 The table is `REQUEST_KINDS` in `run_e2e.py`. For the two `generic-junit` apps the harness acts as the person after
-`bdd init`: it writes the app's own run line into `.bdd/config.toml` (`go run gotest.tools/gotestsum` for Go, an npm script
-around `node --test` for TypeScript) and removes the sample. They need Go, or Node and npm, on PATH instead of `uv` (the two web requests also need pnpm, which installs the web adapter's test tooling), and the
-baseline arm runs the app's own tests (`go test ./...`, `npm test`).
+`bdd init`: it writes the app's own run line into `.bdd/config.toml` (`go run gotest.tools/gotestsum` for Go, a pnpm script
+around `node --test` for TypeScript) and removes the sample. They need Go, or Node and pnpm, on PATH instead of `uv` (pnpm installs the two apps and the web adapter's test tooling), and the
+baseline arm runs the app's own tests (`go test ./...`, `pnpm test`).
 
 Each app has its engineering standards in `evals/apps/<app>/standards.md`: filled in from the app's real stack by the
 person running the evaluation. After `bdd init` the harness, acting as that person, puts it in place of greenlight's

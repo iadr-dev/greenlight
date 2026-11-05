@@ -1,7 +1,7 @@
 """The generic-junit adapter on the two reference apps, with each app's own runner.
 
 money-lib runs node's built-in test runner (compiled TypeScript), csv-tool runs `go test` through gotestsum. Both need
-their toolchain and the network (`npm ci`, the Go module proxy), so they run only when GREENLIGHT_APP_ADAPTER_TESTS=1 is
+their toolchain and the network (`pnpm install`, the Go module proxy), so they run only when GREENLIGHT_APP_ADAPTER_TESTS=1 is
 set and the tool is on PATH; the CI jobs of the reference apps set it. The check: scaffold the adapter into a copy of the
 app, swap the run line the way the evaluation harness does, and prove that a missing seam is a valid red and a working
 one a valid green, through `bdd run` and `bdd classify` and nothing else."""
@@ -269,8 +269,8 @@ func TestFEAT_001_RefusesAnEmptyFile(t *testing.T) {
 """
 
 
-@unittest.skipUnless(ENABLED and shutil.which("node") and shutil.which("npm"),
-                     "needs node, npm, network and GREENLIGHT_APP_ADAPTER_TESTS=1")
+@unittest.skipUnless(ENABLED and shutil.which("node") and shutil.which("pnpm"),
+                     "needs node, pnpm, network and GREENLIGHT_APP_ADAPTER_TESTS=1")
 class MoneyLibTest(AppCase, unittest.TestCase):
     request = "money-convert"
     red_steps = ("tests/steps/counting.test.ts", NODE_RED)
@@ -279,8 +279,8 @@ class MoneyLibTest(AppCase, unittest.TestCase):
     @classmethod
     def prepare_app(cls):
         import subprocess
-        done = subprocess.run([shutil.which("npm"), "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=cls.root,
-                              capture_output=True, text=True)
+        done = subprocess.run([shutil.which("pnpm"), "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace"], cwd=cls.root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
         if done.returncode != 0:
             raise RuntimeError(done.stdout + done.stderr)
 

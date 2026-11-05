@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The two reference apps (`evals/apps/money-lib` and `evals/apps/shop-web`) are installed and run with pnpm like the adapters' tooling: `pnpm-lock.yaml` and a pinned `packageManager` replace `package-lock.json`, and the CI jobs, the evaluation harness (installs, baselines, the money-lib run line, the web server start) and the tests that use them follow.
+
 ### Fixed
 - The evaluation harness (`evals/run_e2e.py`) installed the web adapter's test tooling with `npm ci`, which stopped working when 1.2.0 moved that tooling to pnpm (no `package-lock.json` any more), so the two web requests (`minimum-order`, `login-return`) failed at set-up. The harness now installs it with pnpm like the adapter's own guide, and checks for `pnpm` on the PATH. CI does not run the harness, so nothing caught it.
 

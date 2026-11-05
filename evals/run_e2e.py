@@ -35,7 +35,7 @@ hashed before and after the run, and a change is listed in the row (`host_change
 name a file outside the run's project and its private folders is marked `contaminated` and kept out of the targets in the
 summary table, which lists it apart.
 
-Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool), Node and npm (money-lib, shop-web) and, for the web requests, pnpm (the adapter's test tooling), working credentials, and some money: a run makes many model calls. Not
+Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool), Node and pnpm (money-lib, shop-web and the web adapter's test tooling), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
@@ -77,9 +77,9 @@ MAX_FOLLOW_UPS = 6
 # installed from its lockfile, gets the adapter's test tooling and a browser, and has its server started by the bound
 # configuration (see set_up_web).
 WEB_PORT = "3107"
-NPM_CI = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
-# The web adapter pins its test tooling with pnpm (D58); the reference apps themselves are installed with npm.
-PNPM_TOOLING = ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace", "--dir", "tests"]
+# pnpm everywhere (D58): the web adapter's pinned test tooling, and the two reference apps themselves.
+PNPM_APP = ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace"]
+PNPM_TOOLING = [*PNPM_APP, "--dir", "tests"]
 PYTEST = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 REQUEST_KINDS = {
     "discounts": {"app": "shop-api", "skill": "feature", "adapter": "python-pytest-bdd", "tools": ("uv",),
@@ -93,18 +93,18 @@ REQUEST_KINDS = {
                            ["tests/run_junit.py", "go.mod"],
                            # go test takes the last -run, so the scenario's own test (named without spaces) narrows it
                            {"shuffle": "--add=-shuffle={seed}", "isolated": "--add=-run=(?i)^Test{marker}_{scenario:alnum}$"})},
-    "money-convert": {"app": "money-lib", "skill": "feature", "adapter": "generic-junit", "tools": ("node", "npm"),
-                      "baseline": ["npm", "test", "--silent"],
+    "money-convert": {"app": "money-lib", "skill": "feature", "adapter": "generic-junit", "tools": ("node", "pnpm"),
+                      "baseline": ["pnpm", "--silent", "test"],
                       "run": ("{python} -I tests/run_junit.py --reports node-report.xml --command "
-                              "\"npm run bdd --silent -- {marker}_ dist/tests/**/*.test.js\"",
-                              ["tests/run_junit.py", "package.json", "package-lock.json", "tsconfig.json"],
+                              "\"pnpm --silent run bdd {marker}_ dist/tests/**/*.test.js\"",
+                              ["tests/run_junit.py", "package.json", "pnpm-lock.yaml", "tsconfig.json"],
                               # node:test of Node 22 has no random order, and a second name pattern widens the first
                               # instead of narrowing it, so this stack has neither; `bdd run --shuffle` says so
                               {})},
-    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm", "pnpm"),
-                      "baseline": ["npm", "test"]},
-    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm", "pnpm"),
-                     "baseline": ["npm", "test"]},
+    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "pnpm"),
+                      "baseline": ["pnpm", "test"]},
+    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "pnpm"),
+                     "baseline": ["pnpm", "test"]},
 }
 
 # The model and the request are chosen from fixed tables, so nothing typed on the command line reaches a command.
@@ -209,7 +209,7 @@ def build_project(tmp: Path, kind: dict) -> tuple[Path, dict, str]:
     if kind["adapter"] != "python-pytest-bdd":                      # the app brings its own runner; bdd runs under this Python
         env = base_environment(tmp)
         if kind["app"] in ("money-lib", "shop-web"):
-            run([shutil.which("npm") or "npm", *NPM_CI[1:]], project, env, timeout=900)
+            run([shutil.which("pnpm") or "pnpm", *PNPM_APP[1:]], project, env, timeout=900)
         return project, env, sys.executable
     venv = tmp / ".venv"
     run(["uv", "venv", "--python", "3.12", str(venv)], tmp, os.environ.copy())
@@ -259,7 +259,7 @@ def swap_run_line(project: Path, kind: dict) -> None:
         (project / sample).unlink(missing_ok=True)
 
 
-WEB_SERVER = ("  webServer: { command: 'npm run build && node node_modules/next/dist/bin/next start -p " + WEB_PORT + "', cwd: '..', "
+WEB_SERVER = ("  webServer: { command: 'pnpm run build && node node_modules/next/dist/bin/next start -p " + WEB_PORT + "', cwd: '..', "
               "url: 'http://127.0.0.1:" + WEB_PORT + "/login', reuseExistingServer: false, timeout: 240_000, "
               "env: { SHOP_TEST_ENDPOINTS: '1' } },")
 WEB_SERVER_COMMENT = "  // webServer: { command: 'npm start', url: 'http://localhost:3000', reuseExistingServer: false },"
