@@ -61,12 +61,15 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     old = current(REPO)
     new = patch_after(old)
+    if not SEMVER.match(new):
+        raise SystemExit(f"{new!r} is not MAJOR.MINOR.PATCH")
     log = REPO / "CHANGELOG.md"
     release_log = changelog(log.read_text(encoding="utf-8"), new, datetime.date.today())
     if args.write:
         for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "tools/bdd/bddlib/__init__.py"):
-            stamp(REPO / rel, old, new, True)
+            stamp(REPO / rel, old, new)
         for path in sorted(REPO.glob("adapters/*/ci/github-actions.yml")) + sorted(REPO.glob("adapters/*/ci.md")):
+            path = inside(path)
             text = path.read_text(encoding="utf-8")
             if CLONE.search(text):
                 path.write_text(CLONE.sub(lambda m: f"{m.group(1)}{new}", text), encoding="utf-8", newline="\n")

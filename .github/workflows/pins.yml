@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Move the pinned language versions
-        run: python tools/pins/bump.py --write --summary "$RUNNER_TEMP/summary.md"
+        run: python tools/pins/bump.py --write | tee "$RUNNER_TEMP/summary.md"
       - name: Open the pull request and let it merge itself when CI passes
         run: |
           if git diff --quiet; then echo "Every pinned language version is current."; exit 0; fi

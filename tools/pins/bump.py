@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move the language versions named in the workflows and the adapters' CI templates to the newest supported release.
 
-    python tools/pins/bump.py [--write] [--summary FILE]
+    python tools/pins/bump.py [--write]
 
 Without ``--write`` it only prints what it would change. The target of a product is the newest release cycle on
 https://endoflife.date that has been out for 30 days and is not at its end of life; for a product that has long-term-support cycles
@@ -121,7 +121,6 @@ def log_entry(root: Path, changes: list[str]) -> None:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Move the pinned language versions to the newest supported release.")
     ap.add_argument("--write", action="store_true", help="change the files (default: only print)")
-    ap.add_argument("--summary", help="write the summary of the change to this file")
     args = ap.parse_args(argv)
     texts, changes, skipped = plan(check.REPO, check.fetch_json, datetime.date.today())
     text = summary(changes, skipped)
@@ -131,8 +130,6 @@ def main(argv: list[str]) -> int:
             path.write_text(new, encoding="utf-8", newline="")
         if changes:
             log_entry(check.REPO, changes)
-    if args.summary and changes:
-        Path(args.summary).write_text(text + "\n", encoding="utf-8")
     return 0
 
 
