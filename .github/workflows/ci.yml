@@ -529,3 +529,21 @@ jobs:
           pnpm run build
       - name: The adapter works on the real app, and a backend plus the web front end run as one feature
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_shop_web.py" -v
+
+  # The one check a branch rule needs: it passes when every job above passed, so a new job never has to be added to the rule.
+  all-checks:
+    if: ${{ always() }}
+    needs: [unit, coverage, adapter-python-pytest-bdd, reference-app-legacy-billing, mutation-wrapper, adapter-ts-playwright-bdd,
+            adapter-ts-cucumber-js, adapter-dart-flutter-test, adapter-go-godog, adapter-dotnet-reqnroll,
+            adapter-java-cucumber-spring, adapter-kotlin-android, adapter-kotlin-android-agp, language-card-rust,
+            language-card-swift, language-card-kotlin, reference-app-csv-tool, reference-app-money-lib,
+            adapter-generic-junit, reference-app-shop-web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*|*" skipped "*) exit 1 ;; esac

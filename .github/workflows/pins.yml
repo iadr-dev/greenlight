@@ -1,6 +1,7 @@
 name: Pinned versions
 
-# Weekly: the runtimes and actions that Dependabot does not see, kept as one issue (tools/pins/check.py, D62).
+# Weekly: the runtimes and actions that Dependabot does not see, kept as one issue (tools/pins/check.py, D62), and the
+# language versions moved to the newest supported release in a pull request that merges itself when every CI job passes.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -28,3 +29,35 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
         run: python tools/pins/check.py --issue
+
+  language-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.PINS_TOKEN }}
+      BRANCH: pins/language-versions
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          token: ${{ secrets.PINS_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Move the pinned language versions
+        run: python tools/pins/bump.py --write --summary "$RUNNER_TEMP/summary.md"
+      - name: Open the pull request and let it merge itself when CI passes
+        run: |
+          if git diff --quiet; then echo "Every pinned language version is current."; exit 0; fi
+          git config user.name "greenlight-pins"
+          git config user.email "greenlight-pins@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit -a -q -m "Pinned language versions: newest supported release"
+          git push -q --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')" ]; then
+            { echo "The language versions the workflows and the adapters' CI templates pin, moved to the newest supported release (an LTS one where the language has them, out for at least 30 days). Made by tools/pins/bump.py (D62)."; echo; cat "$RUNNER_TEMP/summary.md"; echo; echo "Merges itself when every CI job passes; a failure leaves this pull request open for a person."; } > "$RUNNER_TEMP/body.md"
+            gh pr create --head "$BRANCH" --base main --title "Pinned language versions: newest supported release" --body-file "$RUNNER_TEMP/body.md"
+          fi
+          gh pr merge "$BRANCH" --auto --squash --delete-branch

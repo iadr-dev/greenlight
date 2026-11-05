@@ -1,0 +1,67 @@
+name: Release
+
+# A merged update of the pinned language versions is released by itself as a patch version (D62): a pull request that
+# prepares it (tools/pins/release.py) merges itself when CI passes, and the merge of a "Release x.y.z" pull request, made by
+# this workflow or by a person, is tagged and published.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ startsWith(github.event.head_commit.message, 'Pinned language versions') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.PINS_TOKEN }}
+      BRANCH: release/next
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          token: ${{ secrets.PINS_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Prepare the release and let its pull request merge itself when CI passes
+        run: |
+          version="$(python tools/pins/release.py --write)"
+          git config user.name "greenlight-pins"
+          git config user.email "greenlight-pins@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit -a -q -m "Release $version"
+          git push -q --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')" ]; then
+            gh pr create --head "$BRANCH" --base main --title "Release $version"               --body "Patch release $version, prepared by tools/pins/release.py after the pinned language versions were updated (D62). Merges itself when every CI job passes; the merge is tagged and published by the release workflow."
+          fi
+          gh pr merge "$BRANCH" --auto --squash --delete-branch
+
+  publish:
+    if: ${{ startsWith(github.event.head_commit.message, 'Release ') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: true
+      - name: Tag the version and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")"
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then echo "$tag exists"; exit 0; fi
+          awk -v head="## [$version]" 'index($0, head) == 1 { found = 1; next } found && /^## \[/ { exit } found' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || echo "See CHANGELOG.md" > "$RUNNER_TEMP/notes.md"
+          git tag "$tag"
+          git push origin "$tag"
+          gh release create "$tag" --title "greenlight $version" --notes-file "$RUNNER_TEMP/notes.md" --latest
