@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-05
+
+A patch release made by the update automation: the language versions the workflows and the adapters' CI templates pin were brought up to date.
+
 ### Changed
 - Pinned language versions moved to the newest supported release by the update automation: eclipse-temurin 21 -> 25; go 1.26 -> 1.27; nodejs 22 -> 26; python 3.12 -> 3.14; python 3.13 -> 3.14. The adapters' CI templates and guides name the new versions; their own CI proved them (D62).
 
