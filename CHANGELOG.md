@@ -7,6 +7,7 @@ versions follow [SemVer](https://semver.org/).
 
 ### Added
 - The evaluation harness takes `--plugin-ref` (a tag, branch or commit of this repository, default the last commit) to choose the plugin version the plugin arm loads, so two versions can be compared on the same request by the same harness (`--plugin-ref v1.2.0` against the current one). The name is checked so git cannot read it as an option, and the rows record `plugin_ref` and the resolved commit.
+- Update automation (D62): `.github/dependabot.yml` for the workflow actions, dev tooling, pnpm packages and Go modules, and `tools/pins/check.py` with a weekly `pins` workflow that keeps one issue about what Dependabot cannot see: language versions near end of life (endoflife.date), actions pinned in the adapters' CI templates, and the .NET adapter's NuGet packages. Pins held back on purpose are listed with their reason in `tools/pins/accepted.toml`.
 
 ### Fixed
 - The evaluation harness started programs by their bare name, which does not work for `pnpm` and `npm` on Windows (they are `.cmd` shims), so the baseline arm of every request that uses them stopped with "file not found" after the model had already run and been paid for. The harness now looks each program up on the run's `PATH`.

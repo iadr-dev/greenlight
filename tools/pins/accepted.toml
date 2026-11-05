@@ -1,0 +1,7 @@
+# Pins that are behind on purpose, each with the reason. An entry applies to exactly the version named in `pinned`: when
+# the pin changes the item is reported again. Remove an entry when its reason no longer holds.
+
+[[accepted]]
+what = "xunit.runner.visualstudio"
+pinned = "3.1.5"
+reason = "Reqnroll.xUnit 3.x is built on xunit v2 (2.9.3), which this template stays on; runner 4.x only adds xunit v3 support."
