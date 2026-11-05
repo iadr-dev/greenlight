@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Pinned language versions moved to the newest supported release by the update automation: eclipse-temurin 21 -> 25; go 1.26 -> 1.27; nodejs 22 -> 26; python 3.12 -> 3.14; python 3.13 -> 3.14. The adapters' CI templates and guides name the new versions; their own CI proved them (D62).
+
+### Changed
 - The language-version bump (D62) leaves alone a pin whose line carries the comment `pins: hold - reason`. The Kotlin language card's Java 21 is held: the pinned detekt 1.23 accepts a JVM target up to 22, and the first automatic bump to Java 25 failed that job and no other.
 
 ### Added

@@ -10,7 +10,7 @@ the comment).
     package_json_file: tests/package.json
 - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
   with:
-    node-version: "22"
+    node-version: "26"
     cache: pnpm
     cache-dependency-path: tests/pnpm-lock.yaml
 - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests
