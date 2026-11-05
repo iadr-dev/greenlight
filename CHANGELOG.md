@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The evaluation harness started programs by their bare name, which does not work for `pnpm` and `npm` on Windows (they are `.cmd` shims), so the baseline arm of every request that uses them stopped with "file not found" after the model had already run and been paid for. The harness now looks each program up on the run's `PATH`.
+
 ### Changed
 - The two reference apps (`evals/apps/money-lib` and `evals/apps/shop-web`) are installed and run with pnpm like the adapters' tooling: `pnpm-lock.yaml` and a pinned `packageManager` replace `package-lock.json`, and the CI jobs, the evaluation harness (installs, baselines, the money-lib run line, the web server start) and the tests that use them follow.
 
