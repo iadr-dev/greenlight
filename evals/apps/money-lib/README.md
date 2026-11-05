@@ -5,8 +5,8 @@ greenlight end to end with the `generic-junit` adapter and the `lib` profile. It
 evaluation adds it.
 
 ```sh
-npm ci
-npm test
+pnpm install --frozen-lockfile
+pnpm test
 ```
 
 The feature request to try on it is in `evals/requests/money-convert.md`.

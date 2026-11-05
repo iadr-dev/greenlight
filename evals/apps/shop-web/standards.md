@@ -10,7 +10,7 @@ auditor until it is.
 ## Language and toolchain
 
 - Language and version: JavaScript (ES modules, JSX), on Node.js 20.9 or newer (`engines`).
-- Build and package tool: npm with the committed `package-lock.json`; `npm ci` is run by the person, never by an agent.
+- Build and package tool: pnpm with the committed `pnpm-lock.yaml`; `pnpm install --frozen-lockfile` is run by the person, never by an agent.
 - Frameworks: Next.js 16.4 with the app router, React 19.3 (pinned in `package.json`).
 - Project type: existing. Its conventions are kept unless this file says otherwise.
 
@@ -55,7 +55,7 @@ auditor until it is.
 
 ## Quality rules
 
-- Build: `npm run build` must succeed with no errors and no warnings from the project's own code. [tool]
+- Build: `pnpm run build` must succeed with no errors and no warnings from the project's own code. [tool]
 - Every behaviour change has a scenario; a bug fix has a regression scenario or unit test that fails without the fix. [review]
 - Test layers: the unit tests in `test/` (rules without a server) and the greenlight scenarios in `tests/`, which drive a real browser against the built app; both are deterministic and independent of order. [review]
 - Coverage: not measured; every rule must have its scenarios (`bdd trace`). [review]

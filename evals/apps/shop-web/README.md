@@ -4,10 +4,10 @@ A tiny Next.js shop used to evaluate greenlight on a web front end: a catalogue,
 BDD setup on purpose; the evaluation adds it (`bdd init --adapter ts-playwright-bdd`).
 
 ```sh
-npm ci
-npm test            # the shop's rules, without a server
-npm run build
-npm start           # http://localhost:3000
+pnpm install --frozen-lockfile
+pnpm test           # the shop's rules, without a server
+pnpm run build
+pnpm start          # http://localhost:3000
 ```
 
 | Page | What it does |

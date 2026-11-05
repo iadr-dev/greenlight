@@ -10,7 +10,7 @@ auditor until it is.
 ## Language and toolchain
 
 - Language and version: TypeScript 5.7 (pinned in `package.json`), compiled to ES2022 modules (`NodeNext`), on Node.js 22 or newer (`engines`).
-- Build and package tool: npm with the committed `package-lock.json`; `npm ci` is run by the person, never by an agent.
+- Build and package tool: pnpm with the committed `pnpm-lock.yaml`; `pnpm install --frozen-lockfile` is run by the person, never by an agent.
 - Frameworks: none; the library uses only the language and Node's standard library. Tests use Node's own test runner (`node:test`).
 - Project type: existing. The library is one module, `src/money.ts`; its conventions are kept unless this file says otherwise.
 
