@@ -57,6 +57,25 @@ class AddTest(DocsCase):
             self.assertIn("the source must be an https address or a file that exists", str(refused.exception))
         self.assertEqual(docsrecord.entries(self.feature_dir), [])
 
+    def test_a_version_file_is_not_documentation_wherever_it_is_and_however_it_is_written(self):
+        """An evaluation run cited node_modules/next/package.json as the documentation of Next.js; it only names a version."""
+        self.write("node_modules/next/package.json", "{}")
+        for source in ("node_modules/next/package.json", "package.json", "pnpm-lock.yaml", "go.mod", "requirements-dev.txt",
+                       "https://github.com/vercel/next.js/blob/canary/package.json", "C:\\app\\Cargo.toml", "x/Foo.csproj",
+                       "poetry.lock", "PACKAGE.JSON", "https://example.com/pom.xml?raw=1"):
+            with self.subTest(source=source), self.assertRaises(UsageError) as refused:
+                self.add(source=source)
+            self.assertIn("a version file is not documentation", str(refused.exception))
+        self.assertEqual(docsrecord.entries(self.feature_dir), [])
+
+    def test_the_documentation_of_a_package_and_an_ordinary_page_are_accepted(self):
+        self.write("node_modules/next/README.md", "# next\n")
+        self.write("node_modules/next/types/index.d.ts", "export {}\n")
+        for source in ("node_modules/next/README.md", "node_modules/next/types/index.d.ts", "docs/lib.md",
+                       "https://nextjs.org/docs/app/api-reference", "https://docs.python.org/3/library/json.html"):
+            with self.subTest(source=source):
+                self.add(source=source)
+
     def test_a_record_needs_all_three_and_a_task_of_the_feature(self):
         for missing in ("library", "version", "source"):
             with self.subTest(missing=missing), self.assertRaises(UsageError):
