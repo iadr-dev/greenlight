@@ -56,7 +56,10 @@ class WhoTest(RouteCase):
     def test_the_same_files_always_give_the_same_routing(self):
         self.spec_with(UI_SCENARIO, CLI_SCENARIO)
         self.tasks("## T-007.1 Both\nCovers: EX-007.1.1, EX-007.2.1\n")
-        self.assertEqual(route.routes(self.root, self.feature_dir, "FEAT-007"), route.routes(self.root, self.feature_dir, "FEAT-007"))
+        first = route.routes(self.root, self.feature_dir, "FEAT-007")
+        second = route.routes(self.root, self.feature_dir, "FEAT-007")
+        self.assertEqual(first, second)
+        self.assertEqual(first[0].reviewers, ["code-reviewer", "ui-reviewer"])
 
     def test_a_signed_in_actor_in_the_background_makes_it_a_security_task(self):
         self.spec_with(CLI_SCENARIO, background="\n  Background:\n    Given alice is signed in as admin\n")
