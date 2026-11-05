@@ -109,6 +109,59 @@ Feature: The documentation a task was written from is on record
         the source must be an https address or a file that exists
         """
 
+    @EX-108.1.3
+    Scenario: A version file is not documentation
+      Given the input file project config contains:
+        """
+        [[adapters]]
+        name = "x"
+        features = "features"
+        steps = "steps"
+        """
+      And the input file feature file contains:
+        """
+        @FEAT-007
+        Feature: Discounts
+
+          @R-007.1
+          Rule: Orders of 1000 or more get 10% off
+
+            @EX-007.1.1
+            Scenario: A big order
+              When alice runs export discounts
+              Then the command succeeds
+        """
+      And the input file rules contains:
+        """
+        R-007.1 Orders of 1000 or more get 10% off.
+        """
+      And the input file tasks contains:
+        """
+        ## T-007.1 Discounts
+
+        Covers: EX-007.1.1
+        """
+      And the input file package manifest contains:
+        """
+        {"dependencies": {"next": "16.4.5"}}
+        """
+      When alice runs docs with:
+        | key | value        |
+        | arg | FEAT-007     |
+        | arg | --task       |
+        | arg | T-007.1      |
+        | arg | --library    |
+        | arg | next         |
+        | arg | --version    |
+        | arg | 16.4.5       |
+        | arg | --source     |
+        | arg | package.json |
+      Then the command fails with usage error
+      And the stderr output contains:
+        """
+        a version file is not documentation
+        """
+
   @R-108.2
   Rule: A task that calls no library says so, with a reason
 

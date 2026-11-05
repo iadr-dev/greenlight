@@ -23,6 +23,13 @@ from . import route, store
 from .errors import StoreError, UsageError
 
 RECORD = "docs-consulted.json"
+# Files that name a version or a dependency and say nothing about how a library is used: no source for a record.
+VERSION_FILES = re.compile(
+    r"(?i)^(?:package(?:-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|npm-shrinkwrap\.json|bun\.lockb?|pyproject\.toml|"
+    r"requirements[\w.-]*\.(?:txt|in)|poetry\.lock|uv\.lock|pipfile(?:\.lock)?|setup\.(?:py|cfg)|go\.(?:mod|sum)|"
+    r"cargo\.(?:toml|lock)|pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|libs\.versions\.toml|"
+    r"gemfile(?:\.lock)?|composer\.(?:json|lock)|pubspec\.(?:yaml|lock)|package\.swift|packages\.lock\.json|"
+    r"[\w.-]+\.(?:csproj|fsproj|vbproj|sln)|[\w.-]+\.lock)$")
 TASK = re.compile(r"T-\d+\.\d+")
 MIN_REASON = 8
 
@@ -40,6 +47,9 @@ def entries(feature_dir: Path) -> list[dict]:
 
 def source_problem(root: Path, source: str) -> str | None:
     """Why ``source`` is not something a reader can open, or None when it is an https address or an existing file."""
+    if VERSION_FILES.match(Path(source.split("?", 1)[0].replace("\\", "/")).name):
+        return ("a version file is not documentation: give the library's documentation page, or a file of the installed "
+                "package that documents it (its README, docs folder or type definitions)")
     if re.fullmatch(r"https://[^\s/]+\.[^\s/]+\S*", source):
         return None
     target = Path(source)

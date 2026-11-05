@@ -9,6 +9,9 @@ versions follow [SemVer](https://semver.org/).
 - The evaluation harness started programs by their bare name, which does not work for `pnpm` and `npm` on Windows (they are `.cmd` shims), so the baseline arm of every request that uses them stopped with "file not found" after the model had already run and been paid for. The harness now looks each program up on the run's `PATH`.
 
 ### Changed
+- `bdd docs` refuses a version or dependency file (a `package.json`, a lock file, `go.mod`, `pyproject.toml`, `pom.xml`, a project file and the like) as the source of a documentation record. The first end-to-end run recorded `node_modules/next/package.json` as the documentation of Next.js; it only names a version. The source is now an https address or a file of the installed package that documents it (its README, docs or type definitions).
+
+### Changed
 - The two reference apps (`evals/apps/money-lib` and `evals/apps/shop-web`) are installed and run with pnpm like the adapters' tooling: `pnpm-lock.yaml` and a pinned `packageManager` replace `package-lock.json`, and the CI jobs, the evaluation harness (installs, baselines, the money-lib run line, the web server start) and the tests that use them follow.
 
 ### Fixed
