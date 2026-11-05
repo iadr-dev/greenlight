@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -62,10 +63,10 @@ def changelog(text: str, version: str, today: datetime.date) -> str:
 
 def inside(path: Path) -> Path:
     """``path`` when it is a file of this repository, else the run stops."""
-    resolved = path.resolve()
-    if not resolved.is_relative_to(REPO):
+    resolved = os.path.realpath(path)
+    if not resolved.startswith(os.path.realpath(REPO) + os.sep):
         raise SystemExit(f"{path} is outside the repository")
-    return resolved
+    return Path(resolved)
 
 
 def stamp(path: Path, old: str, new: str) -> None:
