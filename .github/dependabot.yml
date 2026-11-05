@@ -1,5 +1,7 @@
 # Updates for the packages and actions this repository pins. The runtimes' versions, the actions in the adapters' CI
-# templates and the .NET adapter's packages are not seen here; tools/pins/check.py reports those (D62).
+# templates and the .NET adapter's packages are not seen here; tools/pins/check.py reports those (D62). The dev tooling
+# (requirements-dev.txt) is left out on purpose: it is compiled with `uv pip compile --universal` for every platform,
+# and Dependabot's compile drops the Windows-only and other-platform packages, which broke the Windows jobs.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -10,14 +12,6 @@ updates:
     labels: ["dependencies"]
     commit-message:
       prefix: "CI"
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    labels: ["dependencies"]
-    commit-message:
-      prefix: "Dev tooling"
   - package-ecosystem: "npm"
     directory: "/adapters/ts-cucumber-js/templates/tests"
     schedule:

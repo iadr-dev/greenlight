@@ -7,6 +7,7 @@ versions follow [SemVer](https://semver.org/).
 
 ### Added
 - The evaluation harness takes `--plugin-ref` (a tag, branch or commit of this repository, default the last commit) to choose the plugin version the plugin arm loads, so two versions can be compared on the same request by the same harness (`--plugin-ref v1.2.0` against the current one). The name is checked so git cannot read it as an option, and the rows record `plugin_ref` and the resolved commit.
+- The language versions the workflows and the adapters' CI templates pin are moved to the newest supported release by the update automation (D62): the weekly `pins` workflow opens a pull request (`tools/pins/bump.py`: newest supported cycle, a long-term-support one where there are any, out for 30 days, only upwards), the pull request merges itself when the new required check `all-checks` passes, and the merge is released as the next patch version by `release.yml` (`tools/pins/release.py`). A failing job leaves the pull request open for a person.
 - Update automation (D62): `.github/dependabot.yml` for the workflow actions, dev tooling, pnpm packages and Go modules, and `tools/pins/check.py` with a weekly `pins` workflow that keeps one issue about what Dependabot cannot see: language versions near end of life (endoflife.date), actions pinned in the adapters' CI templates, and the .NET adapter's NuGet packages. Pins held back on purpose are listed with their reason in `tools/pins/accepted.toml`.
 
 ### Fixed
