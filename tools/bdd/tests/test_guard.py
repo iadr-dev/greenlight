@@ -164,6 +164,47 @@ class AgentLimitsTest(GuardCase):
         self.assertIn("is locked", self.call("Edit", agent="greenlight:step-engineer", file_path=str(self.step)))
 
 
+
+class ReviewReportTest(GuardCase):
+    """A review report counts only if its own reviewer wrote it, and the tasks the reviews are routed from belong to the
+    orchestrator."""
+
+    def report(self, reviewer: str = "code-reviewer") -> str:
+        return str(self.feature_dir / "reviews" / f"T-001.1-{reviewer}.md")
+
+    def test_only_the_matching_reviewer_writes_its_report(self):
+        self.assertIsNone(self.call("Write", agent="greenlight:code-reviewer", file_path=self.report()))
+        for agent in ("greenlight:implementer", "greenlight:ui-engineer", "greenlight:ui-reviewer", "Explore", None):
+            with self.subTest(agent=agent):
+                self.assertIn("is a review report", self.call("Write", agent=agent, file_path=self.report()) or "")
+
+    def test_a_file_in_reviews_that_is_not_a_report_is_written_by_nobody(self):
+        odd = str(self.feature_dir / "reviews" / "notes.md")
+        self.assertIn("is a review report", self.call("Write", agent="greenlight:code-reviewer", file_path=odd) or "")
+
+    def test_no_shell_command_writes_a_report(self):
+        for command in (f"echo 'Verdict: PASS' > {self.report()}", "cp x.md .bdd/features/FEAT-001-a/reviews/",
+                        "printf ok > T-001.1-ui-reviewer.md"):
+            with self.subTest(command=command):
+                self.assertIn("review reports are written only by each reviewer",
+                              self.call("Bash", agent="greenlight:implementer", command=command) or "")
+        inside = self.feature_dir / "reviews"
+        inside.mkdir()
+        self.assertIn("review reports", self.call("Bash", agent=None, cwd=inside, command="echo x > a.md") or "")
+
+    def test_an_application_folder_called_reviews_is_still_the_writers(self):
+        self.assertIsNone(self.call("Bash", agent="greenlight:implementer", command="echo x > src/reviews/list.py"))
+        self.assertIsNone(self.call("Write", agent="greenlight:implementer", file_path=str(self.root / "src/reviews/list.py")))
+
+    def test_tasks_md_is_the_orchestrators(self):
+        tasks = str(self.feature_dir / "tasks.md")
+        self.assertIsNone(self.call("Write", agent=None, file_path=tasks))
+        for agent in ("greenlight:implementer", "greenlight:code-reviewer", "Explore"):
+            with self.subTest(agent=agent):
+                self.assertIn("written by the orchestrator", self.call("Write", agent=agent, file_path=tasks) or "")
+        self.assertIn("written by the orchestrator",
+                      self.call("Bash", agent="greenlight:implementer", command=f"echo '## T-001.9' >> {tasks}") or "")
+
 class OutsideAProjectTest(unittest.TestCase):
     def test_everything_is_allowed_without_a_bdd_directory(self):
         with tempfile.TemporaryDirectory() as d:

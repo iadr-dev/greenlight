@@ -84,6 +84,14 @@ class WhoTest(RouteCase):
         self.tasks("## T-007.3 Checkout\nCovers: EX-007.3.1\n")
         self.assertEqual(self.routes()["T-007.3"].writer, "ui-engineer")
 
+    def test_examples_no_task_claims_are_still_routed_and_reviewed(self):
+        self.spec_with(UI_SCENARIO, CLI_SCENARIO)
+        self.tasks("## T-007.2 Export\nCovers: EX-007.2.1\n")         # the screen example left out of every task
+        found = self.routes()
+        self.assertEqual((found["T-007.0"].title, found["T-007.0"].writer), ("the examples no task claims", "ui-engineer"))
+        self.tasks("# Tasks\n")                                          # an empty list is the whole feature
+        self.assertEqual(list(self.routes()), ["T-007.0"])
+
     def test_without_tasks_md_the_whole_feature_is_one_task(self):
         self.spec_with(UI_SCENARIO, CLI_SCENARIO)
         (only,) = route.routes(self.root, self.feature_dir, "FEAT-007")
@@ -118,6 +126,19 @@ class GateTest(RouteCase):
         self.assertEqual(self.problems(), [])
         self.gate("implement", reviews=False)
         self.assertEqual(self.data()["phase"], "verify")
+
+    def test_where_the_hooks_run_a_report_counts_only_if_its_reviewer_ran(self):
+        from bddlib import agentcost
+        self.write_reviews()
+        reasons = route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True)
+        self.assertEqual(len(reasons), 2)
+        self.assertIn("no ui-reviewer agent ran for FEAT-007", " ".join(reasons))
+        path = agentcost.agents_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps({"agent_id": f"a{i}", "agent": f"greenlight:{who}", "feature": "FEAT-007",
+                                            "phase": "implement"}) + "\n" for i, who in enumerate(("code-reviewer", "ui-reviewer"))),
+                        encoding="utf-8")
+        self.assertEqual(route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True), [])
 
     def test_deleting_tasks_md_does_not_skip_the_reviews(self):
         (self.feature_dir / "tasks.md").unlink()

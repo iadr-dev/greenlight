@@ -26,12 +26,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import config as cfg
-from . import featurefiles, gherkin, store, trace, vocabulary
+from . import featurefiles, gherkin, roles, store, trace, vocabulary
 from .errors import StoreError, UsageError
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 PRACTICES = PLUGIN_ROOT / "cards" / "practices"
-REVIEWS_DIR = "reviews"
+REVIEWS_DIR = roles.REVIEWS_DIR
 VERDICT = re.compile(r"^\s*Verdict:\s*(PASS|FINDINGS)\b", re.IGNORECASE | re.MULTILINE)
 
 UI_STEPS = ("C.UI.", "C.STATE.GLOBAL", "C.STATE.VERIFY")
@@ -46,8 +46,7 @@ SECURITY_WORDS = re.compile(
     r"personal data|email address|phone number|date of birth|address)\b", re.IGNORECASE)
 CARDS = {"ui": ("ui-design", "accessibility"), "api": ("api-design",),
          "data": ("database-schema", "database-performance"), "security": ("security",)}
-WRITERS = ("implementer", "ui-engineer")
-REVIEWERS = ("code-reviewer", "security-reviewer", "ui-reviewer")
+WRITERS, REVIEWERS = roles.WRITERS, roles.REVIEWERS
 
 
 @dataclass
@@ -97,9 +96,12 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
     vocab = vocabulary.load(config.vocabulary_file)
     rules = trace.read_ids(feature_dir / "rules.md", trace.RULE_LINE) or {}
     scenarios = _scenarios_by_example(root, feature_id)
-    tasks = trace.read_tasks(feature_dir / "tasks.md")
-    if tasks is None:                  # the quick path writes no tasks: the whole feature is one task, routed and reviewed
-        tasks = {whole_feature_task(feature_id): {"title": "the whole feature", "examples": sorted(scenarios, key=trace._sort_key)}}
+    tasks = trace.read_tasks(feature_dir / "tasks.md") or {}
+    claimed = {example for task in tasks.values() for example in task["examples"]}
+    unclaimed = sorted((e for e in scenarios if e not in claimed), key=trace._sort_key)
+    if unclaimed or not tasks:         # no tasks.md (the quick path), an empty one, or examples no task claims: still routed
+        title = "the whole feature" if not tasks else "the examples no task claims"
+        tasks[whole_feature_task(feature_id)] = {"title": title, "examples": unclaimed}
     out: list[Route] = []
     for task_id, task in tasks.items():
         ids: list[str] = []
@@ -134,9 +136,20 @@ def review_path(feature_dir: Path, task_id: str, reviewer: str) -> Path:
     return feature_dir / REVIEWS_DIR / f"{task_id}-{reviewer}.md"
 
 
-def review_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
-    """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict."""
+def reviewers_that_ran(root: Path, feature_id: str) -> set[str]:
+    """The reviewers Claude Code reported as finished for this feature during the implement phase (from the plugin's
+    SubagentStop hook, in a folder no agent may write)."""
+    from . import agentcost                                 # light at hook time: only the gate needs it
+    return {str(e.get("agent", ""))[len(agentcost.PLUGIN_AGENT_PREFIX):] for e in agentcost.read_entries(root)
+            if e.get("feature") == feature_id and e.get("phase") == "implement"
+            and str(e.get("agent", "")).startswith(agentcost.PLUGIN_AGENT_PREFIX)}
+
+
+def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False) -> list[str]:
+    """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
+    hooks run, the reviewer it names never ran for this feature."""
     problems: list[str] = []
+    ran = reviewers_that_ran(root, feature_id) if hooks_seen else set()
     for route in routes(root, feature_dir, feature_id):
         for reviewer in route.reviewers:
             path = review_path(feature_dir, route.task, reviewer)
@@ -145,6 +158,9 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]
                 problems.append(f"{route.task} has no {reviewer} report ({rel})")
             elif not VERDICT.search(path.read_text(encoding="utf-8-sig")):
                 problems.append(f"{rel} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line")
+            elif hooks_seen and reviewer not in ran:
+                problems.append(f"{rel} exists, but no {reviewer} agent ran for {feature_id} in the implement phase; "
+                                "a report counts only when the reviewer wrote it")
     return problems
 
 

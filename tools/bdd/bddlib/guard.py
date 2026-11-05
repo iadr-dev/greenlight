@@ -39,7 +39,7 @@ from pathlib import Path
 
 from . import claudepaths, codexsession
 from . import config as cfg
-from . import enforcement, lockfile, sharedvocab, store
+from . import enforcement, lockfile, roles, sharedvocab, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -363,12 +363,46 @@ def agent_name(payload: dict) -> str | None:
     return name if name in AGENT_WRITES else FOREIGN_AGENT
 
 
+REVIEW_FILE = re.compile(r"T-\d+\.\d+-(?P<reviewer>[a-z-]+)\.md")
+
+
+def review_owner(project: Project, path: Path) -> str | None:
+    """For a file in a feature's ``reviews/`` folder, the reviewer that alone may write it (an empty string when the name
+    is not a review report, which nobody may write); None for any other file."""
+    parts = Path(project.relative(path)).parts
+    if len(parts) < 5 or parts[0] != cfg.BDD_DIR or parts[1] != "features" or parts[3] != roles.REVIEWS_DIR:
+        return None
+    match = REVIEW_FILE.fullmatch(parts[-1]) if len(parts) == 5 else None
+    return match.group("reviewer") if match and match.group("reviewer") in roles.REVIEWERS else ""
+
+
+def in_reviews(project: Project, cwd: Path | None) -> bool:
+    """Is the working directory of the call a feature's reviews/ folder (or below it)?"""
+    if cwd is None:
+        return False
+    key, base = path_key(cwd), path_key(project.root / cfg.BDD_DIR / "features")
+    return key.startswith(base + "/") and f"/{roles.REVIEWS_DIR}" in key[len(base):]
+
+
+def is_tasks_file(project: Project, path: Path) -> bool:
+    parts = Path(project.relative(path)).parts
+    return len(parts) == 4 and parts[0] == cfg.BDD_DIR and parts[1] == "features" and parts[3] == "tasks.md"
+
+
 def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
     if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
+    owner = review_owner(project, path)
+    if owner is not None and agent != owner:
+        return (f"greenlight: {project.relative(path)} is a review report; only "
+                + (f"the {owner} agent writes it, as its own review" if owner else "a reviewer writes one, named <task>-<reviewer>.md")
+                + ". A writer, the orchestrator or another agent may not write or change it.")
+    if agent is not None and is_tasks_file(project, path):
+        return (f"greenlight: {project.relative(path)} is written by the orchestrator; an agent may not change the tasks, "
+                "because the reviews are routed from them.")
     protected = check_enforcement_files(path)
     if not protected and any(_CODEX_STATE.search(spelling.replace("\\", "/"))       # as written, and with links followed
                              for spelling in (path.as_posix(), os.path.realpath(path))):
@@ -652,6 +686,15 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     if command_touches_enforcement(scrubbed):
         return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
                                    "(Claude Code hook settings or the plugin itself)")
+    for reading in shell_readings(scrubbed):
+        text = reading.casefold()
+        names_report = re.search(r"(?<![\w.-])t-\d+\.\d+-(?:" + "|".join(roles.REVIEWERS) + r")\.md(?![\w-])", text)
+        if names_report or (names_segment(text, cfg.BDD_DIR) and names_segment(text, roles.REVIEWS_DIR)) or in_reviews(project, cwd):
+            return ("greenlight: review reports are written only by each reviewer with its file tool, never from the "
+                    "shell. (This shell command looks like it writes into a reviews/ folder.)")
+        if agent and re.search(r"(?<![\w.-])tasks\.md(?![\w-])", text):
+            return ("greenlight: tasks.md is written by the orchestrator; an agent may not change the tasks. "
+                    "(This shell command looks like it writes to it.)")
     hit = mentioned_protected(project, scrubbed, cwd)
     if hit is None:
         return None
