@@ -48,6 +48,7 @@ COMMANDS: dict[str, list[str]] = {
     "add the .NET adapter": [*BDD, "adapter", "apply", "dotnet-reqnroll"],
     "add the Node adapter": [*BDD, "adapter", "apply", "ts-cucumber-js"],
     "route": [*BDD, "route"],
+    "helpers": [*BDD, "helpers"],
 }
 
 LIB: dict[str, str] = {}
@@ -59,6 +60,7 @@ FILES: dict[str, str] = {
     "rules": ".bdd/features/FEAT-007-discounts/rules.md",
     "test design": ".bdd/features/FEAT-007-discounts/test-design.md",
     "tasks": ".bdd/features/FEAT-007-discounts/tasks.md",
+    "helpers record": ".bdd/helpers.json",
     "feature file": "features/discounts.feature",
     "step file": "steps/steps.py",
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",

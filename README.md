@@ -140,8 +140,9 @@ delete those folders; `bdd install-skills ... --uninstall` removes the skills it
 ### Plugins greenlight can use
 
 greenlight works on its own: its roles carry their knowledge in `cards/` (UI design, accessibility, security, API
-design, databases, each language) and use the project's own tools. When one of these Claude Code plugins is
-installed, the roles use it too, always in a mode that reports and never in one that edits code or tests:
+design, databases, each language) and use the project's own tools. `/greenlight:init` offers the recommended plugins
+below once (`bdd helpers` lists them any time); nothing is installed unless you type the line it prints, and
+"do not ask again" is remembered. When one of these Claude Code plugins is installed, the roles use it too, always in a mode that reports and never in one that edits code or tests:
 
 | Plugin | Used by | For |
 |---|---|---|

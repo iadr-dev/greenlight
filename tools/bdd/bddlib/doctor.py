@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from . import claudepaths, config as cfg, enforcement
+from . import claudepaths, config as cfg, enforcement, helpers
 
 MIN_PYTHON = (3, 11)
 BUDGET_MS_POSIX = 200
@@ -25,6 +25,8 @@ DENY_RULES = "deny rules"
 ENFORCEMENT = "enforcement"
 CODEX_HOOKS = "codex hooks"
 STANDARDS = "standards"
+HELPERS = "helpers"
+PLUGIN_HOOKS = "plugin hooks"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
 RECOMMENDED_DENY = (
@@ -192,6 +194,25 @@ def check_standards(root: Path) -> Check:
     return Check(STANDARDS, "ok", ".bdd/standards.md is in force")
 
 
+def check_helpers(plugins: dict[str, str] | None, declined: bool) -> list[Check]:
+    """Which of the helper plugins are installed (information only: greenlight works without them), and the installed
+    plugins whose hooks react to every edit."""
+    if plugins is None:
+        return [Check(HELPERS, "ok", "Claude Code's plugin list could not be read, so the helper plugins are not checked")]
+    gaps = helpers.missing(plugins)
+    have = len(helpers.CATALOG) - len(helpers.missing(plugins, only_recommended=False))
+    detail = f"{have} of {len(helpers.CATALOG)} helper plugins installed" + (
+        f"; recommended and missing: {', '.join(h.name for h in gaps)} (`bdd helpers` shows how to install them)"
+        if gaps and not declined else "")
+    out = [Check(HELPERS, "ok", detail)]
+    reacting = sorted(n for n in helpers.short_names(plugins) if n in helpers.HOOK_PLUGINS)
+    if reacting:
+        notes = "; ".join(f"{n}: {helpers.HOOK_PLUGINS[n]}" for n in reacting)
+        out.append(Check(PLUGIN_HOOKS, "ok", "installed plugins whose hooks react to every edit, test files included, and may ask "
+                         "an agent to change a test (it leaves tests alone, the guard sees to that): " + notes))
+    return out
+
+
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _FENCE = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
 _PLACEHOLDER = re.compile(r"<[A-Za-z][^<>\n]*\s[^<>\n]*>")     # `<tool and threshold>`; not `List<T>` or `<br>`
@@ -210,6 +231,7 @@ def run_checks() -> list[Check]:
     mode = [project_enforcement(project)] if project else []
     standards = [check_standards(project)] if project else []
     codex = [c for c in [project_codex_hooks(project)] if c] if project else []
+    plugin_checks = check_helpers(helpers.installed(), helpers.declined(project))
     return [
         check_python(sys.version_info, sys.executable),
         check_tool("sh", shutil.which("sh"),
@@ -220,6 +242,7 @@ def run_checks() -> list[Check]:
         *codex,
         *standards,
         *deny,
+        *plugin_checks,
     ]
 
 
