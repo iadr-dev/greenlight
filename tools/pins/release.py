@@ -69,11 +69,22 @@ def inside(path: Path) -> Path:
     return Path(resolved)
 
 
-def stamp(path: Path, old: str, new: str) -> None:
-    path = inside(path)
-    text = path.read_text(encoding="utf-8")
-    path.write_text(text.replace(f'"version": "{old}"', f'"version": "{new}"').replace(f'__version__ = "{old}"', f'__version__ = "{new}"'),
-                    encoding="utf-8", newline="\n")
+def stamped(text: str, old: str, new: str) -> str:
+    return text.replace(f'"version": "{old}"', f'"version": "{new}"').replace(f'__version__ = "{old}"', f'__version__ = "{new}"')
+
+
+def plan(old: str, new: str) -> dict[Path, str]:
+    """The new text of every file that names the version."""
+    texts: dict[Path, str] = {}
+    for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "tools/bdd/bddlib/__init__.py"):
+        path = inside(REPO / rel)
+        texts[path] = stamped(path.read_text(encoding="utf-8"), old, new)
+    for found in sorted(REPO.glob("adapters/*/ci/github-actions.yml")) + sorted(REPO.glob("adapters/*/ci.md")):
+        path = inside(found)
+        text = path.read_text(encoding="utf-8")
+        if CLONE.search(text):
+            texts[path] = CLONE.sub(lambda m: f"{m.group(1)}{new}", text)
+    return texts
 
 
 def main(argv: list[str]) -> int:
@@ -87,14 +98,11 @@ def main(argv: list[str]) -> int:
     log = REPO / "CHANGELOG.md"
     release_log = changelog(log.read_text(encoding="utf-8"), new, datetime.date.today())
     if args.write:
-        for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "tools/bdd/bddlib/__init__.py"):
-            stamp(REPO / rel, old, new)
-        for path in sorted(REPO.glob("adapters/*/ci/github-actions.yml")) + sorted(REPO.glob("adapters/*/ci.md")):
-            path = inside(path)
-            text = path.read_text(encoding="utf-8")
-            if CLONE.search(text):
-                path.write_text(CLONE.sub(lambda m: f"{m.group(1)}{new}", text), encoding="utf-8", newline="\n")
-        log.write_text(release_log, encoding="utf-8", newline="\n")
+        for path, text in plan(old, new).items():
+            path.write_text(text, encoding="utf-8", newline="
+")
+        log.write_text(release_log, encoding="utf-8", newline="
+")
     print(new)
     return 0
 
