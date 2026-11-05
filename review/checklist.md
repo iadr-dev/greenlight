@@ -48,6 +48,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | Q3 | When `[adapters.quality]` is configured, the recorded result is current and every check passed | yes when configured, otherwise not applicable | `bdd check FEAT-n --check` |
 | Q4 | The diff uses no deprecated or removed API: no deprecation warning is silenced or ignored, and the calls into libraries match their current documentation. A deprecation warning that a dependency or test tool the diff did not choose emits on its own (for example a test client warning about its own successor) is not a finding against the diff: list it as should-fix for the person, since upgrading a dependency is theirs to decide | yes, for what the diff introduces | the deprecation check where configured; otherwise read the diff against the current documentation (project docs, or a documentation tool such as context7) |
 | Q5 | Nothing was suppressed to pass a check: no blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `// nolint` or `@ts-ignore` added without a stated reason | yes | search the diff for suppression markers |
+| Q6 | Every review `bdd route FEAT-n` asks for is in `reviews/` with a verdict, and no must-fix item in the latest report of a reviewer is left unresolved in the code; a must-fix the orchestrator carried into the report after two rounds is listed there | yes | `bdd route FEAT-n`; read `reviews/*.md` and the diff |
 
 ## D - API contract and data
 

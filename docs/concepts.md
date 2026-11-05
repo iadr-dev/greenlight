@@ -184,10 +184,22 @@ under a hook, and whatever an agent could have written (a session file, a log) p
 
 ## Agents
 
-Six agents do the phase work: product-analyst, qa-designer, system-analyst, step-engineer, implementer and
-spec-auditor. Each has an explicit tool list and write permissions (the implementer cannot touch tests, the auditor
-cannot write at all). They read files, never chat history, and report instead of recording; the orchestrator
-(`/greenlight:feature`) records everything.
+Ten agents do the phase work: product-analyst, qa-designer, system-analyst, step-engineer, two writers of production
+code (implementer, and ui-engineer for screens), three reviewers (code-reviewer, ui-reviewer, security-reviewer) and
+spec-auditor. Each has an explicit tool list and write permissions (the writers cannot touch tests, the reviewers write
+only their report under `.bdd/`, the auditor cannot write at all). An agent that is not one of greenlight's (a built-in
+one, your own, another plugin's) may write production code and `.bdd/` data but never the feature files or the steps.
+They read files, never chat history, and report instead of recording; the orchestrator (`/greenlight:feature`) records
+everything.
+
+### Routing the code stage
+
+`bdd route FEAT-n` decides, for each task in `tasks.md`, who writes it and who reviews it, from the steps its scenarios
+use and the words of the rules it covers: a screen step sends the task to the ui-engineer and adds the ui-reviewer;
+signing in, or a rule about money, credentials, access or personal data, adds the security-reviewer; the code-reviewer
+reviews every task. It also names the cards to read. The orchestrator follows it without asking, each reviewer writes
+`reviews/<task>-<reviewer>.md` with a verdict, must-fix findings go back to the writer (at most twice), and the
+implement gate refuses while a routed review is missing.
 
 ## Features across several repositories
 

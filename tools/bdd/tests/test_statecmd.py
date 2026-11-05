@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import approvals, lockcmd, state, statecmd, store
+from bddlib import approvals, lockcmd, route, state, statecmd, store
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 
@@ -116,6 +116,10 @@ class StateCommandTest(unittest.TestCase):
         self.step.write_text("def then_ok():\n    pass\n", encoding="utf-8", newline="\n")
         self.assertEqual(self.gate("implement", "--result", "pass")[0], 2)
         self.step.write_text("def then_ok():\n    assert True\n", encoding="utf-8", newline="\n")
+        self.assertEqual(self.gate("implement", "--result", "pass")[0], 2, "the routed review is not there yet")
+        review = route.review_path(store.find_feature_dir(self.root, "FEAT-007"), "T-007.0", "code-reviewer")
+        review.parent.mkdir(parents=True, exist_ok=True)
+        review.write_text("# code-reviewer: T-007.0\n\nVerdict: PASS\n", encoding="utf-8", newline="\n")
         self.assertEqual(self.gate("implement", "--result", "pass")[0], 0)
 
     def test_usage_errors(self):

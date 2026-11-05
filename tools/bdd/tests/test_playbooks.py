@@ -76,7 +76,7 @@ class FeatureSkillTest(unittest.TestCase):
     """The orchestrator's table agrees with the phases, the agents and the gates of the tool."""
 
     TEXT = (REPO / "skills" / "feature" / "SKILL.md").read_text(encoding="utf-8")
-    ROWS = re.findall(r"^\| ([a-z-]+) \| ([a-z-]+(?:, one task at a time)?|you) \|", TEXT, re.MULTILINE)
+    ROWS = re.findall(r"^\| ([a-z-]+) \| ([a-z-]+(?:, one task at a time)?|you)(?: \([^|]*\))? \|", TEXT, re.MULTILINE)
 
     def test_every_phase_but_done_has_a_row_with_its_agent_in_order(self):
         self.assertEqual([phase for phase, _ in self.ROWS], [p for p in state.PHASES if p != "done"])

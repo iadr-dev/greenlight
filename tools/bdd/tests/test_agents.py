@@ -6,7 +6,8 @@ from bddlib import frontmatter, guard
 
 REPO = Path(__file__).resolve().parents[3]
 AGENTS = REPO / "agents"
-EXPECTED = {"product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "spec-auditor"}
+EXPECTED = {"product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "ui-engineer",
+            "code-reviewer", "security-reviewer", "ui-reviewer", "spec-auditor"}
 WRITERS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 
@@ -15,8 +16,8 @@ def load(name: str) -> tuple[dict, str]:
 
 
 class AgentTest(unittest.TestCase):
-    def test_exactly_the_six_agents_exist_and_match_the_guard_matrix(self):
-        names = {p.stem for p in AGENTS.glob("*.md")}
+    def test_exactly_these_agents_exist_and_match_the_guard_matrix(self):
+        names = {p.stem for p in AGENTS.rglob("*.md")}          # a sub-folder would ship as a plugin agent too
         self.assertEqual(names, EXPECTED)
         self.assertEqual(set(guard.AGENT_WRITES), EXPECTED, "the guard limits paths for exactly these agents")
 
@@ -29,6 +30,8 @@ class AgentTest(unittest.TestCase):
                 self.assertIn(meta["model"], ("opus", "sonnet", "haiku", "inherit"))
                 tools = [t.strip() for t in meta["tools"].split(",")]
                 self.assertTrue(tools and "*" not in tools and len(tools) == len(set(tools)))
+                wild = [t for t in tools if "*" in t]
+                self.assertTrue(all(re.fullmatch(r"mcp__plugin_[\w-]+__\*", t) for t in wild), "a wildcard names one MCP server")
                 self.assertTrue({"Read", "Grep", "Glob"} <= set(tools))
                 self.assertIn("## Return", body, "an agent says what its last message contains")
 
@@ -41,10 +44,10 @@ class AgentTest(unittest.TestCase):
                 else:
                     self.assertTrue(tools & WRITERS)
 
-    def test_only_the_step_engineer_and_implementer_edit_existing_files(self):
+    def test_only_the_step_engineer_and_the_two_writers_edit_existing_files(self):
         for name in EXPECTED:
             tools = {t.strip() for t in load(name)[0]["tools"].split(",")}
-            self.assertEqual("Edit" in tools, name in ("step-engineer", "implementer"), name)
+            self.assertEqual("Edit" in tools, name in ("step-engineer", "implementer", "ui-engineer"), name)
 
     def test_no_agent_records_gates_and_the_boundaries_are_stated(self):
         for name in EXPECTED:

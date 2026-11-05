@@ -56,8 +56,16 @@ AGENT_WRITES = {
     "system-analyst": {"data"},
     "step-engineer": {"data", "steps"},
     "implementer": {"data", "production"},
+    "ui-engineer": {"data", "production"},
+    "code-reviewer": {"data"},              # the reviewers write their report under .bdd/ and nothing else
+    "security-reviewer": {"data"},
+    "ui-reviewer": {"data"},
     "spec-auditor": set(),
 }
+# A subagent that is not one of greenlight's (a built-in one, a user's own, another plugin's) gets what the implementer
+# gets: it may never write the feature files or the steps, whichever tests are locked yet.
+FOREIGN_AGENT = "another agent"
+FOREIGN_WRITES = {"data", "production"}
 MANAGED_NAMES = {"state.json", "lock.json", sharedvocab.LOCK_NAME}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
@@ -346,8 +354,13 @@ def refuses_node_packages(command: str) -> bool:
 
 
 def agent_name(payload: dict) -> str | None:
+    """greenlight's name for the agent making the call: its own agents by their name, any other subagent as
+    ``FOREIGN_AGENT``, and None for the main session (the orchestrator)."""
     agent_type = payload.get("agent_type") or ""
-    return agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else None
+    if not agent_type:
+        return None
+    name = agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else ""
+    return name if name in AGENT_WRITES else FOREIGN_AGENT
 
 
 def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
@@ -362,11 +375,12 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
         protected = CODEX_STATE_MESSAGE
     if protected:
         return protected
-    allowed = AGENT_WRITES.get(agent) if agent else None
+    allowed = (FOREIGN_WRITES if agent == FOREIGN_AGENT else AGENT_WRITES.get(agent)) if agent else None
     category = project.category(path)
     if allowed is not None and category not in allowed:
         what = ", ".join(sorted(allowed)) or "nothing (it is read-only)"
-        return (f"greenlight: the {agent} agent may not write {category} files ({project.relative(path)}); "
+        who = ("an agent that is not one of greenlight's" if agent == FOREIGN_AGENT else f"the {agent} agent")
+        return (f"greenlight: {who} may not write {category} files ({project.relative(path)}); "
                 f"it may write: {what}.")
     return None
 

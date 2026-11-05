@@ -118,7 +118,9 @@ class AgentLimitsTest(GuardCase):
     TARGETS = {"data": ".bdd/features/FEAT-001-a/rules.md", "features": "features/new.feature",
                "steps": "steps/new_steps.py", "production": "src/new.py"}
     ALLOWED = {"product-analyst": {"data"}, "qa-designer": {"data", "features"}, "system-analyst": {"data"},
-               "step-engineer": {"data", "steps"}, "implementer": {"data", "production"}, "spec-auditor": set()}
+               "step-engineer": {"data", "steps"}, "implementer": {"data", "production"},
+               "ui-engineer": {"data", "production"}, "code-reviewer": {"data"}, "security-reviewer": {"data"},
+               "ui-reviewer": {"data"}, "spec-auditor": set()}
 
     def test_the_whole_matrix(self):
         for agent, allowed in self.ALLOWED.items():
@@ -138,11 +140,24 @@ class AgentLimitsTest(GuardCase):
         reason = self.call("Write", agent="greenlight:spec-auditor", file_path=str(self.root / ".bdd" / "x" / "report.md"))
         self.assertIn("nothing (it is read-only)", reason)
 
-    def test_the_orchestrator_and_other_plugins_agents_are_unrestricted(self):
-        for agent in (None, "other-plugin:coder", "Explore"):
-            with self.subTest(agent=agent):
-                for rel in self.TARGETS.values():
-                    self.assertIsNone(self.call("Write", agent=agent, file_path=str(self.root / rel)))
+    def test_the_orchestrator_is_unrestricted(self):
+        for rel in self.TARGETS.values():
+            self.assertIsNone(self.call("Write", agent=None, file_path=str(self.root / rel)))
+
+    def test_an_agent_that_is_not_greenlights_may_not_write_the_tests(self):
+        """A built-in agent, a user's own agent or another plugin's may write production code and data, never the
+        feature files or the steps, whether or not they are locked yet."""
+        for agent in ("other-plugin:coder", "Explore", "general-purpose", "Frontend Developer", "greenlight:no-such-agent"):
+            for category, rel in self.TARGETS.items():
+                with self.subTest(agent=agent, category=category):
+                    refused = self.call("Write", agent=agent, file_path=str(self.root / rel))
+                    if category in ("features", "steps"):
+                        self.assertIn("not one of greenlight's", refused or "")
+                    else:
+                        self.assertIsNone(refused)
+
+    def test_an_agent_that_is_not_greenlights_may_not_install_packages(self):
+        self.assertIn("may not install packages", self.call("Bash", agent="Explore", command="pip install requests") or "")
 
     def test_locks_apply_to_every_agent_even_ones_allowed_to_write_that_category(self):
         self.assertIn("is locked", self.call("Edit", agent="greenlight:qa-designer", file_path=str(self.spec)))

@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import cli, enforcement, lockfile
+from bddlib import cli, enforcement, lockfile, route, store
 
 HAVE_RUNNER = all(importlib.util.find_spec(name) for name in ("pytest", "pytest_bdd"))
 FEATURE = "FEAT-001"
@@ -175,6 +175,11 @@ class SoftModePipelineTest(unittest.TestCase):
         self.write("app/orders.py", PRODUCTION)
         self.ok("run", FEATURE)
         self.ok("classify", FEATURE, "--expect", "green")
+        feature_dir = store.find_feature_dir(self.root, FEATURE)
+        for found in route.routes(self.root, feature_dir, FEATURE):           # what the reviewers leave, as the playbook says
+            for reviewer in found.reviewers:
+                path = route.review_path(feature_dir, found.task, reviewer)
+                self.write(path.relative_to(self.root).as_posix(), f"# {reviewer}: {found.task}\n\nVerdict: PASS\n")
         self.ok("gate", FEATURE, "implement", "--result", "pass")
         self.ok("gate", FEATURE, "verify", "--result", "pass")
         self.assertEqual(self.state()["phase"], "done")
