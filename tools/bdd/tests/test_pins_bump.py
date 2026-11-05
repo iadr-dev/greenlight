@@ -87,6 +87,19 @@ class PlanTest(unittest.TestCase):
         texts, changes, _ = self.plan()
         self.assertEqual((texts, changes), ({}, []))
 
+    def test_a_pin_held_on_its_line_stays_while_the_others_of_the_file_move(self):
+        held = '  java-version: "21"   # pins: hold - detekt stops at 22\n'
+        path = self.write(".github/workflows/ci.yml", 'a:\n  java-version: "21"\nb:\n' + held)
+        self.answers["https://endoflife.date/api/eclipse-temurin.json"] = [
+            {"cycle": "25", "eol": "2031-09-30", "lts": True, "releaseDate": "2025-09-16"}]
+        texts, changes, skipped = self.plan()
+        self.assertEqual(texts[path], 'a:\n  java-version: "25"\nb:\n' + held)
+        self.assertEqual((len(changes), skipped), (1, []))
+
+    def test_a_file_whose_only_pin_is_held_is_left_untouched(self):
+        self.write(".github/workflows/ci.yml", 'node-version: "22"   # pins: hold - the tool needs 22\n')
+        self.assertEqual(self.plan()[0], {})
+
     def test_two_versions_of_one_language_in_a_file_are_a_decision_and_are_left_alone(self):
         self.write(".github/workflows/ci.yml", 'a: 1\nnode-version: "20"\nnode-version: "22"\n')
         texts, changes, skipped = self.plan()

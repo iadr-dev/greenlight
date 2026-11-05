@@ -7,7 +7,8 @@ Without ``--write`` it only prints what it would change. The target of a product
 https://endoflife.date that has been out for 30 days and is not at its end of life; for a product that has long-term-support cycles
 (Node, Java, .NET) only those count. A pin is only ever moved up. A file that names two different versions of the same
 language (a matrix, a minimum on purpose) is left alone and listed, because which one is meant is not for a script to
-guess. Nothing is merged here: the workflow opens a pull request and the repository's own CI decides. Standard library
+guess. A pin whose line has the comment `pins: hold` and the reason is never moved (the tool it needs does not
+support the newer version yet); remove the comment when it does. Nothing is merged here: the workflow opens a pull request and the repository's own CI decides. Standard library
 only.
 """
 from __future__ import annotations
@@ -59,12 +60,21 @@ def moved(value: str, cycle: str) -> str | None:
     return new + (".x" if dotted_x else "")
 
 
+HOLD = "pins: hold"                   # in a comment on the line: the pin stays, and the comment says why
+
+
+def held(text: str, m: re.Match) -> bool:
+    start = text.rfind("\n", 0, m.start()) + 1
+    end = text.find("\n", m.end())
+    return HOLD in text[start:end if end >= 0 else len(text)]
+
+
 def pin_value(text: str, key: str) -> set[str]:
-    return {m["value"] for m in check.RUNTIME.finditer(text) if m["key"] == key}
+    return {m["value"] for m in check.RUNTIME.finditer(text) if m["key"] == key and not held(text, m)}
 
 
 def rewrite(text: str, key: str, value: str, new: str) -> str:
-    pattern = rf"(?m)^(\s*-?\s*{re.escape(key)}\s*:\s*[\"']?){re.escape(value)}(?=[\"']?(\s|$))"
+    pattern = rf"(?m)^(\s*-?\s*{re.escape(key)}\s*:\s*[\"']?){re.escape(value)}(?=[\"']?(\s|$))(?![^\n]*{HOLD})"
     return re.sub(pattern, lambda m: m.group(1) + new, text)
 
 
@@ -88,6 +98,8 @@ def plan(root: Path, fetch, today: datetime.date) -> tuple[dict[Path, str], list
         original = text = path.read_text(encoding="utf-8", errors="replace")
         for key in sorted({m["key"] for m in check.RUNTIME.finditer(original)}):
             found = pin_value(original, key)
+            if not found:
+                continue
             if len(found) > 1:
                 skipped.append(f"{check.rel(root, path)}: {key} names {', '.join(sorted(found))}; left alone")
                 continue

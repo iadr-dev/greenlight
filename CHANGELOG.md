@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The language-version bump (D62) leaves alone a pin whose line carries the comment `pins: hold - reason`. The Kotlin language card's Java 21 is held: the pinned detekt 1.23 accepts a JVM target up to 22, and the first automatic bump to Java 25 failed that job and no other.
+
 ### Added
 - The evaluation harness takes `--plugin-ref` (a tag, branch or commit of this repository, default the last commit) to choose the plugin version the plugin arm loads, so two versions can be compared on the same request by the same harness (`--plugin-ref v1.2.0` against the current one). The name is checked so git cannot read it as an option, and the rows record `plugin_ref` and the resolved commit.
 - The language versions the workflows and the adapters' CI templates pin are moved to the newest supported release by the update automation (D62): the weekly `pins` workflow opens a pull request (`tools/pins/bump.py`: newest supported cycle, a long-term-support one where there are any, out for 30 days, only upwards), the pull request merges itself when the new required check `all-checks` passes, and the merge is released as the next patch version by `release.yml` (`tools/pins/release.py`). A failing job leaves the pull request open for a person.
