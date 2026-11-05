@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- The evaluation harness takes `--plugin-ref` (a tag, branch or commit of this repository, default the last commit) to choose the plugin version the plugin arm loads, so two versions can be compared on the same request by the same harness (`--plugin-ref v1.2.0` against the current one). The name is checked so git cannot read it as an option, and the rows record `plugin_ref` and the resolved commit.
+
 ### Fixed
 - The evaluation harness started programs by their bare name, which does not work for `pnpm` and `npm` on Windows (they are `.cmd` shims), so the baseline arm of every request that uses them stopped with "file not found" after the model had already run and been paid for. The harness now looks each program up on the run's `PATH`.
 
