@@ -27,6 +27,7 @@ COMMANDS = {
     "scan": ("reportcmd", "run_scan"),
     "design": ("design", "run"),
     "route": ("route", "run"),
+    "helpers": ("helpers", "run"),
     "pr": ("pr", "run"),
     "report": ("htmlreport", "run"),
     "vocabulary": ("vocabcmd", "run"),

@@ -47,7 +47,28 @@ Do not change anything on the machine without asking first.
    `pytest-bdd`). Show the command and ask before running it; prefer the project's own tool (`uv`, `pip`,
    `poetry`).
 
-5. **Prove it works.**
+5. **Offer the helper plugins, once.** greenlight works without them; they make its roles better (design guidance,
+   current library documentation, browser checks, review tools).
+
+   ```sh
+   "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" helpers --json
+   ```
+
+   Skip this step when `declined` is true, when `claude_found` is false (say that the plugin list could not be read), or
+   when `install` is null (everything recommended is installed: say so in one line). Otherwise show the recommended
+   helpers that are missing (name, what it adds, what it needs) and ask once, with a question that has three answers:
+   *install them*, *not now*, *do not ask again*.
+
+   - *Install them*: you cannot install plugins. Installing changes the person's Claude Code settings, so the guard refuses
+     it from a tool call. Give the person the `install` line from the JSON, exactly as it is, and tell them to type it
+     themselves (the leading `!` runs it in their own shell, between prompts). Then go on; do not wait for it, and do not
+     try to run it.
+   - *Not now*: go on. Nothing is recorded, so the question comes again at the next `/greenlight:init`.
+   - *Do not ask again*: run `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" helpers --decline`.
+
+   Never describe a missing helper as required. A project without any of them is fine.
+
+6. **Prove it works.**
 
    ```sh
    "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" init --smoke
@@ -56,6 +77,6 @@ Do not change anything on the machine without asking first.
    It runs the sample feature and cleans up after itself. If it fails, show the output and the likely cause
    (missing requirements, wrong interpreter); do not go on until it is green.
 
-6. **Say what comes next**: start a feature with `/greenlight:feature "<what you want>"`, see where things stand
+7. **Say what comes next**: start a feature with `/greenlight:feature "<what you want>"`, see where things stand
    with `/greenlight:status`. Mention that approvals of rules and examples are typed by the person as
    `/greenlight:approve FEAT-n rules` and `/greenlight:approve FEAT-n examples`, and that the AI cannot give them.

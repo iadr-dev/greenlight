@@ -222,6 +222,22 @@ class ReviewReportTest(GuardCase):
         self.assertIn("written by the orchestrator",
                       self.call("Bash", agent="greenlight:implementer", command=f"echo '## T-001.9' >> {tasks}") or "")
 
+class HelperInstallTest(GuardCase):
+    """Installing the helper plugins changes the person's Claude Code settings: the person types it, no tool call does."""
+
+    def test_neither_an_agent_nor_the_orchestrator_may_install_them(self):
+        command = 'sh "/plugin/tools/bdd/bdd" helpers install --yes'
+        for agent in (None, "greenlight:implementer", "Explore"):
+            with self.subTest(agent=agent):
+                self.assertIn("installing the helper plugins", self.call("Bash", agent=agent, command=command) or "")
+
+    def test_listing_and_declining_are_fine(self):
+        for command in ('sh "/plugin/tools/bdd/bdd" helpers', 'sh "/plugin/tools/bdd/bdd" helpers --json',
+                        'sh "/plugin/tools/bdd/bdd" helpers --decline'):
+            with self.subTest(command=command):
+                self.assertIsNone(self.call("Bash", agent=None, command=command))
+
+
 class OutsideAProjectTest(unittest.TestCase):
     def test_everything_is_allowed_without_a_bdd_directory(self):
         with tempfile.TemporaryDirectory() as d:

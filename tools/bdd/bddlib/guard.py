@@ -285,6 +285,10 @@ _PIN_COMMAND = re.compile(r"\bvocabulary\s+pin\b|--shared-vocabulary\b", re.IGNO
 PIN_MESSAGE = ("greenlight: pinning a shared vocabulary says that a person has read the included files, so it is the person's "
                "act and no tool call may do it. Ask the person to read the files and run `bdd vocabulary pin` themselves "
                "(in Claude Code, type `! ` followed by the command).")
+_HELPERS_INSTALL = re.compile(r"\bbdd\b[^;&|\n]*\bhelpers\b[^;&|\n]*\binstall\b", re.IGNORECASE)
+HELPERS_MESSAGE = ("greenlight: installing the helper plugins changes the person's Claude Code settings (which the tripwire "
+                   "watches), so it is the person's act and no tool call may do it. Show them `bdd helpers`, which prints the "
+                   "line to type: in Claude Code they type `! ` followed by the command.")
 _PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
 PR_FILE = "PULL_REQUEST.md"
 
@@ -703,6 +707,8 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     scrubbed = _NOISE.sub(" ", command)
     if _PIN_COMMAND.search(scrubbed):
         return PIN_MESSAGE
+    if _HELPERS_INSTALL.search(scrubbed):
+        return HELPERS_MESSAGE
     refused = check_agent_command(project, scrubbed, agent) if agent else None
     if refused:
         return refused

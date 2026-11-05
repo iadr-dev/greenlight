@@ -10,6 +10,8 @@ versions follow [SemVer](https://semver.org/).
 - Three practice cards: `ui-design` (use the design system, design every state, follow the platform), `accessibility` (WCAG 2.2 AA by criterion, with a severity scale) and `security` (access per record on the server, validation at the boundary, secrets, safe errors and logs, money that cannot be charged twice).
 - The roles use installed plugins when they are there (frontend-design, figma, context7, microsoft-docs, chrome-devtools-mcp, impeccable's audit, feature-dev, pstack's review skills, code-metrics-tracker, api-drift-detector, open-code-review), always to report and never to edit code or tests; the README lists them. greenlight works without any of them.
 
+- `bdd helpers` lists the helper plugins the roles can use, which of them are installed (from `claude plugin list --json`) and the one line that installs the missing ones; `/greenlight:init` offers them once, with the answers *install them*, *not now* and *do not ask again* (`bdd helpers --decline`). greenlight never installs a plugin on its own: installing changes your Claude Code settings, so `bdd helpers install --yes` is refused when a tool call makes it, and you type the printed line after a `!`. `bdd doctor` reports how many helpers are installed and names the installed plugins whose own hooks react to every edit, with what is known about quieting each. Decision D60.
+
 ### Changed
 - A subagent that is not one of greenlight's (a built-in one, your own, another plugin's) may no longer write feature files or steps, or install packages, in a greenlight project. Before, only greenlight's own agents were limited.
 
