@@ -1,0 +1,68 @@
+# Updates for the packages and actions this repository pins. The runtimes' versions, the actions in the adapters' CI
+# templates and the .NET adapter's packages are not seen here; tools/pins/check.py reports those (D62).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "CI"
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Dev tooling"
+  - package-ecosystem: "npm"
+    directory: "/adapters/ts-cucumber-js/templates/tests"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
+  - package-ecosystem: "npm"
+    directory: "/adapters/ts-playwright-bdd/templates/tests"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
+  - package-ecosystem: "npm"
+    directory: "/evals/apps/money-lib"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
+  - package-ecosystem: "npm"
+    directory: "/evals/apps/shop-web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
+  - package-ecosystem: "gomod"
+    directory: "/adapters/go-godog/templates/tests"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
+  - package-ecosystem: "gomod"
+    directory: "/evals/apps/csv-tool"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "Packages"
