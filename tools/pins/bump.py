@@ -59,6 +59,25 @@ def moved(value: str, cycle: str) -> str | None:
     return new + (".x" if dotted_x else "")
 
 
+def pin_value(text: str, key: str) -> set[str]:
+    return {m["value"] for m in check.RUNTIME.finditer(text) if m["key"] == key}
+
+
+def rewrite(text: str, key: str, value: str, new: str) -> str:
+    pattern = rf"(?m)^(\s*-?\s*{re.escape(key)}\s*:\s*[\"']?){re.escape(value)}(?=[\"']?(\s|$))"
+    return re.sub(pattern, lambda m: m.group(1) + new, text)
+
+
+def goal(product: str, cycles: dict[str, str | None], fetch, today: datetime.date, skipped: list[str]) -> str | None:
+    """The cycle ``product`` moves to, asked for once; a product with no answer is said once."""
+    if product not in cycles:
+        table = fetch(f"https://endoflife.date/api/{product}.json")
+        cycles[product] = target(table, today) if isinstance(table, list) else None
+        if cycles[product] is None:
+            skipped.append(f"{product}: no answer from endoflife.date; left alone")
+    return cycles[product]
+
+
 def plan(root: Path, fetch, today: datetime.date) -> tuple[dict[Path, str], list[str], list[str]]:
     """(new text per file, one line per change, one line per pin left alone and why)."""
     changes: list[str] = []
@@ -66,34 +85,20 @@ def plan(root: Path, fetch, today: datetime.date) -> tuple[dict[Path, str], list
     texts: dict[Path, str] = {}
     cycles: dict[str, str | None] = {}
     for path in check.files(root):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        values = defaultdict(set)
-        for m in check.RUNTIME.finditer(text):
-            values[m["key"]].add(m["value"])
-        edits = []
-        for key, found in values.items():
-            product = check.RUNTIME_KEYS[key]
+        original = text = path.read_text(encoding="utf-8", errors="replace")
+        for key in sorted({m["key"] for m in check.RUNTIME.finditer(original)}):
+            found = pin_value(original, key)
             if len(found) > 1:
                 skipped.append(f"{check.rel(root, path)}: {key} names {', '.join(sorted(found))}; left alone")
                 continue
-            if product not in cycles:
-                table = fetch(f"https://endoflife.date/api/{product}.json")
-                cycles[product] = target(table, today) if isinstance(table, list) else None
-                if cycles[product] is None:
-                    skipped.append(f"{product}: no answer from endoflife.date; left alone")
-            if cycles[product] is None:
-                continue
+            cycle = goal(check.RUNTIME_KEYS[key], cycles, fetch, today, skipped)
             (value,) = found
-            new = moved(value, cycles[product])
+            new = moved(value, cycle) if cycle else None
             if new:
-                edits.append((key, value, new))
-        if not edits:
-            continue
-        for key, value, new in edits:
-            text = re.sub(rf"(?m)^(\s*-?\s*{re.escape(key)}\s*:\s*[\"']?){re.escape(value)}(?=[\"']?(\s|$))",
-                          lambda m, new=new: m.group(1) + new, text)
-            changes.append(f"{check.RUNTIME_KEYS[key]} {value} -> {new} in {check.rel(root, path)}")
-        texts[path] = text
+                text = rewrite(text, key, value, new)
+                changes.append(f"{check.RUNTIME_KEYS[key]} {value} -> {new} in {check.rel(root, path)}")
+        if text != original:
+            texts[path] = text
     return texts, changes, skipped
 
 

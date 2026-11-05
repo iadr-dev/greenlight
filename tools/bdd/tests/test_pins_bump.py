@@ -105,6 +105,18 @@ class PlanTest(unittest.TestCase):
         self.assertIn("Left alone:", text)
 
 
+class LogEntryTest(unittest.TestCase):
+    def test_the_change_is_recorded_under_unreleased(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CHANGELOG.md").write_text("# C\n\n## [Unreleased]\n\n### Added\n- x\n\n## [1.0.0] - d\n", encoding="utf-8")
+            bump.log_entry(root, ["nodejs 22 -> 26 in a.yml", "nodejs 22 -> 26 in b.yml", "go 1.26 -> 1.27 in c.yml"])
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn("## [Unreleased]\n\n### Changed\n- Pinned language versions moved", text)
+        self.assertIn("go 1.26 -> 1.27; nodejs 22 -> 26.", text)
+        self.assertIn("### Added\n- x", text)
+
+
 class ReleaseTest(unittest.TestCase):
     CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Changed\n- A thing.\n\n## [1.2.0] - 2026-11-04\n\nOld.\n")
 
@@ -123,6 +135,31 @@ class ReleaseTest(unittest.TestCase):
     def test_the_tag_the_adapters_clone_is_found_in_both_forms(self):
         for text in ("  GREENLIGHT_REF: v1.2.0          # a release tag", "- run: git clone --depth 1 --branch v1.2.0 https://x"):
             self.assertIn("v1.2.1", release.CLONE.sub(lambda m: m.group(1) + "1.2.1", text))
+
+    def test_writing_a_release_edits_every_place_the_version_is_stamped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            files = {".claude-plugin/plugin.json": '{\n  "version": "1.2.0"\n}\n',
+                     ".claude-plugin/marketplace.json": '{"plugins": [{"version": "1.2.0"}]}\n',
+                     "tools/bdd/bddlib/__init__.py": '__version__ = "1.2.0"\n',
+                     "adapters/a/ci/github-actions.yml": "  GREENLIGHT_REF: v1.2.0          # a release tag\n",
+                     "adapters/a/ci.md": "- run: git clone --depth 1 --branch v1.2.0 https://x\n",
+                     "CHANGELOG.md": self.CHANGELOG}
+            for rel, text in files.items():
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(text, encoding="utf-8")
+            original, release.REPO = release.REPO, root
+            try:
+                self.assertEqual(release.main(["--write"]), 0)
+            finally:
+                release.REPO = original
+            for rel in list(files)[:5]:
+                text = (root / rel).read_text(encoding="utf-8")
+                self.assertIn("1.2.1", text, rel)
+                self.assertNotIn("1.2.0", text, rel)
+            log = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            self.assertIn("## [Unreleased]\n\n## [1.2.1] - ", log)
+            self.assertIn("### Changed\n- A thing.\n\n## [1.2.0] - 2026-11-04", log)
 
     def test_the_repository_stamps_one_version_everywhere(self):
         version = release.current(REPO)

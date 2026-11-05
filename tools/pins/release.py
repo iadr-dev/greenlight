@@ -35,24 +35,44 @@ def patch_after(version: str) -> str:
     return f"{major}.{minor}.{int(patch) + 1}"
 
 
+def unreleased_span(text: str) -> tuple[int, int] | None:
+    """(start, end) of the text between the Unreleased heading and the next version heading."""
+    heading = "## [Unreleased]\n"
+    start = text.find(heading)
+    if start < 0:
+        return None
+    start += len(heading)
+    end = text.find("\n## [", start)
+    return (start, end) if end >= 0 else None
+
+
 def unreleased(text: str) -> str:
-    m = re.search(r"## \[Unreleased\]\n(.*?)(?=\n## \[)", text, re.S)
-    return m.group(1).strip() if m else ""
+    span = unreleased_span(text)
+    return text[span[0]:span[1]].strip() if span else ""
 
 
 def changelog(text: str, version: str, today: datetime.date) -> str:
     body = unreleased(text)
     if not body:
         raise SystemExit("nothing under Unreleased in CHANGELOG.md: nothing to release")
-    section = f"## [Unreleased]\n\n## [{version}] - {today.isoformat()}\n\n{INTRO}\n\n{body}\n"
-    return re.sub(r"## \[Unreleased\]\n.*?(?=\n## \[)", lambda _: section, text, count=1, flags=re.S)
+    start, end = unreleased_span(text)
+    section = f"\n## [{version}] - {today.isoformat()}\n\n{INTRO}\n\n{body}\n"
+    return text[:start] + section + text[end:]
 
 
-def stamp(path: Path, old: str, new: str, write: bool) -> None:
+def inside(path: Path) -> Path:
+    """``path`` when it is a file of this repository, else the run stops."""
+    resolved = path.resolve()
+    if not resolved.is_relative_to(REPO):
+        raise SystemExit(f"{path} is outside the repository")
+    return resolved
+
+
+def stamp(path: Path, old: str, new: str) -> None:
+    path = inside(path)
     text = path.read_text(encoding="utf-8")
-    if write:
-        path.write_text(text.replace(f'"version": "{old}"', f'"version": "{new}"').replace(f'__version__ = "{old}"', f'__version__ = "{new}"'),
-                        encoding="utf-8", newline="\n")
+    path.write_text(text.replace(f'"version": "{old}"', f'"version": "{new}"').replace(f'__version__ = "{old}"', f'__version__ = "{new}"'),
+                    encoding="utf-8", newline="\n")
 
 
 def main(argv: list[str]) -> int:
