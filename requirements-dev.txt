@@ -4,10 +4,6 @@ asgiref==3.13.0 \
     --hash=sha256:034cc8cbf72d00553b4be256703ac545120b4e50af13b49dec99da899aeeecb4 \
     --hash=sha256:f9596a2434512686473d50f96ff6207fbba49ae1a785dfac614df4aeb085674d
     # via django
-colorama==0.4.6 ; sys_platform == 'win32' \
-    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
-    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
-    # via pytest
 coverage==7.17.1 \
     --hash=sha256:006453b2515ea4c44a857e07b985429038b164080fa777cabea6d22d2e686325 \
     --hash=sha256:0411fe8b17b7f481cdfe9138bd5b266bb18de124114cfab0cf796b61383ef321 \
@@ -129,9 +125,9 @@ coverage==7.17.1 \
     --hash=sha256:fc7b1ee12d7376ea85f6d09a272da3011c879e605d2f354d4a1c21c890cb571c \
     --hash=sha256:fda1023828e4a9f4a40ef06783e005f3630f805f839edc679c87f597f33e041f
     # via -r requirements-dev.in
-django==5.2.19 \
-    --hash=sha256:5965d974a5218a2b68a11dd1276434707f23886525c23f0598eccedaf4f4ca00 \
-    --hash=sha256:ad03d8abc51dbff95ebf34b27123cf0c26a3b62db7ba0cd520783686362533d1
+django==6.1.2 \
+    --hash=sha256:141efee6ec64d1db6db90683bf734c550102450f444fb099063b0be1bd27d991 \
+    --hash=sha256:a1e92451ccb8b514e91bbb3b6d186d20b4030558f116b5d9de6535455ff210b7
     # via -r requirements-dev.in
 gherkin-official==42.0.1 \
     --hash=sha256:6bf291733d126712eb167f6f75be57931dd8b9c9eb606de28013f3669007ec06 \
@@ -421,7 +417,3 @@ typing-extensions==4.16.0 \
     #   gherkin-official
     #   pytest-bdd
     #   sqlalchemy
-tzdata==2026.6 ; sys_platform == 'win32' \
-    --hash=sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec \
-    --hash=sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d
-    # via django
