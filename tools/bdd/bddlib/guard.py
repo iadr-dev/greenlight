@@ -39,7 +39,7 @@ from pathlib import Path
 
 from . import claudepaths, codexsession
 from . import config as cfg
-from . import enforcement, lockfile, roles, sharedvocab, store
+from . import enforcement, lockfile, reviewlog, roles, sharedvocab, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -363,16 +363,23 @@ def agent_name(payload: dict) -> str | None:
     return name if name in AGENT_WRITES else FOREIGN_AGENT
 
 
-REVIEW_FILE = re.compile(r"T-\d+\.\d+-(?P<reviewer>[a-z-]+)\.md")
+REVIEW_FILE = re.compile(r"t-\d+\.\d+-(?P<reviewer>[a-z-]+)\.md")
+
+
+def _parts(project: Project, path: Path) -> tuple[str, ...]:
+    """The path's segments below the project, folded the way the file system folds them (``.BDD/Features`` is
+    ``.bdd/features`` on Windows and macOS)."""
+    parts = Path(project.relative(path)).parts
+    return tuple(p.casefold() for p in parts) if CASE_INSENSITIVE_FS else parts
 
 
 def review_owner(project: Project, path: Path) -> str | None:
     """For a file in a feature's ``reviews/`` folder, the reviewer that alone may write it (an empty string when the name
     is not a review report, which nobody may write); None for any other file."""
-    parts = Path(project.relative(path)).parts
+    parts = _parts(project, path)
     if len(parts) < 5 or parts[0] != cfg.BDD_DIR or parts[1] != "features" or parts[3] != roles.REVIEWS_DIR:
         return None
-    match = REVIEW_FILE.fullmatch(parts[-1]) if len(parts) == 5 else None
+    match = REVIEW_FILE.fullmatch(parts[-1].casefold()) if len(parts) == 5 else None
     return match.group("reviewer") if match and match.group("reviewer") in roles.REVIEWERS else ""
 
 
@@ -385,8 +392,21 @@ def in_reviews(project: Project, cwd: Path | None) -> bool:
 
 
 def is_tasks_file(project: Project, path: Path) -> bool:
-    parts = Path(project.relative(path)).parts
+    parts = _parts(project, path)
     return len(parts) == 4 and parts[0] == cfg.BDD_DIR and parts[1] == "features" and parts[3] == "tasks.md"
+
+
+def record_review(project: Project, payload: dict, target: Path, agent: str | None) -> str | None:
+    """When a reviewer writes its own report, remember what it wrote (``reviewlog``); the gate later accepts the report
+    only with exactly that content. A report can only be written whole, with the Write tool, so the content is known."""
+    owner = review_owner(project, target)
+    if not owner or agent != owner:
+        return None
+    tool_input = payload.get("tool_input") or {}
+    if payload.get("tool_name") != "Write" or not isinstance(tool_input.get("content"), str):
+        return f"greenlight: write the whole review report with the Write tool ({project.relative(target)})."
+    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"))
+    return None
 
 
 def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
@@ -721,7 +741,8 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         target = raw if raw.is_absolute() else cwd / raw
-        return check_file_write(project.owner_of(target), target, agent_name(payload))
+        owner, agent = project.owner_of(target), agent_name(payload)
+        return check_file_write(owner, target, agent) or record_review(owner, payload, target, agent)
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None

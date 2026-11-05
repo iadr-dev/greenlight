@@ -173,10 +173,27 @@ class ReviewReportTest(GuardCase):
         return str(self.feature_dir / "reviews" / f"T-001.1-{reviewer}.md")
 
     def test_only_the_matching_reviewer_writes_its_report(self):
-        self.assertIsNone(self.call("Write", agent="greenlight:code-reviewer", file_path=self.report()))
+        self.assertIsNone(self.call("Write", agent="greenlight:code-reviewer", file_path=self.report(), content="Verdict: PASS\n"))
         for agent in ("greenlight:implementer", "greenlight:ui-engineer", "greenlight:ui-reviewer", "Explore", None):
             with self.subTest(agent=agent):
                 self.assertIn("is a review report", self.call("Write", agent=agent, file_path=self.report()) or "")
+
+    def test_a_reviewer_writes_its_report_whole_and_what_it_wrote_is_recorded(self):
+        from bddlib import reviewlog
+        payload = {"tool_name": "Write", "agent_type": "greenlight:code-reviewer", "cwd": str(self.root),
+                   "tool_input": {"file_path": self.report(), "content": "Verdict: PASS\n"}}
+        self.assertIsNone(guard.evaluate(payload))
+        self.assertEqual(reviewlog.recorded(self.root)[(reviewlog.key(self.root, Path(self.report())), "code-reviewer")],
+                         {reviewlog.digest("Verdict: PASS\n")})
+        self.assertIn("with the Write tool", self.call("Edit", agent="greenlight:code-reviewer", file_path=self.report(),
+                                                       old_string="PASS", new_string="FINDINGS") or "")
+
+    @unittest.skipUnless(guard.CASE_INSENSITIVE_FS, "only Windows and macOS fold the case of a path")
+    def test_another_spelling_of_the_reviews_folder_is_the_same_folder(self):
+        folded = self.root / ".BDD" / "Features" / self.feature_dir.name / "REVIEWS" / "T-001.1-Code-Reviewer.md"
+        self.assertIn("is a review report", self.call("Write", agent="greenlight:implementer", file_path=str(folded)) or "")
+        tasks = self.root / ".BDD" / "FEATURES" / self.feature_dir.name / "TASKS.MD"
+        self.assertIn("written by the orchestrator", self.call("Write", agent="greenlight:implementer", file_path=str(tasks)) or "")
 
     def test_a_file_in_reviews_that_is_not_a_report_is_written_by_nobody(self):
         odd = str(self.feature_dir / "reviews" / "notes.md")

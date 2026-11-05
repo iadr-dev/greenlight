@@ -95,6 +95,13 @@ class WhoTest(RouteCase):
         self.tasks("# Tasks\n")                                          # an empty list is the whole feature
         self.assertEqual(list(self.routes()), ["T-007.0"])
 
+    def test_a_task_md_that_uses_the_reserved_id_keeps_its_examples(self):
+        self.spec_with(UI_SCENARIO, CLI_SCENARIO)
+        self.tasks("## T-007.0 Export\nCovers: EX-007.2.1\n")           # the screen example claimed by nobody
+        (only,) = self.routes().values()
+        self.assertEqual((only.task, only.writer), ("T-007.0", "ui-engineer"))
+        self.assertEqual(only.reviewers, ["code-reviewer", "ui-reviewer"], "merged, not overwritten")
+
     def test_without_tasks_md_the_whole_feature_is_one_task(self):
         self.spec_with(UI_SCENARIO, CLI_SCENARIO)
         (only,) = route.routes(self.root, self.feature_dir, "FEAT-007")
@@ -130,18 +137,37 @@ class GateTest(RouteCase):
         self.gate("implement", reviews=False)
         self.assertEqual(self.data()["phase"], "verify")
 
-    def test_where_the_hooks_run_a_report_counts_only_if_its_reviewer_ran(self):
-        from bddlib import agentcost
-        self.write_reviews()
+    def reviewer_writes(self, reviewer: str, content: str) -> None:
+        """What happens in a real run: the guard sees the reviewer's Write first, then the file is written."""
+        from bddlib import guard
+        path = route.review_path(self.feature_dir, "T-007.1", reviewer)
+        payload = {"tool_name": "Write", "agent_type": f"greenlight:{reviewer}", "cwd": str(self.root),
+                   "tool_input": {"file_path": str(path), "content": content}}
+        self.assertIsNone(guard.evaluate(payload))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8", newline="\n")
+
+    def test_where_the_hooks_run_a_report_counts_only_as_its_reviewer_wrote_it(self):
+        self.write_reviews()                                     # written past the guard: no reviewer wrote them
         reasons = route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True)
         self.assertEqual(len(reasons), 2)
-        self.assertIn("no ui-reviewer agent ran for FEAT-007", " ".join(reasons))
-        path = agentcost.agents_path(self.root)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("".join(json.dumps({"agent_id": f"a{i}", "agent": f"greenlight:{who}", "feature": "FEAT-007",
-                                            "phase": "implement"}) + "\n" for i, who in enumerate(("code-reviewer", "ui-reviewer"))),
-                        encoding="utf-8")
+        self.assertIn("is not what the ui-reviewer agent wrote", " ".join(reasons))
+        for reviewer in ("code-reviewer", "ui-reviewer"):
+            self.reviewer_writes(reviewer, f"# {reviewer}: T-007.1\n\nVerdict: FINDINGS\n\n## Must fix\n- a.py:1 - x\n")
         self.assertEqual(route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True), [])
+        report = route.review_path(self.feature_dir, "T-007.1", "ui-reviewer")
+        report.write_text("# ui-reviewer: T-007.1\n\nVerdict: PASS\n", encoding="utf-8")      # changed afterwards, any way
+        self.assertEqual(route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True),
+                         ["reviews/T-007.1-ui-reviewer.md is not what the ui-reviewer agent wrote: a report counts only "
+                          "as its own reviewer wrote it, unchanged; run the reviewer again"])
+
+    def test_a_report_written_under_another_reviewers_name_does_not_count(self):
+        from bddlib import reviewlog
+        path = route.review_path(self.feature_dir, "T-007.1", "ui-reviewer")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Verdict: PASS\n", encoding="utf-8")
+        reviewlog.record(self.root, path, "code-reviewer", "Verdict: PASS\n")
+        self.assertFalse(reviewlog.written_by(self.root, path, "ui-reviewer"))
 
     def test_deleting_tasks_md_does_not_skip_the_reviews(self):
         (self.feature_dir / "tasks.md").unlink()

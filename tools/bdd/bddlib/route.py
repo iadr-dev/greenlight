@@ -26,7 +26,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import config as cfg
-from . import featurefiles, gherkin, roles, store, trace, vocabulary
+from . import featurefiles, gherkin, reviewlog, roles, store, trace, vocabulary
 from .errors import StoreError, UsageError
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -101,7 +101,8 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
     unclaimed = sorted((e for e in scenarios if e not in claimed), key=trace._sort_key)
     if unclaimed or not tasks:         # no tasks.md (the quick path), an empty one, or examples no task claims: still routed
         title = "the whole feature" if not tasks else "the examples no task claims"
-        tasks[whole_feature_task(feature_id)] = {"title": title, "examples": unclaimed}
+        reserved = tasks.setdefault(whole_feature_task(feature_id), {"title": title, "examples": []})
+        reserved["examples"] = reserved["examples"] + [e for e in unclaimed if e not in reserved["examples"]]   # never overwritten
     out: list[Route] = []
     for task_id, task in tasks.items():
         ids: list[str] = []
@@ -136,20 +137,11 @@ def review_path(feature_dir: Path, task_id: str, reviewer: str) -> Path:
     return feature_dir / REVIEWS_DIR / f"{task_id}-{reviewer}.md"
 
 
-def reviewers_that_ran(root: Path, feature_id: str) -> set[str]:
-    """The reviewers Claude Code reported as finished for this feature during the implement phase (from the plugin's
-    SubagentStop hook, in a folder no agent may write)."""
-    from . import agentcost                                 # light at hook time: only the gate needs it
-    return {str(e.get("agent", ""))[len(agentcost.PLUGIN_AGENT_PREFIX):] for e in agentcost.read_entries(root)
-            if e.get("feature") == feature_id and e.get("phase") == "implement"
-            and str(e.get("agent", "")).startswith(agentcost.PLUGIN_AGENT_PREFIX)}
-
-
 def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False) -> list[str]:
     """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
-    hooks run, the reviewer it names never ran for this feature."""
+    hooks run, its content is not what that reviewer wrote to that file (``reviewlog``)."""
     problems: list[str] = []
-    ran = reviewers_that_ran(root, feature_id) if hooks_seen else set()
+    log = reviewlog.recorded(root) if hooks_seen else {}
     for route in routes(root, feature_dir, feature_id):
         for reviewer in route.reviewers:
             path = review_path(feature_dir, route.task, reviewer)
@@ -158,9 +150,9 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
                 problems.append(f"{route.task} has no {reviewer} report ({rel})")
             elif not VERDICT.search(path.read_text(encoding="utf-8-sig")):
                 problems.append(f"{rel} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line")
-            elif hooks_seen and reviewer not in ran:
-                problems.append(f"{rel} exists, but no {reviewer} agent ran for {feature_id} in the implement phase; "
-                                "a report counts only when the reviewer wrote it")
+            elif hooks_seen and not reviewlog.written_by(root, path, reviewer, log):
+                problems.append(f"{rel} is not what the {reviewer} agent wrote: a report counts only as its own reviewer "
+                                "wrote it, unchanged; run the reviewer again")
     return problems
 
 
