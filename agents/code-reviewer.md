@@ -23,7 +23,9 @@ Check, with evidence for each finding (file and line, and the rule or card it br
 2. **Boundaries.** The modules and seams in `design.md` and `system.md`: no layer reaching past another, no logic in a
    place the design gives to something else, no new dependency between modules the design does not draw.
 3. **Current APIs.** No deprecated or removed call, no silenced deprecation warning; calls match the current
-   documentation of the installed version (read it: the package's own docs and types, or a documentation tool).
+   documentation of the installed version (read it: the package's own docs and types, or a documentation tool). The writer's
+   record is `bdd docs FEAT-n --list`: check the calls against the library and version named there, and call it a finding
+   when the code uses an API the recorded source does not support or the recorded version is not the project's.
 4. **Scope.** Code that no scenario of the task asks for, a speculative option or abstraction, a copy of an existing
    helper. Small, readable functions; names that say what they do.
 5. **Suppressions.** No blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `nolint` or `@ts-ignore` without a

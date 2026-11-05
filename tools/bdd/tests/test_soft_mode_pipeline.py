@@ -180,6 +180,7 @@ class SoftModePipelineTest(unittest.TestCase):
             for reviewer in found.reviewers:
                 path = route.review_path(feature_dir, found.task, reviewer)
                 self.write(path.relative_to(self.root).as_posix(), f"# {reviewer}: {found.task}\n\nVerdict: PASS\n")
+            self.ok("docs", FEATURE, "--task", found.task, "--none", "the sample calls no library")
         self.ok("gate", FEATURE, "implement", "--result", "pass")
         self.ok("gate", FEATURE, "verify", "--result", "pass")
         self.assertEqual(self.state()["phase"], "done")

@@ -55,5 +55,5 @@ question, or that starts a server or a browser: you report, the orchestrator dec
 
 Your last message is read by the orchestrator. It must contain: the files you changed; the result of
 `bdd classify FEAT-n`; the components and tokens of the design system you used, and any you had to add with the
-reason; the documentation you consulted (library, version, source); the helpers you used, if any; the states you
+reason; the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); the helpers you used, if any; the states you
 covered; change requests, if any; and whether the task is ready for its reviews.

@@ -40,5 +40,5 @@ When the code touches an API or a database, read the cards `api-design`, `databa
 ## Return
 
 Your last message is read by the orchestrator. It must contain: the files you changed; the result of
-`bdd classify FEAT-n`; the quality tools you ran, if any (`bdd check FEAT-n` is the orchestrator's); the library documentation you consulted; the tasks done and not done; change requests, if any; and whether the implement gate can
+`bdd classify FEAT-n`; the quality tools you ran, if any (`bdd check FEAT-n` is the orchestrator's); the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); the tasks done and not done; change requests, if any; and whether the implement gate can
 pass.

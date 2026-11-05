@@ -199,7 +199,9 @@ use and the words of the rules it covers: a screen step sends the task to the ui
 signing in, or a rule about money, credentials, access or personal data, adds the security-reviewer; the code-reviewer
 reviews every task. It also names the cards to read. The orchestrator follows it without asking, each reviewer writes
 `reviews/<task>-<reviewer>.md` with a verdict, must-fix findings go back to the writer (at most twice), and the
-implement gate refuses while a routed review is missing.
+implement gate refuses while a routed review is missing. Each writer also states which documentation it read for each
+task (the library, its version and a source anyone can open); the orchestrator records it with `bdd docs`, and the gate
+refuses a task with no record and no stated reason.
 
 ## Features across several repositories
 

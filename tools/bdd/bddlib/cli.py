@@ -28,6 +28,7 @@ COMMANDS = {
     "design": ("design", "run"),
     "route": ("route", "run"),
     "helpers": ("helpers", "run"),
+    "docs": ("docsrecord", "run"),
     "pr": ("pr", "run"),
     "report": ("htmlreport", "run"),
     "vocabulary": ("vocabcmd", "run"),
