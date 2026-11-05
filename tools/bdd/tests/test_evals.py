@@ -207,6 +207,18 @@ class HarnessHelpersTest(unittest.TestCase):
                     self.assertIn("pnpm", kind["tools"])
         self.assertNotIn('"npm", *NPM_CI[1:], "--prefix", "tests"', (REPO / "evals" / "run_e2e.py").read_text(encoding="utf-8"))
 
+    def test_a_program_is_looked_up_on_the_path_so_a_windows_shim_starts(self):
+        """`pnpm` is `pnpm.cmd` on Windows; started by its bare name it is "file not found" (found when the baseline arm
+        stopped after the model had run)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            shim = Path(tmp) / ("pnpm.cmd" if os.name == "nt" else "pnpm")
+            shim.write_text("echo", encoding="utf-8")
+            shim.chmod(0o755)
+            found = run_e2e.resolved(["pnpm", "test"], {"PATH": tmp})
+            self.assertEqual((found[0].casefold(), found[1:]), (str(shim).casefold(), ["test"]))   # Windows reports the extension in capitals
+            self.assertEqual(run_e2e.resolved(["no-such-program-anywhere", "x"], {"PATH": tmp}), ["no-such-program-anywhere", "x"])
+            self.assertEqual(run_e2e.resolved([], {"PATH": tmp}), [])
+
     def test_the_waiting_command_is_found_in_the_status_text(self):
         self.assertEqual(run_e2e.WAITING.search("the person: /greenlight:approve FEAT-002 examples").groups(), ("FEAT-002", "examples"))
         self.assertIsNone(run_e2e.WAITING.search("the bind phase"))

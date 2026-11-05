@@ -112,9 +112,17 @@ MODELS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "haiku-5.5": "us
           "sonnet-5.5": "us.anthropic.claude-sonnet-5-5", "opus-5.5": "us.anthropic.claude-opus-5-5"}
 
 
+def resolved(command: list[str], env: dict) -> list[str]:
+    """The command with its program looked up on the PATH the run will use. On Windows ``pnpm`` and ``npm`` are ``.cmd``
+    shims that a bare name does not start (``CreateProcess`` adds only ``.exe``), so the baseline arm, which ran
+    ``pnpm test`` by name, stopped with "file not found" after the model had already been paid for."""
+    program = shutil.which(command[0], path=env.get("PATH")) if command else None
+    return [program, *command[1:]] if program else command
+
+
 def run(command: list[str], cwd: Path, env: dict, timeout: int = 600, check: bool = True,
         stdin_text: str | None = None) -> subprocess.CompletedProcess:
-    done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    done = subprocess.run(resolved(command, env), cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           input=stdin_text, stdin=None if stdin_text is not None else subprocess.DEVNULL, timeout=timeout)
     if check and done.returncode != 0:
         raise SystemExit(f"command failed ({done.returncode}): {' '.join(command)}\n{done.stdout}\n{done.stderr}")
