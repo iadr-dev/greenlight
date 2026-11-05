@@ -164,15 +164,26 @@ def checkout_changes() -> list[str]:
     return [line[3:].strip() for line in done.stdout.splitlines() if line.strip()]
 
 
-def plugin_snapshot(tmp: Path, hooks: str) -> Path:
-    """The committed tree of the plugin, written into the run's folder through a private index: nothing the checkout has
-    not committed, and nothing anyone edits there while the run is going. With hooks off, its hooks file is empty, which
-    is how a soft-enforcement arm is made."""
+REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}")
+
+
+def plugin_ref(value: str) -> str:
+    """A tag, branch or commit of this repository, as the plugin version to run: a name made of the usual characters that
+    does not start with a dash, so it cannot be read by git as an option. ``HEAD`` is the checkout's last commit."""
+    if value != "HEAD" and not REF.fullmatch(value):
+        raise argparse.ArgumentTypeError("a tag, branch or commit name (letters, digits, . _ / -), or HEAD")
+    return value
+
+
+def plugin_snapshot(tmp: Path, hooks: str, ref: str = "HEAD") -> Path:
+    """The committed tree of the plugin at ``ref``, written into the run's folder through a private index: nothing the
+    checkout has not committed, and nothing anyone edits there while the run is going. With hooks off, its hooks file is
+    empty, which is how a soft-enforcement arm is made."""
     target = tmp / PLUGIN_SNAPSHOT
     tmp.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["GIT_INDEX_FILE"] = str(tmp / "plugin.index")
-    run([*GIT, "read-tree", "HEAD"], REPO, env)
+    run([*GIT, "read-tree", ref], REPO, env)
     run([*GIT, "checkout-index", "--all", f"--prefix={target.as_posix()}/"], REPO, env)
     (tmp / "plugin.index").unlink(missing_ok=True)
     if hooks == "off":
@@ -450,7 +461,7 @@ def run_notes(project: Path, output: dict) -> dict:
 
 def plugin_row(tmp: Path, args: argparse.Namespace, request: str, level: str, answers: list[dict]) -> dict:
     kind = REQUEST_KINDS[args.request]
-    plugin = plugin_snapshot(tmp, args.hooks)
+    plugin = plugin_snapshot(tmp, args.hooks, args.plugin_ref)
     project, env, python = build_project(tmp, kind)
     set_up(project, env, level, python, kind)
     watched = host_watched_files(env, tmp)
@@ -513,6 +524,8 @@ def main() -> int:
     ap.add_argument("--autonomy", default="autopilot", type=lambda v: parse_list(v, LEVELS, "autonomy"),
                     help="one level or a comma-separated list, e.g. standard,autopilot")
     ap.add_argument("--arms", default="plugin", type=lambda v: parse_list(v, ARMS, "arms"), help="plugin, baseline or both")
+    ap.add_argument("--plugin-ref", default="HEAD", type=plugin_ref, help="the plugin version the plugin arm loads: a tag, branch or "
+                    "commit of this repository (default HEAD, the last commit); the harness itself is always the checkout's")
     ap.add_argument("--hooks", default="on", choices=("on", "off"), help="off: the plugin's hooks are removed (soft enforcement)")
     ap.add_argument("--runs", type=int, default=1, help="repeat every combination this many times")
     ap.add_argument("--minutes", type=int, default=45, help="give up on one run after this long")
@@ -529,11 +542,11 @@ def main() -> int:
     answers_file = REQUESTS / f"{args.request}.answers.json"
     answers = json.loads(answers_file.read_text(encoding="utf-8")) if answers_file.is_file() else []
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{args.request}-{args.model}.jsonl"
-    dirty = checkout_changes()
+    dirty = checkout_changes() if args.plugin_ref == "HEAD" else []
     if dirty:
         print(f"note: {len(dirty)} uncommitted change(s) in the checkout are not in the plugin the runs load (a snapshot of "
               f"the last commit): {', '.join(dirty[:5])}{' ...' if len(dirty) > 5 else ''}")
-    commit = run([*GIT, "rev-parse", "HEAD"], REPO, os.environ.copy()).stdout.strip()
+    commit = run([*GIT, "rev-parse", "--verify", f"{args.plugin_ref}^{{commit}}"], REPO, os.environ.copy()).stdout.strip()
     rows: list[dict] = []
     plan = [("plugin", level) for level in args.autonomy if "plugin" in args.arms] + [("baseline", None)] * ("baseline" in args.arms)
     for number in range(1, args.runs + 1):
@@ -547,7 +560,7 @@ def main() -> int:
                 else:
                     shutil.rmtree(tmp, ignore_errors=True)
             row.update({"request": args.request, "model": args.model, "arm": arm, "autonomy_requested": level,
-                        "hooks": args.hooks if arm == "plugin" else "n/a", "run": number, "plugin_commit": commit,
+                        "hooks": args.hooks if arm == "plugin" else "n/a", "run": number, "plugin_commit": commit, "plugin_ref": args.plugin_ref,
                         "checkout_changes": len(dirty)})
             append_row(out, row)
             rows.append(row)

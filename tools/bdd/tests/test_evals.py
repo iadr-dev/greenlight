@@ -219,6 +219,24 @@ class HarnessHelpersTest(unittest.TestCase):
             self.assertEqual(run_e2e.resolved(["no-such-program-anywhere", "x"], {"PATH": tmp}), ["no-such-program-anywhere", "x"])
             self.assertEqual(run_e2e.resolved([], {"PATH": tmp}), [])
 
+    def test_the_plugin_version_to_run_is_a_name_git_cannot_read_as_an_option(self):
+        for good in ("HEAD", "v1.2.0", "main", "feature/x-1", "8db79a4"):
+            with self.subTest(good=good):
+                self.assertEqual(run_e2e.plugin_ref(good), good)
+        for bad in ("--upload-pack=x", "-v", "a b", "x;rm", "", "../x ", "a" * 101, "$(id)"):
+            with self.subTest(bad=bad), self.assertRaises(run_e2e.argparse.ArgumentTypeError):
+                run_e2e.plugin_ref(bad)
+
+    def test_an_older_version_of_the_plugin_can_be_snapshotted_for_a_comparison(self):
+        known = run_e2e.run([*run_e2e.GIT, "rev-parse", "--verify", "--quiet", "v1.2.0^{commit}"], REPO, os.environ.copy(), check=False)
+        if known.returncode != 0:
+            self.skipTest("this clone has no v1.2.0 tag")
+        with tempfile.TemporaryDirectory() as tmp:
+            target = run_e2e.plugin_snapshot(Path(tmp), "on", "v1.2.0")
+            version = json.loads((target / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+            self.assertEqual(version, "1.2.0")
+            self.assertFalse((target / "tools" / "bdd" / "bddlib" / "route.py").exists(), "routing came after 1.2.0")
+
     def test_the_waiting_command_is_found_in_the_status_text(self):
         self.assertEqual(run_e2e.WAITING.search("the person: /greenlight:approve FEAT-002 examples").groups(), ("FEAT-002", "examples"))
         self.assertIsNone(run_e2e.WAITING.search("the bind phase"))
