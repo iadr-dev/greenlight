@@ -6,7 +6,7 @@ the restore) and runs the suite the same way `bdd run` does. Pin the actions you
 ```yaml
 - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
   with:
-    python-version: "3.12"
+    python-version: "3.14"
 - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
   with:
     dotnet-version: "10.0.x"

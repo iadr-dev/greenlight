@@ -8,11 +8,11 @@ install):
 - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
   with:
     distribution: temurin
-    java-version: "21"
+    java-version: "25"
     cache: maven
 - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
   with:
-    python-version: "3.12"
+    python-version: "3.14"
 - run: git clone --depth 1 --branch v1.2.0 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
 - name: Check every finished feature
   run: |

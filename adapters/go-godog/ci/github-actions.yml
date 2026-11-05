@@ -26,10 +26,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
-          python-version: "3.12"     # runs the bdd command line only
+          python-version: "3.14"     # runs the bdd command line only
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.27"
           cache-dependency-path: tests/go.sum
       - name: Get greenlight
         run: git clone --depth 1 --branch "$GREENLIGHT_REF" https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
