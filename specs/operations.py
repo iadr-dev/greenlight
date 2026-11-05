@@ -47,6 +47,7 @@ COMMANDS: dict[str, list[str]] = {
     "report": [*BDD, "report"],
     "add the .NET adapter": [*BDD, "adapter", "apply", "dotnet-reqnroll"],
     "add the Node adapter": [*BDD, "adapter", "apply", "ts-cucumber-js"],
+    "route": [*BDD, "route"],
 }
 
 LIB: dict[str, str] = {}
@@ -57,6 +58,7 @@ FILES: dict[str, str] = {
     "newer project config": ".bdd/config.toml",
     "rules": ".bdd/features/FEAT-007-discounts/rules.md",
     "test design": ".bdd/features/FEAT-007-discounts/test-design.md",
+    "tasks": ".bdd/features/FEAT-007-discounts/tasks.md",
     "feature file": "features/discounts.feature",
     "step file": "steps/steps.py",
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",

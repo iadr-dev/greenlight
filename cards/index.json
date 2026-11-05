@@ -181,6 +181,21 @@
       "path": "instructions/C.UI.SEE.md"
     },
     {
+      "apply_when": "writing or reviewing a screen or component that a person sees or operates, on the web or on a mobile device",
+      "id": "accessibility",
+      "kind": "practice",
+      "output": "screens that meet WCAG 2.2 level AA, checked with the keyboard, a screen reader's view and the project's own tools, with each finding rated",
+      "pairs_with": [
+        "ui-design",
+        "language-typescript",
+        "language-dart",
+        "language-kotlin",
+        "language-swift"
+      ],
+      "path": "practices/accessibility.md",
+      "phase": "implement"
+    },
+    {
       "apply_when": "designing, changing or judging an HTTP, GraphQL or RPC interface that other code depends on",
       "id": "api-design",
       "kind": "practice",
@@ -405,6 +420,22 @@
       "phase": "discover"
     },
     {
+      "apply_when": "writing or reviewing code that signs people in, decides who may do what, handles money, secrets or personal data, or takes input from outside the process",
+      "id": "security",
+      "kind": "practice",
+      "output": "code that checks access on the server for each record, validates input at the boundary, keeps secrets and personal data out of code, logs and errors, and cannot repeat a payment",
+      "pairs_with": [
+        "api-design",
+        "database-schema",
+        "language-typescript",
+        "language-python",
+        "language-go",
+        "language-kotlin"
+      ],
+      "path": "practices/security.md",
+      "phase": "implement"
+    },
+    {
       "apply_when": "a scenario failed intermittently, or before declaring a feature done when it touches time, concurrency, the network or a UI",
       "id": "stability-rerun",
       "kind": "practice",
@@ -438,6 +469,23 @@
       ],
       "path": "practices/test-data.md",
       "phase": "bind"
+    },
+    {
+      "apply_when": "writing or reviewing a screen, page or component, on the web or on a mobile device",
+      "id": "ui-design",
+      "kind": "practice",
+      "output": "screens built from the project's design system, with every state designed, that follow the platform's conventions and fit the widths the project supports",
+      "pairs_with": [
+        "accessibility",
+        "language-typescript",
+        "language-nextjs",
+        "language-expo",
+        "language-dart",
+        "language-kotlin",
+        "language-swift"
+      ],
+      "path": "practices/ui-design.md",
+      "phase": "implement"
     },
     {
       "apply_when": "a Python project whose scenarios run with behave (the generic-junit adapter)",

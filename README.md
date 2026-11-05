@@ -48,11 +48,15 @@ request ─▶ rules ─▶ examples ─▶ system map + design ─▶ red tests
   Codex is never graded hard: CI and branch review are the guarantee.
 - **Existing code and several repositories.** `/greenlight:adopt` describes code that already exists without changing
   it; a feature can span repositories (`[workspace]`); teams can share a pinned vocabulary.
+- **The right specialist for each task, chosen for you.** In the code stage `bdd route` reads each task's scenarios and
+  names who writes it (the `implementer`, or the `ui-engineer` for screens) and who reviews it (a `code-reviewer`
+  always, a `ui-reviewer` for screens, a `security-reviewer` for signing in, money or personal data). Nobody is asked;
+  the implement gate waits for every review, and the report shows the routing and each verdict.
 - **Deterministic work is code, not prompts.** Lint, trace, locks, gates and classification are the `bdd` command line
   (Python 3.11+, standard library only).
 - **Traceable.** `@FEAT-n`, `@R-n.m` and `@EX-n.m.k` tags tie every rule to its examples, tests and code.
 
-> Status: 1.1. Measured results and the known limits are in the [CHANGELOG](CHANGELOG.md); the evaluation harness is
+> Status: 1.2. Measured results and the known limits are in the [CHANGELOG](CHANGELOG.md); the evaluation harness is
 > described in [evals/README.md](evals/README.md).
 
 ## See it work
@@ -95,7 +99,8 @@ independent audit, so the report shows what was recorded up to the green run.
 3. **Approve the contract.** You read `rules.md` and the scenarios and approve each by typing
    `/greenlight:approve FEAT-n rules|examples`. Approved examples lock the feature files.
 4. **Red, then green.** The steps and drivers are written and run; every new scenario must fail for the intended
-   reason before any code is written. Then the code is written until the scenarios pass.
+   reason before any code is written. Then each task goes to the writer `bdd route` picks for it, which writes the code
+   until its scenarios pass, and to its reviewers (code, UI, security), whose must-fix findings go back to the writer.
 5. **Verify.** An independent auditor checks the evidence and writes `report.md`; `Verdict: PASS` means every rule has
    examples, every example has a passing test, and nothing approved or bound changed afterwards.
 6. **Hand over.** `bdd check FEAT-n` runs your formatter, linter and type checker; `bdd pr FEAT-n --write` writes a
@@ -132,6 +137,26 @@ greenlight writes `.bdd/` (commit it; its machine-local `.enforcement/`, `.integ
 ignored) and the adapter's `tests/` skeleton into your repository, and never overwrites an existing file. To remove it,
 delete those folders; `bdd install-skills ... --uninstall` removes the skills it installed outside the plugin.
 
+### Plugins greenlight can use
+
+greenlight works on its own: its roles carry their knowledge in `cards/` (UI design, accessibility, security, API
+design, databases, each language) and use the project's own tools. When one of these Claude Code plugins is
+installed, the roles use it too, always in a mode that reports and never in one that edits code or tests:
+
+| Plugin | Used by | For |
+|---|---|---|
+| `frontend-design` | ui-engineer | the design plan of a new screen |
+| `figma` | ui-engineer | building from a Figma design, when the task names one (needs your Figma login) |
+| `context7`, `microsoft-docs` | writers and reviewers | the current official documentation of a library |
+| `chrome-devtools-mcp` | ui-reviewer | accessibility and visual checks in a browser, when the app can be started |
+| `impeccable` | ui-reviewer | its `audit` and its finish reviewer's criteria (not the modes that edit code or ask you) |
+| `feature-dev`, `pstack`, `code-metrics-tracker`, `api-drift-detector` | code-reviewer | review checklists, complexity and duplication, API contract drift |
+| `open-code-review` | code-reviewer | `ocr review --format json`, report only |
+
+Not used inside the pipeline, because their own flows write tests or record approvals: `superpowers` (its TDD and
+subagent-driven development) and `pstack`'s `poteto-mode` and `tdd`. Their hooks still run if you have them installed;
+greenlight's guard keeps every agent away from the tests whatever a hook suggests.
+
 ## Use
 
 ```text
@@ -142,6 +167,7 @@ delete those folders; `bdd install-skills ... --uninstall` removes the skills it
 /greenlight:adopt "orders module"                 # describe code that already exists, change nothing
 /greenlight:status                                # where everything stands
 /greenlight:change FEAT-001 "what changes, why"   # change approved work, keeping the history
+bdd route FEAT-001                                # who writes and who reviews each task, and why
 bdd check FEAT-001                                # your formatter, linter and type checker
 bdd pr FEAT-001                                   # a pull-request description from the recorded facts
 bdd report FEAT-001 --out reports/FEAT-001.html   # a readable HTML report of the feature, for non-developers

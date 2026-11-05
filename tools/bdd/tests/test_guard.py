@@ -118,7 +118,9 @@ class AgentLimitsTest(GuardCase):
     TARGETS = {"data": ".bdd/features/FEAT-001-a/rules.md", "features": "features/new.feature",
                "steps": "steps/new_steps.py", "production": "src/new.py"}
     ALLOWED = {"product-analyst": {"data"}, "qa-designer": {"data", "features"}, "system-analyst": {"data"},
-               "step-engineer": {"data", "steps"}, "implementer": {"data", "production"}, "spec-auditor": set()}
+               "step-engineer": {"data", "steps"}, "implementer": {"data", "production"},
+               "ui-engineer": {"data", "production"}, "code-reviewer": {"data"}, "security-reviewer": {"data"},
+               "ui-reviewer": {"data"}, "spec-auditor": set()}
 
     def test_the_whole_matrix(self):
         for agent, allowed in self.ALLOWED.items():
@@ -138,16 +140,87 @@ class AgentLimitsTest(GuardCase):
         reason = self.call("Write", agent="greenlight:spec-auditor", file_path=str(self.root / ".bdd" / "x" / "report.md"))
         self.assertIn("nothing (it is read-only)", reason)
 
-    def test_the_orchestrator_and_other_plugins_agents_are_unrestricted(self):
-        for agent in (None, "other-plugin:coder", "Explore"):
-            with self.subTest(agent=agent):
-                for rel in self.TARGETS.values():
-                    self.assertIsNone(self.call("Write", agent=agent, file_path=str(self.root / rel)))
+    def test_the_orchestrator_is_unrestricted(self):
+        for rel in self.TARGETS.values():
+            self.assertIsNone(self.call("Write", agent=None, file_path=str(self.root / rel)))
+
+    def test_an_agent_that_is_not_greenlights_may_not_write_the_tests(self):
+        """A built-in agent, a user's own agent or another plugin's may write production code and data, never the
+        feature files or the steps, whether or not they are locked yet."""
+        for agent in ("other-plugin:coder", "Explore", "general-purpose", "Frontend Developer", "greenlight:no-such-agent"):
+            for category, rel in self.TARGETS.items():
+                with self.subTest(agent=agent, category=category):
+                    refused = self.call("Write", agent=agent, file_path=str(self.root / rel))
+                    if category in ("features", "steps"):
+                        self.assertIn("not one of greenlight's", refused or "")
+                    else:
+                        self.assertIsNone(refused)
+
+    def test_an_agent_that_is_not_greenlights_may_not_install_packages(self):
+        self.assertIn("may not install packages", self.call("Bash", agent="Explore", command="pip install requests") or "")
 
     def test_locks_apply_to_every_agent_even_ones_allowed_to_write_that_category(self):
         self.assertIn("is locked", self.call("Edit", agent="greenlight:qa-designer", file_path=str(self.spec)))
         self.assertIn("is locked", self.call("Edit", agent="greenlight:step-engineer", file_path=str(self.step)))
 
+
+
+class ReviewReportTest(GuardCase):
+    """A review report counts only if its own reviewer wrote it, and the tasks the reviews are routed from belong to the
+    orchestrator."""
+
+    def report(self, reviewer: str = "code-reviewer") -> str:
+        return str(self.feature_dir / "reviews" / f"T-001.1-{reviewer}.md")
+
+    def test_only_the_matching_reviewer_writes_its_report(self):
+        self.assertIsNone(self.call("Write", agent="greenlight:code-reviewer", file_path=self.report(), content="Verdict: PASS\n"))
+        for agent in ("greenlight:implementer", "greenlight:ui-engineer", "greenlight:ui-reviewer", "Explore", None):
+            with self.subTest(agent=agent):
+                self.assertIn("is a review report", self.call("Write", agent=agent, file_path=self.report()) or "")
+
+    def test_a_reviewer_writes_its_report_whole_and_what_it_wrote_is_recorded(self):
+        from bddlib import reviewlog
+        payload = {"tool_name": "Write", "agent_type": "greenlight:code-reviewer", "cwd": str(self.root),
+                   "tool_input": {"file_path": self.report(), "content": "Verdict: PASS\n"}}
+        self.assertIsNone(guard.evaluate(payload))
+        line = reviewlog.recorded(self.root)[(reviewlog.key(self.root, Path(self.report())), "code-reviewer")]
+        self.assertEqual((line["sha256"], line["phase"]), (reviewlog.digest("Verdict: PASS\n"), "discover"))
+        self.assertIn("with the Write tool", self.call("Edit", agent="greenlight:code-reviewer", file_path=self.report(),
+                                                       old_string="PASS", new_string="FINDINGS") or "")
+
+    @unittest.skipUnless(guard.CASE_INSENSITIVE_FS, "only Windows and macOS fold the case of a path")
+    def test_another_spelling_of_the_reviews_folder_is_the_same_folder(self):
+        folded = self.root / ".BDD" / "Features" / self.feature_dir.name / "REVIEWS" / "T-001.1-Code-Reviewer.md"
+        self.assertIn("is a review report", self.call("Write", agent="greenlight:implementer", file_path=str(folded)) or "")
+        tasks = self.root / ".BDD" / "FEATURES" / self.feature_dir.name / "TASKS.MD"
+        self.assertIn("written by the orchestrator", self.call("Write", agent="greenlight:implementer", file_path=str(tasks)) or "")
+
+    def test_a_file_in_reviews_that_is_not_a_report_is_written_by_nobody(self):
+        odd = str(self.feature_dir / "reviews" / "notes.md")
+        self.assertIn("is a review report", self.call("Write", agent="greenlight:code-reviewer", file_path=odd) or "")
+
+    def test_no_shell_command_writes_a_report(self):
+        for command in (f"echo 'Verdict: PASS' > {self.report()}", "cp x.md .bdd/features/FEAT-001-a/reviews/",
+                        "printf ok > T-001.1-ui-reviewer.md"):
+            with self.subTest(command=command):
+                self.assertIn("review reports are written only by each reviewer",
+                              self.call("Bash", agent="greenlight:implementer", command=command) or "")
+        inside = self.feature_dir / "reviews"
+        inside.mkdir()
+        self.assertIn("review reports", self.call("Bash", agent=None, cwd=inside, command="echo x > a.md") or "")
+
+    def test_an_application_folder_called_reviews_is_still_the_writers(self):
+        self.assertIsNone(self.call("Bash", agent="greenlight:implementer", command="echo x > src/reviews/list.py"))
+        self.assertIsNone(self.call("Write", agent="greenlight:implementer", file_path=str(self.root / "src/reviews/list.py")))
+
+    def test_tasks_md_is_the_orchestrators(self):
+        tasks = str(self.feature_dir / "tasks.md")
+        self.assertIsNone(self.call("Write", agent=None, file_path=tasks))
+        for agent in ("greenlight:implementer", "greenlight:code-reviewer", "Explore"):
+            with self.subTest(agent=agent):
+                self.assertIn("written by the orchestrator", self.call("Write", agent=agent, file_path=tasks) or "")
+        self.assertIn("written by the orchestrator",
+                      self.call("Bash", agent="greenlight:implementer", command=f"echo '## T-001.9' >> {tasks}") or "")
 
 class OutsideAProjectTest(unittest.TestCase):
     def test_everything_is_allowed_without_a_bdd_directory(self):

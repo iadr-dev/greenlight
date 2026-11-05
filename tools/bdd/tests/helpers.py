@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import approvals, claudepaths, enforcement, gates, lockfile, state
+from bddlib import approvals, claudepaths, enforcement, gates, lockfile, route, state
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 RULES = "# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n"
@@ -53,7 +53,11 @@ class ProjectCase(unittest.TestCase):
         return state.load(self.feature_dir)
 
     # -- gates and approvals -------------------------------------------------------------
-    def gate(self, name: str, result: str = "pass", detail=None, red=None) -> dict:
+    def gate(self, name: str, result: str = "pass", detail=None, red=None, reviews: bool = True) -> dict:
+        """Record a gate. Before ``implement`` the routed reviews are left in ``reviews/``, as the orchestrator does in a
+        real run, unless ``reviews`` is False."""
+        if name == "implement" and result == "pass" and reviews:
+            self.write_reviews()
         return gates.record_gate(self.root, self.feature_dir, name, result, detail or {}, red)
 
     def approve(self, gate: str, grade: str = "self-reported", decision: str = "approve", **extra) -> dict:
@@ -76,6 +80,14 @@ class ProjectCase(unittest.TestCase):
             if step == last:
                 return
         raise ValueError(f"unknown pipeline step {last}")
+
+    def write_reviews(self, verdict: str = "PASS") -> None:
+        """A report from every reviewer the routing names, as the orchestrator leaves them before the implement gate."""
+        for found in route.routes(self.root, self.feature_dir, "FEAT-007"):
+            for reviewer in found.reviewers:
+                path = route.review_path(self.feature_dir, found.task, reviewer)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"# {reviewer}: {found.task}\n\nVerdict: {verdict}\n", encoding="utf-8", newline="\n")
 
     # -- transcripts ---------------------------------------------------------------------
     def transcript(self, *entries: dict, name: str = "session.jsonl") -> Path:

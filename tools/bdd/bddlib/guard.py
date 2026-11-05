@@ -39,7 +39,7 @@ from pathlib import Path
 
 from . import claudepaths, codexsession
 from . import config as cfg
-from . import enforcement, lockfile, sharedvocab, store
+from . import enforcement, lockfile, reviewlog, roles, sharedvocab, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -56,8 +56,16 @@ AGENT_WRITES = {
     "system-analyst": {"data"},
     "step-engineer": {"data", "steps"},
     "implementer": {"data", "production"},
+    "ui-engineer": {"data", "production"},
+    "code-reviewer": {"data"},              # the reviewers write their report under .bdd/ and nothing else
+    "security-reviewer": {"data"},
+    "ui-reviewer": {"data"},
     "spec-auditor": set(),
 }
+# A subagent that is not one of greenlight's (a built-in one, a user's own, another plugin's) gets what the implementer
+# gets: it may never write the feature files or the steps, whichever tests are locked yet.
+FOREIGN_AGENT = "another agent"
+FOREIGN_WRITES = {"data", "production"}
 MANAGED_NAMES = {"state.json", "lock.json", sharedvocab.LOCK_NAME}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
@@ -346,8 +354,68 @@ def refuses_node_packages(command: str) -> bool:
 
 
 def agent_name(payload: dict) -> str | None:
+    """greenlight's name for the agent making the call: its own agents by their name, any other subagent as
+    ``FOREIGN_AGENT``, and None for the main session (the orchestrator)."""
     agent_type = payload.get("agent_type") or ""
-    return agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else None
+    if not agent_type:
+        return None
+    name = agent_type[len(AGENT_PREFIX):] if agent_type.startswith(AGENT_PREFIX) else ""
+    return name if name in AGENT_WRITES else FOREIGN_AGENT
+
+
+REVIEW_FILE = re.compile(r"t-\d+\.\d+-(?P<reviewer>[a-z-]+)\.md")
+
+
+def _parts(project: Project, path: Path) -> tuple[str, ...]:
+    """The path's segments below the project, folded the way the file system folds them (``.BDD/Features`` is
+    ``.bdd/features`` on Windows and macOS)."""
+    parts = Path(project.relative(path)).parts
+    return tuple(p.casefold() for p in parts) if CASE_INSENSITIVE_FS else parts
+
+
+def review_owner(project: Project, path: Path) -> str | None:
+    """For a file in a feature's ``reviews/`` folder, the reviewer that alone may write it (an empty string when the name
+    is not a review report, which nobody may write); None for any other file."""
+    parts = _parts(project, path)
+    if len(parts) < 5 or parts[0] != cfg.BDD_DIR or parts[1] != "features" or parts[3] != roles.REVIEWS_DIR:
+        return None
+    match = REVIEW_FILE.fullmatch(parts[-1].casefold()) if len(parts) == 5 else None
+    return match.group("reviewer") if match and match.group("reviewer") in roles.REVIEWERS else ""
+
+
+def in_reviews(project: Project, cwd: Path | None) -> bool:
+    """Is the working directory of the call a feature's reviews/ folder (or below it)?"""
+    if cwd is None:
+        return False
+    key, base = path_key(cwd), path_key(project.root / cfg.BDD_DIR / "features")
+    return key.startswith(base + "/") and f"/{roles.REVIEWS_DIR}" in key[len(base):]
+
+
+def is_tasks_file(project: Project, path: Path) -> bool:
+    parts = _parts(project, path)
+    return len(parts) == 4 and parts[0] == cfg.BDD_DIR and parts[1] == "features" and parts[3] == "tasks.md"
+
+
+def feature_phase(project: Project, path: Path) -> str | None:
+    """The phase of the feature a file under ``.bdd/features/<feature>/`` belongs to (None when it cannot be read)."""
+    folder = Path(project.relative(path)).parts[2:3]
+    try:
+        return store.read_json(project.root / cfg.BDD_DIR / "features" / folder[0] / "state.json", "state").get("phase") if folder else None
+    except Exception:                                            # the guard never fails a call over a record it cannot read
+        return None
+
+
+def record_review(project: Project, payload: dict, target: Path, agent: str | None) -> str | None:
+    """When a reviewer writes its own report, remember what it wrote (``reviewlog``); the gate later accepts the report
+    only with exactly that content. A report can only be written whole, with the Write tool, so the content is known."""
+    owner = review_owner(project, target)
+    if not owner or agent != owner:
+        return None
+    tool_input = payload.get("tool_input") or {}
+    if payload.get("tool_name") != "Write" or not isinstance(tool_input.get("content"), str):
+        return f"greenlight: write the whole review report with the Write tool ({project.relative(target)})."
+    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"), feature_phase(project, target))
+    return None
 
 
 def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
@@ -356,17 +424,26 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
         return locked_message(project, path, lock)
     if project.is_data(path) or path_key(path) in project.shared:
         return managed_message(project, path)
+    owner = review_owner(project, path)
+    if owner is not None and agent != owner:
+        return (f"greenlight: {project.relative(path)} is a review report; only "
+                + (f"the {owner} agent writes it, as its own review" if owner else "a reviewer writes one, named <task>-<reviewer>.md")
+                + ". A writer, the orchestrator or another agent may not write or change it.")
+    if agent is not None and is_tasks_file(project, path):
+        return (f"greenlight: {project.relative(path)} is written by the orchestrator; an agent may not change the tasks, "
+                "because the reviews are routed from them.")
     protected = check_enforcement_files(path)
     if not protected and any(_CODEX_STATE.search(spelling.replace("\\", "/"))       # as written, and with links followed
                              for spelling in (path.as_posix(), os.path.realpath(path))):
         protected = CODEX_STATE_MESSAGE
     if protected:
         return protected
-    allowed = AGENT_WRITES.get(agent) if agent else None
+    allowed = (FOREIGN_WRITES if agent == FOREIGN_AGENT else AGENT_WRITES.get(agent)) if agent else None
     category = project.category(path)
     if allowed is not None and category not in allowed:
         what = ", ".join(sorted(allowed)) or "nothing (it is read-only)"
-        return (f"greenlight: the {agent} agent may not write {category} files ({project.relative(path)}); "
+        who = ("an agent that is not one of greenlight's" if agent == FOREIGN_AGENT else f"the {agent} agent")
+        return (f"greenlight: {who} may not write {category} files ({project.relative(path)}); "
                 f"it may write: {what}.")
     return None
 
@@ -638,6 +715,15 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     if command_touches_enforcement(scrubbed):
         return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
                                    "(Claude Code hook settings or the plugin itself)")
+    for reading in shell_readings(scrubbed):
+        text = reading.casefold()
+        names_report = re.search(r"(?<![\w.-])t-\d+\.\d+-(?:" + "|".join(roles.REVIEWERS) + r")\.md(?![\w-])", text)
+        if names_report or (names_segment(text, cfg.BDD_DIR) and names_segment(text, roles.REVIEWS_DIR)) or in_reviews(project, cwd):
+            return ("greenlight: review reports are written only by each reviewer with its file tool, never from the "
+                    "shell. (This shell command looks like it writes into a reviews/ folder.)")
+        if agent and re.search(r"(?<![\w.-])tasks\.md(?![\w-])", text):
+            return ("greenlight: tasks.md is written by the orchestrator; an agent may not change the tasks. "
+                    "(This shell command looks like it writes to it.)")
     hit = mentioned_protected(project, scrubbed, cwd)
     if hit is None:
         return None
@@ -664,7 +750,8 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
     if tool in WRITE_TOOLS and tool_input.get(WRITE_TOOLS[tool]):
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         target = raw if raw.is_absolute() else cwd / raw
-        return check_file_write(project.owner_of(target), target, agent_name(payload))
+        owner, agent = project.owner_of(target), agent_name(payload)
+        return check_file_write(owner, target, agent) or record_review(owner, payload, target, agent)
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None
