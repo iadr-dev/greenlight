@@ -35,7 +35,7 @@ hashed before and after the run, and a change is listed in the row (`host_change
 name a file outside the run's project and its private folders is marked `contaminated` and kept out of the targets in the
 summary table, which lists it apart.
 
-Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool) or Node and npm (money-lib, shop-web), working credentials, and some money: a run makes many model calls. Not
+Needs `claude`, `git` and `sh` on PATH, and `uv` (Python apps), Go (csv-tool), Node and npm (money-lib, shop-web) and, for the web requests, pnpm (the adapter's test tooling), working credentials, and some money: a run makes many model calls. Not
 part of CI.
 """
 from __future__ import annotations
@@ -78,6 +78,8 @@ MAX_FOLLOW_UPS = 6
 # configuration (see set_up_web).
 WEB_PORT = "3107"
 NPM_CI = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
+# The web adapter pins its test tooling with pnpm (D58); the reference apps themselves are installed with npm.
+PNPM_TOOLING = ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-workspace", "--dir", "tests"]
 PYTEST = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 REQUEST_KINDS = {
     "discounts": {"app": "shop-api", "skill": "feature", "adapter": "python-pytest-bdd", "tools": ("uv",),
@@ -99,9 +101,9 @@ REQUEST_KINDS = {
                               # node:test of Node 22 has no random order, and a second name pattern widens the first
                               # instead of narrowing it, so this stack has neither; `bdd run --shuffle` says so
                               {})},
-    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+    "minimum-order": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm", "pnpm"),
                       "baseline": ["npm", "test"]},
-    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm"),
+    "login-return": {"app": "shop-web", "skill": "feature", "adapter": "ts-playwright-bdd", "tools": ("node", "npm", "pnpm"),
                      "baseline": ["npm", "test"]},
 }
 
@@ -266,7 +268,7 @@ WEB_SERVER_COMMENT = "  // webServer: { command: 'npm start', url: 'http://local
 def set_up_web(project: Path, env: dict) -> None:
     """Act as the person: the test tooling from the adapter's lockfile, the browser, and the start of the application
     (the agents may not install packages, and the configuration is bound with the steps)."""
-    run([shutil.which("npm") or "npm", *NPM_CI[1:], "--prefix", "tests"], project, env, timeout=900)
+    run([shutil.which("pnpm") or "pnpm", *PNPM_TOOLING[1:]], project, env, timeout=900)
     run(["node", "tests/node_modules/@playwright/test/cli.js", "install", "chromium"], project, env, timeout=900)
     config = project / "tests" / "bdd.config.ts"
     found = config.read_text(encoding="utf-8")

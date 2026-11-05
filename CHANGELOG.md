@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The evaluation harness (`evals/run_e2e.py`) installed the web adapter's test tooling with `npm ci`, which stopped working when 1.2.0 moved that tooling to pnpm (no `package-lock.json` any more), so the two web requests (`minimum-order`, `login-return`) failed at set-up. The harness now installs it with pnpm like the adapter's own guide, and checks for `pnpm` on the PATH. CI does not run the harness, so nothing caught it.
+
 ### Added
 - The code stage is routed to specialist roles. `bdd route FEAT-n` names, for each task, the writer (the `implementer`, or the new `ui-engineer` for a task with screens), the reviewers (the new `code-reviewer` for every task, `ui-reviewer` for screens, `security-reviewer` for signing in, money, credentials, access or personal data) and the cards to read, from the steps the task's scenarios use and the words of its rules. The orchestrator follows it without asking, each reviewer writes `reviews/<task>-<reviewer>.md` with a verdict, must-fix findings go back to the writer at most twice, the implement gate waits for every routed review, and the auditor's new checklist item Q6 checks that no must-fix was left. Only the matching reviewer may write its report (where the hooks run, the gate accepts a report only with exactly the content its reviewer wrote, recorded by the guard), only the orchestrator may write `tasks.md`, and an example no task claims is still routed and reviewed. Decision D59.
 - Three practice cards: `ui-design` (use the design system, design every state, follow the platform), `accessibility` (WCAG 2.2 AA by criterion, with a severity scale) and `security` (access per record on the server, validation at the boundary, secrets, safe errors and logs, money that cannot be charged twice).
