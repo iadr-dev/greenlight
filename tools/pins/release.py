@@ -99,10 +99,8 @@ def main(argv: list[str]) -> int:
     release_log = changelog(log.read_text(encoding="utf-8"), new, datetime.date.today())
     if args.write:
         for path, text in plan(old, new).items():
-            path.write_text(text, encoding="utf-8", newline="
-")
-        log.write_text(release_log, encoding="utf-8", newline="
-")
+            path.write_text(text, encoding="utf-8", newline="\n")
+        log.write_text(release_log, encoding="utf-8", newline="\n")
     print(new)
     return 0
 
