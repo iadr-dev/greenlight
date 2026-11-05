@@ -396,6 +396,15 @@ def is_tasks_file(project: Project, path: Path) -> bool:
     return len(parts) == 4 and parts[0] == cfg.BDD_DIR and parts[1] == "features" and parts[3] == "tasks.md"
 
 
+def feature_phase(project: Project, path: Path) -> str | None:
+    """The phase of the feature a file under ``.bdd/features/<feature>/`` belongs to (None when it cannot be read)."""
+    folder = Path(project.relative(path)).parts[2:3]
+    try:
+        return store.read_json(project.root / cfg.BDD_DIR / "features" / folder[0] / "state.json", "state").get("phase") if folder else None
+    except Exception:                                            # the guard never fails a call over a record it cannot read
+        return None
+
+
 def record_review(project: Project, payload: dict, target: Path, agent: str | None) -> str | None:
     """When a reviewer writes its own report, remember what it wrote (``reviewlog``); the gate later accepts the report
     only with exactly that content. A report can only be written whole, with the Write tool, so the content is known."""
@@ -405,7 +414,7 @@ def record_review(project: Project, payload: dict, target: Path, agent: str | No
     tool_input = payload.get("tool_input") or {}
     if payload.get("tool_name") != "Write" or not isinstance(tool_input.get("content"), str):
         return f"greenlight: write the whole review report with the Write tool ({project.relative(target)})."
-    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"))
+    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"), feature_phase(project, target))
     return None
 
 

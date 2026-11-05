@@ -137,11 +137,18 @@ def review_path(feature_dir: Path, task_id: str, reviewer: str) -> Path:
     return feature_dir / REVIEWS_DIR / f"{task_id}-{reviewer}.md"
 
 
+def _finished_agents(root: Path) -> dict[str, str]:
+    """{agent id: agent type} for every agent the plugin's SubagentStop hook saw finish in this project."""
+    from . import agentcost                                 # light at hook time: only the gate needs it
+    return {str(e["agent_id"]): str(e.get("agent", "")) for e in agentcost.read_entries(root)}
+
+
 def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False) -> list[str]:
     """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
     hooks run, its content is not what that reviewer wrote to that file (``reviewlog``)."""
     problems: list[str] = []
     log = reviewlog.recorded(root) if hooks_seen else {}
+    finished = _finished_agents(root) if hooks_seen else {}
     for route in routes(root, feature_dir, feature_id):
         for reviewer in route.reviewers:
             path = review_path(feature_dir, route.task, reviewer)
@@ -150,7 +157,7 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
                 problems.append(f"{route.task} has no {reviewer} report ({rel})")
             elif not VERDICT.search(path.read_text(encoding="utf-8-sig")):
                 problems.append(f"{rel} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line")
-            elif hooks_seen and not reviewlog.written_by(root, path, reviewer, log):
+            elif hooks_seen and not reviewlog.written_by(root, path, reviewer, log, finished):
                 problems.append(f"{rel} is not what the {reviewer} agent wrote: a report counts only as its own reviewer "
                                 "wrote it, unchanged; run the reviewer again")
     return problems

@@ -59,7 +59,7 @@ Verdict: PASS | FINDINGS
 ```
 
 Only the reviewer itself writes its report: the guard refuses the writers, the orchestrator, other agents and any shell
-command, and where the hooks run the gate accepts a report only with exactly the content its reviewer wrote (the reviewer writes the whole report with the Write tool; if a report is changed afterwards, in any way, the reviewer runs again). `FINDINGS` when *Must fix* is not empty. The must-fix items go back to the task's writer; the reviewer then runs again
+command, and where the hooks run the gate accepts a report only with exactly the content its reviewer last wrote, in the implement phase (the reviewer writes the whole report with the Write tool; if a report is changed afterwards, or an old one put back, the reviewer runs again). `FINDINGS` when *Must fix* is not empty. The must-fix items go back to the task's writer; the reviewer then runs again
 and writes its report fresh. A finding needs evidence from the files: a reviewer that could not check something says so
 under *Not checked* instead of passing it or inventing a finding. Reviewers never edit code or tests, and use a helper
 plugin only to report, never in a mode that fixes.

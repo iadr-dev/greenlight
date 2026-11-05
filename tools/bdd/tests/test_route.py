@@ -5,7 +5,7 @@ import io
 import json
 import os
 
-from bddlib import gates, route
+from bddlib import gates, reviewlog, route
 from bddlib.errors import UsageError
 
 from tests.helpers import ProjectCase
@@ -160,6 +160,29 @@ class GateTest(RouteCase):
         self.assertEqual(route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True),
                          ["reviews/T-007.1-ui-reviewer.md is not what the ui-reviewer agent wrote: a report counts only "
                           "as its own reviewer wrote it, unchanged; run the reviewer again"])
+
+    def test_an_old_report_put_back_does_not_count(self):
+        self.write_reviews()
+        first = "# code-reviewer: T-007.1\n\nVerdict: PASS\n"
+        second = "# code-reviewer: T-007.1\n\nVerdict: FINDINGS\n\n## Must fix\n- a.py:1 - x\n"
+        self.reviewer_writes("code-reviewer", first)
+        self.reviewer_writes("code-reviewer", second)
+        report = route.review_path(self.feature_dir, "T-007.1", "code-reviewer")
+        self.assertTrue(reviewlog.written_by(self.root, report, "code-reviewer"))
+        report.write_text(first, encoding="utf-8", newline="\n")                 # the earlier, passing report restored
+        self.assertFalse(reviewlog.written_by(self.root, report, "code-reviewer"))
+
+    def test_a_report_counts_only_from_the_implement_phase_and_from_a_reviewer_that_finished(self):
+        text = "# x\n\nVerdict: PASS\n"
+        self.reviewer_writes("code-reviewer", text)
+        report = route.review_path(self.feature_dir, "T-007.1", "code-reviewer")
+        self.assertTrue(reviewlog.written_by(self.root, report, "code-reviewer"))
+        reviewlog.record(self.root, report, "code-reviewer", text, agent_id="a1", phase="implement")
+        self.assertFalse(reviewlog.written_by(self.root, report, "code-reviewer", finished={}))
+        self.assertFalse(reviewlog.written_by(self.root, report, "code-reviewer", finished={"a1": "greenlight:implementer"}))
+        self.assertTrue(reviewlog.written_by(self.root, report, "code-reviewer", finished={"a1": "greenlight:code-reviewer"}))
+        reviewlog.record(self.root, report, "code-reviewer", text, agent_id="a1", phase="verify")
+        self.assertFalse(reviewlog.written_by(self.root, report, "code-reviewer", finished={"a1": "greenlight:code-reviewer"}))
 
     def test_a_report_written_under_another_reviewers_name_does_not_count(self):
         from bddlib import reviewlog

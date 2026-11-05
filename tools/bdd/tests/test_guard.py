@@ -183,8 +183,8 @@ class ReviewReportTest(GuardCase):
         payload = {"tool_name": "Write", "agent_type": "greenlight:code-reviewer", "cwd": str(self.root),
                    "tool_input": {"file_path": self.report(), "content": "Verdict: PASS\n"}}
         self.assertIsNone(guard.evaluate(payload))
-        self.assertEqual(reviewlog.recorded(self.root)[(reviewlog.key(self.root, Path(self.report())), "code-reviewer")],
-                         {reviewlog.digest("Verdict: PASS\n")})
+        line = reviewlog.recorded(self.root)[(reviewlog.key(self.root, Path(self.report())), "code-reviewer")]
+        self.assertEqual((line["sha256"], line["phase"]), (reviewlog.digest("Verdict: PASS\n"), "discover"))
         self.assertIn("with the Write tool", self.call("Edit", agent="greenlight:code-reviewer", file_path=self.report(),
                                                        old_string="PASS", new_string="FINDINGS") or "")
 
