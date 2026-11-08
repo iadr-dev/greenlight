@@ -50,6 +50,10 @@ COMMANDS: dict[str, list[str]] = {
     "route": [*BDD, "route"],
     "helpers": [*BDD, "helpers"],
     "docs": [*BDD, "docs"],
+    "cost": [*BDD, "cost"],
+    "subagent stop": [*BDD, "subagent-stop"],
+    "doctor": [*BDD, "doctor"],
+    "guard": [*BDD, "guard"],
 }
 
 LIB: dict[str, str] = {}
@@ -76,9 +80,15 @@ FILES: dict[str, str] = {
     "pubspec manifest": "pubspec.yaml",
     ".NET lock file": "tests/packages.lock.json",
     "Node lock file": "tests/pnpm-lock.yaml",
+    "first feature state": ".bdd/features/FEAT-001-sign-in/state.json",
+    "second feature state": ".bdd/features/FEAT-002-sign-up/state.json",
+    "agent notes": ".bdd/.runs/agents.jsonl",
+    "agent transcript": "transcripts/project/s/subagents/agent-x.jsonl",
+    "session transcript": "transcripts/project/s.jsonl",
 }
 
 ERRORS: dict[str, ErrorRule] = {
     "usage error": ErrorRule(exit_code=2),
     "violations found": ErrorRule(exit_code=1),
+    "refused": ErrorRule(exit_code=2),
 }
