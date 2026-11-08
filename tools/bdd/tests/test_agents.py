@@ -44,10 +44,13 @@ class AgentTest(unittest.TestCase):
                 else:
                     self.assertTrue(tools & WRITERS)
 
-    def test_only_the_step_engineer_and_the_two_writers_edit_existing_files(self):
+    def test_every_agent_that_changes_files_edits_them_and_the_reviewers_do_not(self):
+        """A spec agent without Edit rewrote whole 2,000-line feature files to change one scenario; a reviewer writes
+        its report whole with Write, because the guard refuses an edit of a report."""
+        editors = ("product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "ui-engineer")
         for name in EXPECTED:
             tools = {t.strip() for t in load(name)[0]["tools"].split(",")}
-            self.assertEqual("Edit" in tools, name in ("step-engineer", "implementer", "ui-engineer"), name)
+            self.assertEqual("Edit" in tools, name in editors, name)
 
     def test_no_agent_records_gates_and_the_boundaries_are_stated(self):
         for name in EXPECTED:

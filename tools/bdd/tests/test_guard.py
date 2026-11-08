@@ -132,6 +132,22 @@ class AgentLimitsTest(GuardCase):
                     else:
                         self.assertIn(f"the {agent} agent may not write {category} files", reason)
 
+    def test_an_edit_by_a_spec_agent_is_judged_exactly_like_a_write(self):
+        """The three spec agents have the Edit tool so a change is not a rewrite of the whole file; it gives them no
+        file they could not already write."""
+        extra = {"person config": ".bdd/config.toml", "standards": ".bdd/standards.md", "state": ".bdd/features/FEAT-001-a/state.json"}
+        for agent in ("product-analyst", "qa-designer", "system-analyst"):
+            for name, rel in {**self.TARGETS, **extra}.items():
+                path = str(self.root / rel)
+                written = self.call("Write", agent=f"greenlight:{agent}", file_path=path)
+                for tool in ("Edit", "MultiEdit"):
+                    with self.subTest(agent=agent, target=name, tool=tool):
+                        self.assertEqual(self.call(tool, agent=f"greenlight:{agent}", file_path=path), written)
+        self.assertIn("the qa-designer agent may not write production files",
+                      self.call("Edit", agent="greenlight:qa-designer", file_path=str(self.root / "src" / "app.py")) or "")
+        self.assertIn("the qa-designer agent may not write steps files",
+                      self.call("Edit", agent="greenlight:qa-designer", file_path=str(self.root / "steps" / "new_steps.py")) or "")
+
     def test_the_implementer_cannot_touch_tests(self):
         reason = self.call("Edit", agent="greenlight:implementer", file_path=str(self.root / "steps" / "new.py"))
         self.assertIn("it may write: data, production", reason)

@@ -1,7 +1,7 @@
 ---
 name: qa-designer
 description: Designs the tests of a feature from its approved rules, then writes the Gherkin examples (test-design and examples phases). Use when examples must be derived, written or revised. Writes under .bdd/ and in the feature directory only.
-tools: Read, Grep, Glob, Write, Bash
+tools: Read, Grep, Glob, Edit, Write, Bash
 model: opus
 ---
 
@@ -24,6 +24,9 @@ Run the **test-design** or **examples** playbook named in your task (`phases/tes
 - Read the `gherkin-style` card before writing the scenarios: one behaviour each, no independent concerns bundled,
   state over navigation, a minimal `Given`. Check your work with `bdd lint` and `bdd trace FEAT-n` and fix what they
   report, including the style warnings (`L015` to `L025`).
+- To change a file that already exists (a scenario, a section of `test-design.md`), use Edit on the lines that
+  change; do not write the whole file again. Rewriting a long file costs many tokens and can change text you did not
+  mean to touch, such as an escape sequence the file spells out or a scenario the person approved.
 
 ## What you must not do
 
