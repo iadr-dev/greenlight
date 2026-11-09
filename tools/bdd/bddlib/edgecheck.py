@@ -5,7 +5,7 @@ forgot after the code was written (Fieldly's CR-001.4, CR-002.3, CR-003.3 and CR
 card in its ``Techniques:`` line needs, by the kind of value its text speaks of:
 
     a date or a time        leap day
-    text, a length, digits  empty, maximum length
+    text, a length, digits  empty value, maximum length
     a page of a list        page size 1
 
 An edge is recorded when a bullet of the rule's section (an example, an exclusion) mentions it, or when a bullet says
@@ -25,11 +25,13 @@ from pathlib import Path
 from . import trace
 
 CARD = "boundary-value"
-HEADING = re.compile(r"^#{2,}\s+(.*\S)\s*$")
+HEADING = re.compile(r"^(#{2,})\s+(.*\S)\s*$")
 RULE_ID = re.compile(r"\b[RN]-\d+\.\d+\b")
-TECHNIQUES = re.compile(r"^\s*Techniques\s*:\s*(.*)$", re.IGNORECASE)
+ANY_ID = re.compile(r"\b[A-Z]{1,2}-\d+(?:\.\d+)*\b")
+TECHNIQUES = re.compile(r"^\s*(?:[-*]\s+)?\**\s*Techniques\s*\**\s*:\s*\**\s*(.*)$", re.IGNORECASE)
 BULLET = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+")
-NO_BOUNDARY = re.compile(r"^\s*(?:[-*]\s+)?No\s+(?P<edge>[a-z0-9 ]+?)\s+boundary\s*:\s*(?P<reason>.*)$", re.IGNORECASE)
+NO_BOUNDARY = re.compile(r"^\s*(?:(?:[-*]|\d+[.)])\s+)?\**\s*No\s+(?P<edge>[a-z0-9 -]+?)\s+boundary\s*\**\s*:\s*\**\s*(?P<reason>.*)$",
+                         re.IGNORECASE)
 
 DATE = re.compile(r"\b(?:dates?|calendar|days?|months?|years?|birthday|weekday|start time|end time|deadline|expir\w*)\b"
                   r"|\b\d{4}-\d{2}-\d{2}\b", re.IGNORECASE)
@@ -38,24 +40,30 @@ PAGING = re.compile(r"\b(?:pages of|per page|page size|paged|paging|pagination|c
 
 # edge -> (what a rule's words must say for the edge to apply, what a bullet says when it records the edge)
 EDGES = {
-    "leap day": (DATE, re.compile(r"leap|\b29\s+feb|\bfeb(?:ruary)?\.?\s+29|\b0?2[-/]29\b|閏", re.IGNORECASE)),
-    "empty": (TEXT, re.compile(r"\bempty\b|\bblank\b|white\s?space|\bno characters\b|zero[- ]length|空白|空字", re.IGNORECASE)),
+    "leap day": (DATE, re.compile(r"leap|\b29\s+feb|\bfeb(?:ruary)?\.?\s+29|\b0?2[-/]29\b|\b29[./-]0?2\b|閏", re.IGNORECASE)),
+    "empty": (TEXT, re.compile(r"\bempty\b|\bblank\b|white\s?space|\bno characters\b|zero[- ]length|\"\"|空白|空字", re.IGNORECASE)),
     "maximum length": (TEXT, re.compile(r"\bmax(?:imum)?\b|\blongest\b|\btoo long\b|\bone (?:character |char )?over\b|"
                                          r"\bover the limit\b|\bat the limit\b|上限|最大", re.IGNORECASE)),
-    "page size 1": (PAGING, re.compile(r"page[- ]size(?: of| is)?[ =:]*1\b|\b(?:1|one) (?:item|row|record|result)s? per page\b|"
-                                       r"\bsize 1\b|\bpage of (?:1|one)\b|\bone[- ]item page\b|\bsingle[- ]item page\b", re.IGNORECASE)),
+    "page size 1": (PAGING, re.compile(r"page[-_ ]?size(?: of| is)?\s*[=:]?\s*1\b|\b(?:per_page|limit|size)\s*[=:]\s*1\b|"
+                                       r"\b(?:1|one) (?:item|row|record|result)s? per page\b|\bsize 1\b|\bpage of (?:1|one)\b|"
+                                       r"\bone[- ]item page\b|\bsingle[- ]item page\b", re.IGNORECASE)),
 }
+LABELS = {"empty": "empty value"}
 LIMIT = re.compile(r"(?:\bat most|\bup to|\bmaximum(?: of)?|\bno more than|\blimit of|\bwithin)\s+(\d+)\b"
                    r"|\b(\d+)[- ]?(?:characters?|chars?|digits?|letters?)\b", re.IGNORECASE)
 KINDS = {"leap day": "a date", "empty": "text", "maximum length": "text", "page size 1": "a page of a list"}
 
 
 def _sections(text: str) -> list[tuple[str, list[str]]]:
+    """The ``##`` sections of the file. A deeper heading without a rule id (``### Examples``) belongs to the section it
+    sits in, so the bullets under it count for the rule."""
     sections: list[tuple[str, list[str]]] = []
+    depth = 0
     for line in text.splitlines():
         heading = HEADING.match(line)
-        if heading:
-            sections.append((heading.group(1), []))
+        if heading and (RULE_ID.search(heading.group(2)) or not sections or len(heading.group(1)) <= depth):
+            sections.append((heading.group(2), []))
+            depth = len(heading.group(1))
         elif sections:
             sections[-1][1].append(line)
     return sections
@@ -66,7 +74,7 @@ def _bullets(lines: list[str]) -> list[str]:
     found: list[str] = []
     wrapped = False
     for line in lines:
-        if BULLET.match(line):
+        if BULLET.match(line) or NO_BOUNDARY.match(line):
             found.append(line)
             wrapped = True
         elif wrapped and line.strip() and line[:1].isspace():
@@ -88,15 +96,15 @@ def _recorded(bullets: list[str], words: str) -> tuple[set[str], list[str]]:
     thin: list[str] = []
     for bullet in bullets:
         said = NO_BOUNDARY.match(bullet)
-        if said and said.group("edge").casefold() in EDGES:
-            edge = said.group("edge").casefold()
-            if len(said.group("reason").split()) >= 2:
+        if said:
+            edge = " ".join(said.group("edge").casefold().replace("-", " ").split())
+            if edge in EDGES and len(said.group("reason").split()) >= 2:
                 edges.add(edge)
-            else:
+            elif edge in EDGES:
                 thin.append(edge)
             continue
         edges.update(edge for edge, (_, seen) in EDGES.items() if seen.search(bullet))
-        if limits.intersection(re.findall(r"\d+", bullet)):
+        if limits.intersection(re.findall(r"\d+", ANY_ID.sub(" ", bullet))):
             edges.add("maximum length")
     return edges, thin
 
@@ -120,6 +128,6 @@ def problems(feature_dir: Path) -> list[str]:
                 continue
             reason = (f'the reason after "No {edge} boundary:" is too short to be a reason' if edge in thin else
                       f"add an example for it, or a line \"- No {edge} boundary: <why this rule has none>\"")
-            found.append(f"{' and '.join(ids)} uses the {CARD} card for {KINDS[edge]} but records no {edge}: {reason} "
-                         "in its section of test-design.md")
+            found.append(f"{' and '.join(ids)} uses the {CARD} card for {KINDS[edge]} but records no {LABELS.get(edge, edge)}: "
+                         f"{reason} in its section of test-design.md")
     return found

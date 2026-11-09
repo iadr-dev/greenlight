@@ -42,7 +42,7 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 
 Every rule has at least one example, and every decision-table row and state transition is an example or an
 exclusion, and every rule that uses `boundary-value` has its edges. Check with `bdd trace FEAT-n` (rules without
-examples are gap `T001`, an edge a boundary rule lacks is gap `T008`), then:
+examples are gap `T001`, an edge a boundary rule lacks is gap `T009`), then:
 
 ```sh
 bdd gate FEAT-n test-design --result pass

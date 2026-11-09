@@ -9,7 +9,7 @@ Sources (each is optional, because a feature is traced while it is still being b
 * ``tasks.md``: a task starts at a line that begins with ``T-007.2``; the example ids mentioned up to
   the next task are the scenarios it owns.
 
-A gap is a link that is missing or points at something that does not exist (``T008``, a boundary rule with an edge
+A gap is a link that is missing or points at something that does not exist (``T009``, a boundary rule with an edge
 missing from ``test-design.md``, is reported until the test-design gate has passed). Only artifacts that exist
 are compared, so a feature that has no ``tasks.md`` yet is not reported as having unowned scenarios.
 """
@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import featurefiles, gherkin, tagcheck
+from . import featurefiles, gherkin, store, tagcheck
 from .errors import StoreError
 
 _LEAD = r"^\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)?[*_`]*"
@@ -150,14 +150,14 @@ def build(root: Path, feature_dir: Path, feature_id: str, members: tuple = ()) -
 
 
 def edge_gaps(feature_dir: Path) -> list[Gap]:
-    """T008: a boundary rule that records no edge. Only until the test-design gate has passed: once the examples are
+    """T009: a boundary rule that records no edge. Only until the test-design gate has passed: once the examples are
     approved the edges are the auditor's to judge, and a feature approved before this check is not reopened by it."""
-    from . import edgecheck, store               # edgecheck reads this module's patterns
+    from . import edgecheck                      # it reads this module's patterns
     try:
         passed = store.read_json(feature_dir / "state.json", "state").get("gates", {}).get("test-design", {}).get("result")
     except (OSError, ValueError, StoreError):
         passed = None
-    return [] if passed == "pass" else [Gap("T008", problem) for problem in edgecheck.problems(feature_dir)]
+    return [] if passed == "pass" else [Gap("T009", problem) for problem in edgecheck.problems(feature_dir)]
 
 
 def _sort_key(identifier: str) -> tuple:

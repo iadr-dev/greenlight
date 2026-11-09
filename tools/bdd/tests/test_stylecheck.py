@@ -325,11 +325,11 @@ class ConfigTest(ProjectCase):
         self.assertEqual(config.load(self.root).lint_projected_records, ("work order", "company"))
         self.set_lint("")
         self.assertEqual(config.load(self.root).lint_projected_records, ())
-        for bad in ('projected_records = "company"', "projected_records = [1]", 'projected_records = [""]'):
-            with self.subTest(bad=bad):
-                self.set_lint(f"\n[lint]\n{bad}\n")
-                with self.assertRaises(config.ConfigError):
-                    config.load(self.root)
+        for written, expected in (('"Company"', ("company",)), ('["company", 1, ""]', ("company",)), ("1", ()), ("[1]", ()),
+                                  ('{ a = 1 }', ())):
+            with self.subTest(written=written):
+                self.set_lint(f"\n[lint]\nprojected_records = {written}\n")
+                self.assertEqual(config.load(self.root).lint_projected_records, expected)
 
     def test_a_declared_projection_lets_the_cli_pass_mixed_record_tables(self):
         text = ("@FEAT-007\nFeature: F\n  @R-007.1\n  Rule: R\n    @EX-007.1.1\n    Scenario: One\n      Given the moon is full\n"

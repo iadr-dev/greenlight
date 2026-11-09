@@ -357,11 +357,14 @@ def _lint_ignore(data: dict, path: Path) -> tuple[str, ...]:
 
 
 def _lint_projected_records(data: dict, path: Path) -> tuple[str, ...]:
+    """The entities written as a list, or one as a string. A value that is neither is ignored, not an error: a config error
+    stops the guard on every call, and the lint it would have silenced says what to write."""
     table = data.get("lint", {})
-    names = table.get("projected_records", []) if isinstance(table, dict) else None
-    if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
-        raise ConfigError(f'{path}: [lint] projected_records must be a list of entity names, or ["*"] for all')
-    return tuple(dict.fromkeys(" ".join(name.casefold().split()) for name in names))
+    names = table.get("projected_records", []) if isinstance(table, dict) else []
+    if isinstance(names, str):
+        names = [names]
+    named = (" ".join(name.casefold().split()) for name in (names if isinstance(names, list) else []) if isinstance(name, str))
+    return tuple(dict.fromkeys(name for name in named if name))
 
 
 def _models(data: dict, path: Path) -> tuple[tuple[str, str], ...]:

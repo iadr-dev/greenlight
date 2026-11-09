@@ -70,7 +70,7 @@ class TextAndPagesTest(EdgeCase):
     def test_a_length_rule_needs_the_empty_value_and_the_maximum(self):
         design = section("R-007.2", "Notes", "EX-007.2.1 A note of 200 characters is kept", "EX-007.2.2 A note of 201 is refused")
         problems = self.check(TEXT_RULE, design)
-        self.assertEqual([p.split(" records no ")[1].split(":")[0] for p in problems], ["empty"])
+        self.assertEqual([p.split(" records no ")[1].split(":")[0] for p in problems], ["empty value"])
         full = section("R-007.2", "Notes", "EX-007.2.1 An empty note is refused", "EX-007.2.2 The maximum, 200, is kept")
         self.assertEqual(self.check(TEXT_RULE, full), [])
 
@@ -94,6 +94,56 @@ class TextAndPagesTest(EdgeCase):
         for wording in ("page size 1", "page size of 1", "one item per page", "1 row per page", "a page of one"):
             with self.subTest(wording=wording):
                 self.assertEqual(self.check(PAGE_RULE, section("R-007.3", "Lists", f"EX-007.3.2 {wording} returns the total")), [])
+
+
+class HowItIsWrittenTest(EdgeCase):
+    PIN_RULE = "R-007.5 A PIN has 4 digits.\n"
+
+    def test_bullets_under_a_subheading_belong_to_the_rule(self):
+        design = ("## R-007.2 Notes\n\nTechniques: boundary-value\n\n### Examples\n\n- EX-007.2.1 An empty note is refused\n"
+                  "- EX-007.2.2 A note of 200 characters is kept\n\n### Excluded\n\n- none\n\n## Coverage check\n\n- yes\n")
+        self.assertEqual(self.check(TEXT_RULE, design), [])
+
+    def test_the_next_rule_starts_its_own_section_even_one_level_down(self):
+        design = ("## R-007.1 Date\n\nTechniques: boundary-value\n\n- EX-007.1.1 leap day\n\n"
+                  "### R-007.2 Notes\n\nTechniques: boundary-value\n\n- EX-007.2.1 today\n")
+        problems = self.check(DATE_RULE + TEXT_RULE, design)
+        self.assertEqual([p.split(" ")[0] for p in problems], ["R-007.2", "R-007.2"])
+
+    def test_the_digits_of_an_example_id_are_not_the_limit(self):
+        design = section("R-007.5", "PIN", "EX-007.5.4 A PIN of three digits is refused", "EX-007.5.1 An empty PIN is refused")
+        (problem,) = self.check(self.PIN_RULE, design)
+        self.assertIn("records no maximum length", problem)
+
+    def test_spellings_of_page_size_1(self):
+        for wording in ("pageSize=1", "page_size=1", "per_page=1", "limit=1", "Page size: 1", "a page of one"):
+            with self.subTest(wording=wording):
+                self.assertEqual(self.check(PAGE_RULE, section("R-007.3", "Lists", f"EX-007.3.2 {wording} returns one item")), [])
+
+    def test_other_ways_to_write_the_edge_or_the_waiver(self):
+        for line in ("1. No leap day boundary: the date is only compared with today", "**No leap day boundary**: only compared with today",
+                     "- No leap-day boundary: the date is only compared with today", "* no Leap Day boundary: only compared, never added"):
+            with self.subTest(line=line):
+                self.assertEqual(self.check(DATE_RULE, f"## R-007.1 Date\n\nTechniques: boundary-value\n\n{line}\n"), [])
+        for wording in ("Delivery on 29.02.2028", "Delivery on 29/02", "A date of 2028-02-29"):
+            with self.subTest(wording=wording):
+                self.assertEqual(self.check(DATE_RULE, section("R-007.1", "Date", f"EX-007.1.1 {wording}")), [])
+        self.assertEqual(self.check(TEXT_RULE, section("R-007.2", "Notes", 'EX-007.2.1 A note of "" is refused', "EX-007.2.2 The maximum")), [])
+
+    def test_a_waiver_with_a_thin_reason_is_never_read_as_the_edge(self):
+        for line in ("1. No leap day boundary: n/a", "**No leap day boundary**: none", "- No leap-day boundary: leap"):
+            with self.subTest(line=line):
+                (problem,) = self.check(DATE_RULE, f"## R-007.1 Date\n\nTechniques: boundary-value\n\n{line}\n")
+                self.assertIn("too short to be a reason", problem)
+
+    def test_the_techniques_line_may_be_bold_or_a_bullet(self):
+        for line in ("**Techniques:** boundary-value", "- Techniques: boundary-value", "Techniques: **boundary-value**"):
+            with self.subTest(line=line):
+                self.assertEqual(len(self.check(DATE_RULE, f"## R-007.1 Date\n\n{line}\n\n- EX-007.1.1 today\n")), 1)
+
+    def test_the_message_says_empty_value(self):
+        (problem,) = self.check(TEXT_RULE, section("R-007.2", "Notes", "EX-007.2.1 200 characters"))
+        self.assertIn("records no empty value: add an example for it, or a line \"- No empty boundary:", problem)
 
 
 class WhichRulesTest(EdgeCase):
@@ -149,13 +199,13 @@ class WhereItIsCheckedTest(ProjectCase):
 
     def test_trace_shows_it_as_a_gap_until_the_gate_has_passed(self):
         codes = lambda: [g["code"] for g in trace.build(self.root, self.feature_dir, "FEAT-007")["gaps"]]
-        self.assertIn("T008", codes())
+        self.assertIn("T009", codes())
         self.test_design.write_text("# Test design\n\n" + section("R-007.1", "Delivery date", "EX-007.1.1 leap day"),
                                     encoding="utf-8")
-        self.assertNotIn("T008", codes())
+        self.assertNotIn("T009", codes())
         self.test_design.write_text("# Test design\n\n" + section("R-007.1", "Delivery date", "EX-007.1.1 Today"),
                                     encoding="utf-8")
-        self.assertIn("T008", codes())
+        self.assertIn("T009", codes())
 
     def test_a_feature_whose_test_design_gate_passed_before_is_not_reopened_by_it(self):
         self.test_design.write_text("# Test design\n\n" + section("R-007.1", "Delivery date", "EX-007.1.1 leap day"),
@@ -164,7 +214,7 @@ class WhereItIsCheckedTest(ProjectCase):
         self.test_design.write_text("# Test design\n\n" + section("R-007.1", "Delivery date", "EX-007.1.1 Today"),
                                     encoding="utf-8")
         report = trace.build(self.root, self.feature_dir, "FEAT-007")
-        self.assertNotIn("T008", [g["code"] for g in report["gaps"]])
+        self.assertNotIn("T009", [g["code"] for g in report["gaps"]])
 
 
 class TaskAreasTest(unittest.TestCase):
