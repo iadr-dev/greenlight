@@ -55,6 +55,7 @@ COMMANDS: dict[str, list[str]] = {
     "subagent stop": [*BDD, "subagent-stop"],
     "doctor": [*BDD, "doctor"],
     "guard": [*BDD, "guard"],
+    "the guard on the hook payload": ["sh", "-c", 'exec sh "$1" guard < hook-payload.json', "sh", BDD[1]],
     "init": [*BDD, "init"],
     "add the standards": [*BDD, "init", "--standards"],
     "approve": [*BDD, "approve"],
@@ -104,6 +105,10 @@ FILES: dict[str, str] = {
     "integrity record": ".bdd/.integrity/violations.json",
     "Claude Code plugin record": "claude-home/plugins/installed_plugins.json",
     "call record": ".bdd/.integrity/calls.json",
+    "driver project config": ".bdd/config.toml",
+    "locked driver": "tests/drivers/barrier.ts",
+    "project settings": ".claude/settings.json",
+    "hook payload": "hook-payload.json",
 }
 
 ERRORS: dict[str, ErrorRule] = {
