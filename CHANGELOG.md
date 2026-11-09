@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Pinned language versions moved to the newest supported release by the update automation: python 3.14 -> 3.15. The adapters' CI templates and guides name the new versions; their own CI proved them (D62).
+
+### Changed
 - The mutation-wrapper job keeps Python 3.14 (`pins: hold`): its hashed, wheels-only install of mutmut needs `pyyaml==6.0.3`, which has no wheel for Python 3.15, so the first automatic bump to 3.15 failed that job and no other (D62).
 
 ### Added

@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Check the pins and keep the issue up to date
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -45,7 +45,7 @@ jobs:
           persist-credentials: true
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Move the pinned language versions
         run: python tools/pins/bump.py --write | tee "$RUNNER_TEMP/summary.md"
       - name: Open the pull request and let it merge itself when CI passes

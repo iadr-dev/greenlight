@@ -12,7 +12,7 @@ plugin's wrapper (Python 3.11 or newer, nothing to install):
 - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c  # v6.4.1
 - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
   with:
-    python-version: "3.14"
+    python-version: "3.15"
 - run: git clone --depth 1 --branch v1.2.1 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
 - name: Check every finished feature
   run: |
