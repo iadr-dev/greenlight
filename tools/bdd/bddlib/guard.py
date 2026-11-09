@@ -839,11 +839,26 @@ def touches_enforcement(spelled_: Spelled) -> str | None:
             return shell_message
     if any(glob_reaches_claude(pattern) for pattern in spelled_.patterns):
         return shell_message
+    plugin_key = path_key(plugin_root) if plugin_root else None
+    transcripts = named_places[:-1] if plugin_root else named_places
+    moved, seen = bool(spelled_.found and spelled_.found.context), set()
     for token, target in written_tokens(spelled_):
-        for place in (target_places(token, target, bare=True) or []) if not target.code else []:
-            if check_enforcement_files(place):
+        if target.code or token.startswith("-") or (token, target.dirs) in seen or not (moved or "/" in token.replace("\\", "/")):
+            continue                                       # a bare name lands in a protected folder only after a `cd`
+        seen.add((token, target.dirs))
+        for place in target_places(token, target, bare=True) or []:
+            if enforcement_place(path_key(place), plugin_key, transcripts):
                 return shell_message
     return None
+
+
+def enforcement_place(key: str, plugin_key: str | None, transcripts: list[str]) -> bool:
+    """``check_enforcement_files`` for a resolved ``path_key``, with the protected folders worked out once per call."""
+    if plugin_key and key.startswith(plugin_key + "/"):
+        return True
+    if "/.claude/hooks/" in key or any(key.startswith(root + "/") and not is_memory(key, root) for root in transcripts):
+        return True
+    return key.rsplit("/", 1)[-1].casefold() in SETTINGS_NAMES and claudepaths.is_settings_file(Path(key))
 
 
 def command_touches_enforcement(command: str, cwd: Path | None = None) -> bool:
