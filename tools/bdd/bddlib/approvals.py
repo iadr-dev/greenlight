@@ -297,7 +297,7 @@ def classify(entry: dict) -> tuple[str, str]:
     return "invalid", evidence
 
 
-def _age_exceeds_timeout(at: str) -> bool:
+def age_exceeds_timeout(at: str) -> bool:
     try:
         return datetime.now(timezone.utc) - datetime.fromisoformat(at) > PENDING_TIMEOUT
     except ValueError:
@@ -322,7 +322,7 @@ def verdict_for(approval: dict, feature: str, earlier: list[dict]) -> tuple[str,
     except UsageError as exc:
         return "unverifiable", str(exc)
     if not entries:
-        return ("unverifiable", "the prompt never appeared in the transcript") if _age_exceeds_timeout(approval["at"]) else None
+        return ("unverifiable", "the prompt never appeared in the transcript") if age_exceeds_timeout(approval["at"]) else None
     origin, evidence = classify_all(entries)
     if origin in ("human", "headless") and says_something_else(entries, feature, approval):
         return "invalid", f"the prompt is not the {approval['gate']} {approval['decision']} that was recorded ({evidence})"

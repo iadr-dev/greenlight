@@ -70,7 +70,7 @@ def pre_tool_use(payload: dict) -> int:
 
 def post_tool_use(root: Path, payload: dict) -> int:
     try:
-        new = tripwire.check(root, PLUGIN_ROOT, payload.get("tool_name"))
+        new = tripwire.check(root, None, payload.get("tool_name"))      # the plugin copy Codex runs is not watched (D63)
     except CONTEXT_ERRORS as exc:
         return feed_back(f"greenlight: the integrity check could not run ({exc}). The implement and verify gates will refuse "
                          "until the integrity data under .bdd/.integrity is readable again; tell the person.")
@@ -85,7 +85,7 @@ def user_prompt_submit(root: Path, payload: dict) -> int:
     """Never blocks the prompt; what happened goes to the model as context."""
     lines: list[str] = []
     with contextlib.redirect_stdout(io.StringIO()) as shown:
-        tripwire.run_accept(root)
+        tripwire.run_accept(root, None, offer_ack=False)
     lines += [line for line in shown.getvalue().splitlines() if line]
     turn = payload.get("turn_id")
     typed = {"prompt": payload.get("prompt"), "cwd": payload.get("cwd"), "session_id": payload.get("session_id"),

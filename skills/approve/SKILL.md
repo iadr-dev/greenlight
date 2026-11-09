@@ -1,6 +1,6 @@
 ---
 name: approve
-description: Approve or reject the rules or the examples of a feature. Only the person can run this by typing /greenlight:approve FEAT-n rules|examples (add "reject <reason>" to reject); the AI never invokes it.
+description: Approve or reject the rules or the examples of a feature, or acknowledge open integrity violations. Only the person can run this by typing /greenlight:approve FEAT-n rules|examples (add "reject <reason>" to reject) or /greenlight:approve integrity <ids> <reason>; the AI never invokes it.
 disable-model-invocation: true
 ---
 
@@ -25,6 +25,12 @@ to stand in for the person when the hook has run.
    An approval shows `pending` until Claude Code has written the person's prompt to the session
    transcript; run the check again after the next turn if it does. An approval that is `invalid`
    or `unverifiable` does not count: tell the person to type the command again themselves.
+   If the person typed `integrity #3,#4 <reason>` (or `integrity <reason>` with one violation open), the line
+   names exactly the violations it covers, or why it covers none. Run
+   `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" status` instead and show its `integrity:` line (none means nothing is open); the violations
+   close once the transcript shows the person typed it, so run it again after the next turn if they are
+   still open. Never edit `.bdd/.integrity` and never try to acknowledge anything yourself: no command
+   does it.
 3. If there is **no** `greenlight approval:` line at all, hooks are not active in this session.
    Say so. In a project that allows it (`enforcement = "soft"`, or hooks never having run), ask the
    person to confirm in plain words, and only then record their answer with

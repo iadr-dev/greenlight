@@ -2,6 +2,7 @@
 
     /greenlight:approve FEAT-007 rules
     /greenlight:approve FEAT-007 examples reject the boundary case is missing
+    /greenlight:approve integrity tools reinstalled
 
 Only a prompt that is *exactly* one of these forms counts; a sentence that merely contains one does
 not. The hook also fires for prompts the system injects (platform notes), so it cannot tell who wrote
@@ -54,12 +55,38 @@ def record(payload: dict, parse=approvalcommand.parse, tool: str = "Claude Code"
                "(`bdd approve --check`)."))
 
 
+def acknowledge(payload: dict) -> str | None:
+    """Record ``/greenlight:approve integrity <reason>``. Returns the line to show, or None if the prompt is not one.
+
+    Like an approval it is pending until the transcript shows the person typed it; then the violations close."""
+    reason = approvalcommand.parse_integrity(payload.get("prompt"))
+    if reason is None:
+        return None
+    from . import config, enforcement, integrityack, tripwire
+    from .config import ConfigError
+    from .errors import StoreError, UsageError
+
+    root = config.find_root(Path(payload.get("cwd") or "."))
+    if root is None:
+        return None
+    try:
+        enforcement.touch(root, payload.get("session_id"))
+        entry, left = integrityack.acknowledge(root, tripwire.plugin_root(), reason,
+                                               session=enforcement.safe_session(payload.get("session_id")),
+                                               prompt_id=payload.get("prompt_id"), transcript_path=payload.get("transcript_path"))
+    except (UsageError, StoreError, ConfigError, OSError, KeyError, TypeError, ValueError) as exc:
+        return f"{PREFIX} NOT recorded. {exc}"
+    return (f"{PREFIX} integrity acknowledgement recorded ({entry['reason']}) for exactly: " + "; ".join(entry["shown"])
+            + ". These close, with the files as listed, once Claude Code's transcript confirms the person typed this, at "
+            "the next tool call or `bdd status`." + (" Not covered: " + "; ".join(left) + "." if left else ""))
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except ValueError:
         return 0
-    line = record(payload) if isinstance(payload, dict) else None
+    line = (acknowledge(payload) or record(payload)) if isinstance(payload, dict) else None
     if line:
         print(line)
     return 0

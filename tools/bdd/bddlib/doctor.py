@@ -28,6 +28,7 @@ STANDARDS = "standards"
 HELPERS = "helpers"
 PLUGIN_HOOKS = "plugin hooks"
 MODELS = "models"
+INTEGRITY = "integrity"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
 RECOMMENDED_DENY = (
@@ -180,6 +181,21 @@ def project_codex_hooks(project: Path) -> Check | None:
                              (enforcement.marker_dir(project) / enforcement.CODEX_MARKER).is_file())
 
 
+def check_integrity(root: Path) -> Check:
+    from . import tripwire
+    from .errors import StoreError
+    try:
+        status, detail = tripwire.summary(root)
+    except (StoreError, OSError, KeyError, TypeError, ValueError) as exc:
+        return Check(INTEGRITY, "warn", f"the integrity data cannot be read ({exc})",
+                     "The implement and verify gates refuse until .bdd/.integrity is readable again; see docs/troubleshooting.md.")
+    if enforcement.codex_seen(root) or shutil.which("codex"):
+        detail += "; the plugin copy Codex runs is not watched (Codex is soft, D11)"
+    return Check(INTEGRITY, status, detail, "" if status == "ok" else
+                 "Undo a change you did not make (for example with git). If you made it or want it, type "
+                 f"{tripwire.ACKNOWLEDGE_COMMAND} in Claude Code, with the ids `bdd status` lists.")
+
+
 def check_standards(root: Path) -> Check:
     """Are the project's engineering standards in place? They are in force as soon as the file exists; only the person
     can edit it."""
@@ -246,6 +262,7 @@ def run_checks() -> list[Check]:
     deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
     mode = [project_enforcement(project)] if project else []
     standards = [check_standards(project), check_models(project)] if project else []
+    integrity = [check_integrity(project)] if project else []
     codex = [c for c in [project_codex_hooks(project)] if c] if project else []
     plugin_checks = check_helpers(helpers.installed(), helpers.declined(project))
     return [
@@ -255,6 +272,7 @@ def run_checks() -> list[Check]:
         check_tool("git", shutil.which("git"), "Install git: https://git-scm.com/downloads", True),
         check_latency(samples, sys.platform, error),
         *mode,
+        *integrity,
         *codex,
         *standards,
         *deny,

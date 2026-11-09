@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import agentcost, classify, pr, runner, state, store
+from . import agentcost, classify, integrityack, pr, runner, state, store, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .guard import path_key
@@ -228,6 +228,11 @@ def evidence(facts: dict) -> list[str]:
         body.append(bullets([esc(p) for p in locks["problems"]]))
     if facts["changes"]:
         body.append(f"<p>Approved work was changed {esc(facts['changes'])} time(s) through the change flow.</p>")
+    acknowledged = facts.get("integrity") or []
+    if acknowledged:
+        rows = [[esc(f"#{v['id']}"), esc(tripwire.describe(v)), esc(v["acknowledgement"]["reason"]),
+                 esc(f"{v['acknowledgement'].get('user') or 'the person'}, {v['acknowledgement']['at']}")] for v in acknowledged]
+        body += ["<h3>Integrity violations the person acknowledged</h3>", table(["Violation", "What", "Reason", "Who, when"], rows)]
     return section("evidence", "Evidence", body)
 
 
@@ -343,6 +348,7 @@ def run(argv: list[str]) -> int:
         root = project_root()
         feature_dir = store.find_feature_dir(root, args.feature)
         facts = pr.collect(root, feature_dir)
+        facts["integrity"] = integrityack.acknowledged(root)
         page = render(facts, scenario_results(root, facts["feature"], state.load(feature_dir)))
         if args.out is None:
             sys.stdout.write(page)
