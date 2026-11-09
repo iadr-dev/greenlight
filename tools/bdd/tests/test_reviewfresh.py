@@ -1,7 +1,9 @@
 """A review older than the production code of its task: found by hash at the implement gate."""
 import json
+import os
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -114,6 +116,15 @@ class WhichFilesTest(FreshCase):
         self.tasks("## T-007.1 Banner\nCovers: EX-007.1.1\nAreas:\n")
         self.assertEqual(list(self.judge()["files"]), ["src/app.py"])
 
+    def test_what_a_test_tool_generates_is_not_code(self):
+        for name in (".coverage", "coverage.xml", "htmlcov/index.html", "mutants/src/app.py", ".pytest_cache/v/lastfailed", "src/__pycache__/x.pyc"):
+            self.write(name, "x")
+        self.tasks("## T-007.1 Banner\nCovers: EX-007.1.1\nAreas:\n")
+        self.assertEqual(list(self.judge()["files"]), ["src/app.py"])
+
+    def test_areas_written_with_backslashes_are_read(self):
+        self.assertEqual(reviewfresh.area_paths("src\\api\\, web\\app.ts"), ["src/api/", "web/app.ts"])
+
     def test_a_feature_without_a_red_record_is_not_judged(self):
         state.update(self.feature_dir, lambda data: data.update(red=None))
         with self.assertRaises(reviewfresh.Unjudged):
@@ -194,17 +205,56 @@ class SealTest(FreshCase):
         self.assertIsNotNone(self.sealed("code-reviewer", "T-007.1"))
         self.assertIsNotNone(self.sealed("code-reviewer", "T-007.2"))
 
-    def test_a_failure_while_sealing_never_reaches_the_agent_and_leaves_no_seal(self):
+    def test_a_failure_while_sealing_never_reaches_the_agent_and_the_seal_says_why(self):
         self.reviewer_writes("code-reviewer", agent="a1")
         with mock.patch.object(reviewfresh, "judge", side_effect=RuntimeError("git is gone")):
-            self.assertFalse(reviewlog.seal(self.root, "a1"))
-        self.assertIsNone(self.sealed())
+            self.assertTrue(reviewlog.seal(self.root, "a1"))
+        self.assertEqual(self.sealed()["error"], "RuntimeError: git is gone")
+        self.assertIsNone(self.sealed()["code"])
 
-    def test_two_writers_at_once_do_not_cut_each_others_lines(self):
-        reviewlog.record(self.root, route.review_path(self.feature_dir, "T-007.1", "code-reviewer"), "code-reviewer",
-                         "x" * 200000, agent_id="a1", phase="implement")
-        line = (self.root / reviewlog.LOG).read_text(encoding="utf-8").splitlines()[-1]
-        self.assertEqual(json.loads(line)["agent_id"], "a1")
+    def test_one_report_that_cannot_be_sealed_does_not_stop_the_others(self):
+        self.tasks(TWO_TASKS)
+        self.reviewer_writes("code-reviewer", "T-007.1", agent="a1")
+        self.reviewer_writes("code-reviewer", "T-007.2", agent="a1")
+        real = reviewfresh.judge
+
+        def judge(root, feature_dir, task):
+            if task == "T-007.1":
+                raise RuntimeError("no")
+            return real(root, feature_dir, task)
+
+        with mock.patch.object(reviewfresh, "judge", judge):
+            reviewlog.seal(self.root, "a1")
+        self.assertEqual(self.sealed("code-reviewer", "T-007.1")["error"], "RuntimeError: no")
+        self.assertIsNotNone(self.sealed("code-reviewer", "T-007.2")["code"])
+
+    def test_the_report_line_keeps_the_path_as_it_is_spelled_on_disk(self):
+        self.reviewer_writes("code-reviewer", agent="a1")
+        line = next(iter(reviewlog.recorded(self.root).values()))
+        self.assertEqual(line["file"], f".bdd/features/{self.feature_dir.name}/reviews/T-007.1-code-reviewer.md")
+
+    def test_a_folded_path_in_a_line_from_before_is_still_sealed_where_the_file_system_allows(self):
+        self.reviewer_writes("code-reviewer", agent="a1")
+        log = self.root / reviewlog.LOG
+        lines = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        for line in lines:
+            line.pop("file", None)
+        log.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+        self.assertTrue(reviewlog.seal(self.root, "a1"))
+
+    def test_writers_at_once_do_not_cut_each_others_lines(self):
+        script = ("import sys; from pathlib import Path; from bddlib import reviewlog\n"
+                  "root, who = Path(sys.argv[1]), sys.argv[2]\n"
+                  "for n in range(25):\n"
+                  "    reviewlog.record(root, root / '.bdd' / 'features' / 'x' / 'reviews' / f'T-007.{n}-code-reviewer.md',"
+                  " 'code-reviewer', who * 4000, agent_id=who, phase='implement')\n")
+        (self.root / ".bdd" / "features" / "x" / "reviews").mkdir(parents=True)
+        bdd = Path(reviewlog.__file__).resolve().parents[1]
+        workers = [subprocess.Popen([sys.executable, "-c", script, str(self.root), who], cwd=bdd,
+                                    env={**os.environ, "PYTHONPATH": str(bdd)}) for who in "abcd"]
+        self.assertEqual([w.wait() for w in workers], [0, 0, 0, 0])
+        lines = (self.root / reviewlog.LOG).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len([line for line in lines if json.loads(line)["agent_id"] in "abcd"]), 100)
 
 
 class GateTest(FreshCase):
@@ -217,9 +267,9 @@ class GateTest(FreshCase):
         self.edit("3")
         self.assertEqual(self.problems(), [
             "reviews/T-007.1-code-reviewer.md is older than the code it covers: src/app.py changed after the "
-            "code-reviewer finished; run the code-reviewer again on it",
+            "code-reviewer finished; run the code-reviewer again",
             "reviews/T-007.1-ui-reviewer.md is older than the code it covers: src/app.py changed after the "
-            "ui-reviewer finished; run the ui-reviewer again on it"])
+            "ui-reviewer finished; run the ui-reviewer again"])
 
     def test_the_gate_refuses_it_and_a_review_written_after_the_edit_passes(self):
         self.write_docs()
@@ -278,6 +328,30 @@ class GateTest(FreshCase):
         self.edit("3")
         self.assertEqual(self.problems(), [])
 
+    def test_in_verify_the_way_out_is_to_go_back_to_implement(self):
+        self.review_task_1()
+        self.edit("3")
+        found = route.review_problems(self.root, self.feature_dir, "FEAT-007", hooks_seen=True, gate="verify")
+        self.assertEqual(len(found), 2)
+        self.assertIn("src/app.py changed after the code-reviewer finished; the feature is in verify: go back to implement "
+                      "with /greenlight:change, run the code-reviewer there and pass the implement gate again", found[0])
+
+    def test_a_report_written_without_an_agent_id_says_it_cannot_be_sealed(self):
+        path = route.review_path(self.feature_dir, "T-007.1", "code-reviewer")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Verdict: PASS\n", encoding="utf-8")
+        reviewlog.record(self.root, path, "code-reviewer", "Verdict: PASS\n", agent_id=None, phase="implement")
+        self.assertIn("T-007.1-code-reviewer.md was written without an agent id, so it cannot be sealed",
+                      " ".join(self.problems()))
+
+    def test_a_seal_that_carries_an_error_is_refused_with_the_error(self):
+        self.reviewer_writes("code-reviewer", agent="a1")
+        with mock.patch.object(reviewfresh, "judge", side_effect=RuntimeError("git is gone")):
+            reviewlog.seal(self.root, "a1")
+        self.reviewer_stops("code-reviewer", agent="a1")
+        self.assertIn("T-007.1-code-reviewer.md: the code it covers could not be read when the code-reviewer finished "
+                      "(RuntimeError: git is gone); run the code-reviewer again", " ".join(self.problems()))
+
     def test_without_hooks_nothing_is_judged(self):
         self.review_task_1()
         self.edit("3")
@@ -323,7 +397,15 @@ class OverlappingAreasTest(FreshCase):
         self.edit("3")                                                           # T-007.2's work, in the same folder
         self.review("code-reviewer", "T-007.2")
         self.assertEqual(self.problems(), ["reviews/T-007.1-ui-reviewer.md is older than the code it covers: src/app.py "
-                                           "changed after the ui-reviewer finished; run the ui-reviewer again on it"])
+                                           "changed after the ui-reviewer finished; run the ui-reviewer again"])
+
+    def test_a_report_that_was_changed_afterwards_excuses_nothing(self):
+        self.review("code-reviewer", "T-007.1")
+        self.review("ui-reviewer", "T-007.1")
+        self.edit("3")
+        self.review("code-reviewer", "T-007.2")
+        route.review_path(self.feature_dir, "T-007.2", "code-reviewer").write_text("Verdict: FINDINGS\nedited\n", encoding="utf-8")
+        self.assertTrue(any("T-007.1-code-reviewer.md is older than the code it covers" in p for p in self.problems()))
 
     def test_the_earlier_review_is_aged_when_no_later_review_of_that_kind_read_the_file(self):
         self.review("code-reviewer", "T-007.1")

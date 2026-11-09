@@ -166,7 +166,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
             problems += run_problems(root, data["feature"], "verify", raw)
     if gate in ("implement", "verify") and data.get("kind") != "adopt":      # the code of an adoption already exists: not judged
         problems += quality.problems(root, data["feature"])
-        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")))
+        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")), gate=gate)
         if gate == "implement":
             problems += docsrecord.problems(root, feature_dir, data["feature"])
     if gate == "verify":

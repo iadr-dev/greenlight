@@ -141,6 +141,33 @@ class HowItIsWrittenTest(EdgeCase):
             with self.subTest(line=line):
                 self.assertEqual(len(self.check(DATE_RULE, f"## R-007.1 Date\n\n{line}\n\n- EX-007.1.1 today\n")), 1)
 
+    def test_the_names_the_message_itself_uses_are_understood_in_a_waiver(self):
+        cases = {"empty value": (TEXT_RULE, "R-007.2", "empty value"), "max length": (TEXT_RULE, "R-007.2", "maximum length"),
+                 "maximum": (TEXT_RULE, "R-007.2", "maximum length"), "leap year": (DATE_RULE, "R-007.1", "leap day"),
+                 "page size one": (PAGE_RULE, "R-007.3", "page size 1")}
+        for edge, (rule, text, recorded) in cases.items():
+            with self.subTest(edge=edge):
+                design = f"## {text} Rule\n\nTechniques: boundary-value\n\n- No {edge} boundary: the database column checks it\n"
+                found = self.check(rule, design)
+                self.assertFalse(any(f"records no {recorded}:" in p for p in found), found)
+                self.assertFalse(any("too short" in p for p in found), found)
+
+    def test_the_card_name_and_the_techniques_label_may_be_written_loosely(self):
+        for line in ("Techniques: Boundary-Value", "Technique: boundary-value", "_Techniques:_ boundary-value"):
+            with self.subTest(line=line):
+                self.assertEqual(len(self.check(DATE_RULE, f"## R-007.1 Date\n\n{line}\n\n- EX-007.1.1 today\n")), 1)
+
+    def test_an_underscore_emphasised_waiver_with_a_thin_reason_is_not_the_edge(self):
+        (problem,) = self.check(DATE_RULE, "## R-007.1 Date\n\nTechniques: boundary-value\n\n- _No leap day boundary_: n/a\n")
+        self.assertIn("too short to be a reason", problem)
+
+    def test_a_same_level_heading_for_the_examples_belongs_to_the_rule_and_a_coverage_check_does_not(self):
+        design = ("## R-007.1 Date\n\nTechniques: boundary-value\n\n## Examples\n\n- EX-007.1.1 a leap day\n\n"
+                  "## Coverage check\n\n- leap day: yes\n")
+        self.assertEqual(self.check(DATE_RULE, design), [])
+        design = "## R-007.1 Date\n\nTechniques: boundary-value\n\n- EX-007.1.1 today\n\n## Coverage check\n\n- leap day: yes\n"
+        self.assertEqual(len(self.check(DATE_RULE, design)), 1)
+
     def test_the_message_says_empty_value(self):
         (problem,) = self.check(TEXT_RULE, section("R-007.2", "Notes", "EX-007.2.1 200 characters"))
         self.assertIn("records no empty value: add an example for it, or a line \"- No empty boundary:", problem)

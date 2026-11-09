@@ -22,6 +22,7 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -143,40 +144,65 @@ def _finished_agents(root: Path) -> dict[str, str]:
     return {str(e["agent_id"]): str(e.get("agent", "")) for e in agentcost.read_entries(root)}
 
 
-def _seen_by(seals: dict[tuple[str, str], dict], reviewer: str) -> set[tuple[str, str]]:
-    """(file, hash) pairs that some report of this kind of reviewer was sealed with: a file another task changed after
-    this report, and a later report of the same reviewer read as it is now, is not news to that reviewer kind."""
-    return {(name, digest) for (_, kind), seal in seals.items() if kind == reviewer and isinstance(seal.get("code"), dict)
-            and isinstance(seal["code"].get("files"), dict) for name, digest in seal["code"]["files"].items()}
+def _seen_by(root: Path, feature_dir: Path, reviewer: str, seals: dict[tuple[str, str], dict],
+             log: dict[tuple[str, str], dict]) -> set[tuple[str, str]]:
+    """(file, hash) pairs that a report of this feature by this kind of reviewer, as that reviewer wrote it, was sealed with:
+    a file another task changed after this report, and that kind of reviewer read as it is now, is not news to it."""
+    folder = reviewlog.key(root, feature_dir) + "/"
+    seen: set[tuple[str, str]] = set()
+    for (where, kind), seal in seals.items():
+        line, code = log.get((where, kind)), seal.get("code")
+        if kind != reviewer or not where.startswith(folder) or line is None or not isinstance(code, dict):
+            continue
+        try:
+            if reviewlog.digest((root / str(line.get("file") or where)).read_text(encoding="utf-8-sig")) != line.get("sha256"):
+                continue
+        except OSError:
+            continue
+        if isinstance(code.get("files"), dict):
+            seen.update((name, digest) for name, digest in code["files"].items())
+    return seen
 
 
-def _older_than_code(root: Path, rel: str, reviewer: str, seal: dict | None, seals: dict[tuple[str, str], dict]) -> str | None:
+def _again(reviewer: str, gate: str) -> str:
+    if gate == "verify":
+        return (f"the feature is in verify: go back to implement with /greenlight:change, run the {reviewer} there and pass "
+                "the implement gate again (files a test tool generated belong in .gitignore)")
+    return f"run the {reviewer} again"
+
+
+def _older_than_code(root: Path, rel: str, reviewer: str, gate: str, line: dict, seal: dict | None,
+                     seen: Callable[[], set[tuple[str, str]]]) -> str | None:
     """The problem when the report has no seal, or its seal records production files that changed after its reviewer
-    finished, and no later report of that reviewer kind was sealed with them as they are now. A seal that says the files
+    finished, and no other report of that reviewer kind was sealed with them as they are now. A seal that says the files
     could not be told (``Unjudged``) leaves the report as it is; anything that stops the check from running is a problem
     too, so a report is never passed on what could not be read."""
+    again = _again(reviewer, gate)
     if seal is None:
-        return (f"{rel} has no record of the code it was written against (the {reviewer}'s SubagentStop did not seal it): "
-                f"run the {reviewer} again")
+        if line.get("agent_id") in (None, ""):
+            return f"{rel} was written without an agent id, so it cannot be sealed: the {reviewer} subagent writes it; {again}"
+        return f"{rel} has no record of the code it was written against (the {reviewer}'s SubagentStop did not seal it): {again}"
+    if seal.get("error"):
+        return f"{rel}: the code it covers could not be read when the {reviewer} finished ({seal['error']}); {again}"
     if seal["code"] is None:
         return None
     try:
         news = reviewfresh.changed(root, seal["code"])
     except Exception as exc:
-        return (f"{rel}: whether the code it covers changed could not be checked ({type(exc).__name__}: {exc}); "
-                f"run the {reviewer} again")
-    seen = _seen_by(seals, reviewer)
-    news = [name for name, digest in news.items() if digest is None or (name, digest) not in seen]
+        return f"{rel}: whether the code it covers changed could not be checked ({type(exc).__name__}: {exc}); {again}"
+    if news:
+        known = seen()
+        news = {name: digest for name, digest in news.items() if digest is None or (name, digest) not in known}
     if not news:
         return None
-    shown = ", ".join(news[:3]) + (f" and {len(news) - 3} more" if len(news) > 3 else "")
-    return f"{rel} is older than the code it covers: {shown} changed after the {reviewer} finished; run the {reviewer} again on it"
+    shown = ", ".join(list(news)[:3]) + (f" and {len(news) - 3} more" if len(news) > 3 else "")
+    return f"{rel} is older than the code it covers: {shown} changed after the {reviewer} finished; {again}"
 
 
-def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False) -> list[str]:
+def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False, gate: str = "implement") -> list[str]:
     """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
     hooks run, its content is not what that reviewer wrote to that file (``reviewlog``), or the production files of its
-    task changed after the reviewer finished (``reviewfresh``)."""
+    task changed after the reviewer finished (``reviewfresh``). ``gate`` only words what to do about a stale report."""
     problems: list[str] = []
     log = reviewlog.recorded(root) if hooks_seen else {}
     finished = _finished_agents(root) if hooks_seen else {}
@@ -193,7 +219,9 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
                 problems.append(f"{rel} is not what the {reviewer} agent wrote: a report counts only as its own reviewer "
                                 "wrote it, unchanged; run the reviewer again")
             elif hooks_seen:
-                older = _older_than_code(root, rel, reviewer, seals.get((reviewlog.key(root, path), reviewer)), seals)
+                where = (reviewlog.key(root, path), reviewer)
+                older = _older_than_code(root, rel, reviewer, gate, log[where], seals.get(where),
+                                         lambda kind=reviewer: _seen_by(root, feature_dir, kind, seals, log))
                 if older:
                     problems.append(older)
     return problems

@@ -16,6 +16,9 @@ import os
 import sys
 from pathlib import Path
 
+from . import store
+from .errors import StoreError
+
 LOG = Path(".bdd") / ".runs" / "reviews.jsonl"
 CASE_INSENSITIVE_FS = sys.platform in ("win32", "darwin")
 REPORT_FIELDS = {"path", "reviewer", "sha256"}
@@ -33,11 +36,20 @@ def key(root: Path, path: Path) -> str:
 
 
 def _append(root: Path, line: dict) -> None:
-    """One write of the whole line to a file opened for appending, so two writers at once (the guard for one reviewer, the
-    hook for another) never cut each other's line in two."""
+    """Add a line under the log's lock, so two writers at once (the guard for one reviewer, the hook for another) never
+    cut each other's line in two: appending is not atomic on Windows. A lock that cannot be had in two seconds is not
+    waited for; a torn line is skipped by the reader and the report it belonged to is asked for again."""
     log = root / LOG
     log.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        with store.file_lock(log, timeout=2.0):
+            _write(log, line)
+    except StoreError:
+        _write(log, line)
+
+
+def _write(log: Path, line: dict) -> None:
+    descriptor = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
     try:
         os.write(descriptor, (json.dumps(line) + "\n").encode("utf-8"))
     finally:
@@ -45,7 +57,10 @@ def _append(root: Path, line: dict) -> None:
 
 
 def record(root: Path, path: Path, reviewer: str, content: str, agent_id: object = None, phase: str | None = None) -> None:
-    _append(root, {"path": key(root, path), "reviewer": reviewer, "sha256": digest(content), "agent_id": agent_id, "phase": phase})
+    """The report's ``file`` is its path as it is spelled on disk: ``path`` is folded on a case-insensitive file system, and
+    a folded path cannot be opened on a case-sensitive volume."""
+    _append(root, {"path": key(root, path), "file": Path(path).resolve().relative_to(root.resolve()).as_posix(),
+                   "reviewer": reviewer, "sha256": digest(content), "agent_id": agent_id, "phase": phase})
 
 
 def _read(root: Path) -> list[dict]:
@@ -96,8 +111,9 @@ def seal(root: Path, agent_id: object) -> bool:
     the guard when the report is written, because reading the code takes git calls the guard has no time for.
 
     A seal is its own line, naming the hash of the report line it seals and the agent that wrote it. It is made only for
-    the latest line of a report and only for a named agent, so an agent that finishes late cannot seal a newer report, and
-    it is not made when the code cannot be read: the gate then asks for the review again. Never raises."""
+    the latest line of a report and only for a named agent, so an agent that finishes late cannot seal a newer report.
+    When the code cannot be read the seal carries the ``error`` and the gate asks for the review again. One report that
+    cannot be sealed does not stop the others. Never raises."""
     if agent_id is None or str(agent_id) == "":
         return False
     try:
@@ -106,16 +122,18 @@ def seal(root: Path, agent_id: object) -> bool:
         for line, existing in _held(root).values():
             if str(line.get("agent_id")) != str(agent_id) or existing is not None:
                 continue
-            report = root / str(line["path"])
-            task = reviewfresh.task_of(report)
-            if task is None:
-                continue
-            try:
-                code, why = reviewfresh.judge(root, report.parent.parent, task.upper()), None
-            except reviewfresh.Unjudged as exc:
-                code, why = None, str(exc)
             sealed = {"seal": line["sha256"], "path": line["path"], "reviewer": line["reviewer"],
-                      "agent_id": line["agent_id"], "code": code, "why": why}
+                      "agent_id": line["agent_id"], "code": None, "why": None}
+            try:
+                report = root / str(line.get("file") or line["path"])
+                task = reviewfresh.task_of(report)
+                if task is None:
+                    continue
+                sealed["code"] = reviewfresh.judge(root, report.parent.parent, task.upper())
+            except reviewfresh.Unjudged as exc:
+                sealed["why"] = str(exc)
+            except Exception as exc:
+                sealed["error"] = f"{type(exc).__name__}: {exc}"
             _append(root, sealed)
             done = True
         return done

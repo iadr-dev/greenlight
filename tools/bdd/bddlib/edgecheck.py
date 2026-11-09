@@ -26,11 +26,12 @@ from . import trace
 
 CARD = "boundary-value"
 HEADING = re.compile(r"^(#{2,})\s+(.*\S)\s*$")
+PART_OF_A_RULE = re.compile(r"example|exclu|edge|boundar|negative", re.IGNORECASE)
 RULE_ID = re.compile(r"\b[RN]-\d+\.\d+\b")
 ANY_ID = re.compile(r"\b[A-Z]{1,2}-\d+(?:\.\d+)*\b")
-TECHNIQUES = re.compile(r"^\s*(?:[-*]\s+)?\**\s*Techniques\s*\**\s*:\s*\**\s*(.*)$", re.IGNORECASE)
+TECHNIQUES = re.compile(r"^\s*(?:[-*]\s+)?[*_]*\s*Techniques?\s*[*_]*\s*:\s*[*_]*\s*(.*)$", re.IGNORECASE)
 BULLET = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+")
-NO_BOUNDARY = re.compile(r"^\s*(?:(?:[-*]|\d+[.)])\s+)?\**\s*No\s+(?P<edge>[a-z0-9 -]+?)\s+boundary\s*\**\s*:\s*\**\s*(?P<reason>.*)$",
+NO_BOUNDARY = re.compile(r"^\s*(?:(?:[-*]|\d+[.)])\s+)?[*_]*\s*No\s+(?P<edge>[a-z0-9 -]+?)\s+boundary\s*[*_]*\s*:\s*[*_]*\s*(?P<reason>.*)$",
                          re.IGNORECASE)
 
 DATE = re.compile(r"\b(?:dates?|calendar|days?|months?|years?|birthday|weekday|start time|end time|deadline|expir\w*)\b"
@@ -51,17 +52,22 @@ EDGES = {
 LABELS = {"empty": "empty value"}
 LIMIT = re.compile(r"(?:\bat most|\bup to|\bmaximum(?: of)?|\bno more than|\blimit of|\bwithin)\s+(\d+)\b"
                    r"|\b(\d+)[- ]?(?:characters?|chars?|digits?|letters?)\b", re.IGNORECASE)
+ALIASES = {"leap year": "leap day", "leap": "leap day", "empty value": "empty", "empty text": "empty", "blank": "empty",
+           "max length": "maximum length", "maximum": "maximum length", "max": "maximum length", "longest": "maximum length",
+           "page size one": "page size 1", "page of one": "page size 1"}
 KINDS = {"leap day": "a date", "empty": "text", "maximum length": "text", "page size 1": "a page of a list"}
 
 
 def _sections(text: str) -> list[tuple[str, list[str]]]:
-    """The ``##`` sections of the file. A deeper heading without a rule id (``### Examples``) belongs to the section it
-    sits in, so the bullets under it count for the rule."""
+    """The ``##`` sections of the file. A heading without a rule id belongs to the section it sits in when it is deeper
+    (``### Examples``) or names the parts of a rule (``## Examples``, ``## Excluded``), so the bullets under it count for
+    the rule; any other (``## Coverage check``) ends the rule."""
     sections: list[tuple[str, list[str]]] = []
     depth = 0
     for line in text.splitlines():
         heading = HEADING.match(line)
-        if heading and (RULE_ID.search(heading.group(2)) or not sections or len(heading.group(1)) <= depth):
+        if heading and (RULE_ID.search(heading.group(2)) or not sections
+                        or (len(heading.group(1)) <= depth and not PART_OF_A_RULE.search(heading.group(2)))):
             sections.append((heading.group(2), []))
             depth = len(heading.group(1))
         elif sections:
@@ -98,6 +104,7 @@ def _recorded(bullets: list[str], words: str) -> tuple[set[str], list[str]]:
         said = NO_BOUNDARY.match(bullet)
         if said:
             edge = " ".join(said.group("edge").casefold().replace("-", " ").split())
+            edge = ALIASES.get(edge, edge)
             if edge in EDGES and len(said.group("reason").split()) >= 2:
                 edges.add(edge)
             elif edge in EDGES:
@@ -119,7 +126,7 @@ def problems(feature_dir: Path) -> list[str]:
     for heading, lines in _sections(design.read_text(encoding="utf-8-sig")):
         ids = RULE_ID.findall(heading)
         techniques = next((m.group(1) for m in map(TECHNIQUES.match, lines) if m), "")
-        if not ids or CARD not in techniques:
+        if not ids or CARD not in techniques.casefold():
             continue
         words = " ".join([heading, *(rules.get(i, "") for i in ids)])
         recorded, thin = _recorded(_bullets(lines), words)

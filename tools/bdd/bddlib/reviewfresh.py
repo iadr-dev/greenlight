@@ -9,8 +9,8 @@ The production files of a task are the production files changed since the red wa
 ``Areas:`` line in ``tasks.md`` names (a folder, a file or a glob; other words in the line are ignored). When no path of
 the line matches a changed file, or the task has no ``Areas:``, a feature with one task (or none: the quick path) uses
 every changed production file, and a feature with several tasks is not judged, because nothing says which file belongs
-to which task (``Unjudged``; the seal says so and the gate leaves the report as it is). Pictures, videos, logs, archives
-and traces a reviewer's tools leave in the project do not count.
+to which task (``Unjudged``; the seal says so and the gate leaves the report as it is). Pictures, videos, logs, archives,
+traces, coverage and mutation output a run leaves in the project do not count (``is_code``).
 """
 from __future__ import annotations
 
@@ -25,6 +25,9 @@ HASH_CHARS = 16
 HOOK_TIMEOUT = 30
 NOT_CODE = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm", ".mov", ".log", ".tmp", ".har", ".zip", ".gz",
             ".trace", ".heapsnapshot", ".cpuprofile")
+GENERATED_FILES = frozenset({".coverage", "coverage.xml", "junit.xml", "lcov.info", "coverage.json", "report.xml"})
+GENERATED_FOLDERS = frozenset({"htmlcov", "mutants", ".mutmut-cache", ".pytest_cache", ".nyc_output",
+                               ".stryker-tmp", ".tox", "__pycache__"})
 REPORT = re.compile(r"(?P<task>T-\d+\.\d+)-[a-z-]+\.md", re.IGNORECASE)
 _PATH = re.compile(r"[\w.*?\[\]@-]+(?:/[\w.*?\[\]@+-]+)*/?")
 
@@ -40,7 +43,7 @@ def task_of(report: Path) -> str | None:
 
 def area_paths(text: str) -> list[str]:
     """The paths a task's ``Areas:`` line names: words with a slash, or a file name with an extension."""
-    words = (w.strip("`'\"()[]<>,;") for w in text.replace(",", " ").replace(";", " ").split())
+    words = (w.strip("`'\"()[]<>,;") for w in text.replace(",", " ").replace(";", " ").replace(chr(92), "/").split())
     return [w.removeprefix("./") for w in words if _PATH.fullmatch(w) and ("/" in w or re.search(r"\.\w{1,6}$", w))]
 
 
@@ -49,9 +52,15 @@ def _inside(name: str, area: str) -> bool:
     return name == folder or name.startswith(folder + "/") or fnmatch.fnmatchcase(name, area)
 
 
+def is_code(name: str) -> bool:
+    """False for what a reviewer's or a test tool's run leaves in the project: pictures, traces, coverage and mutation output."""
+    parts = name.lower().split("/")
+    return not (name.lower().endswith(NOT_CODE) or parts[-1] in GENERATED_FILES or GENERATED_FOLDERS.intersection(parts[:-1]))
+
+
 def _changed_since_red(root: Path, red: str) -> list[str]:
     files = redrecord.changed_production_files(root, cfg.load(root).test_dirs, red, timeout=HOOK_TIMEOUT)
-    return [f for f in files if not f.lower().endswith(NOT_CODE)]
+    return [f for f in files if is_code(f)]
 
 
 def _hashes(root: Path, names: list[str]) -> dict[str, str]:
