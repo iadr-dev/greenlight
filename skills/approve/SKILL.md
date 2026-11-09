@@ -14,7 +14,9 @@ to stand in for the person when the hook has run.
 
 1. Look for a line starting with `greenlight approval:` in the context of this prompt.
    - If it says the approval was recorded, run the check below and tell the person the result.
-   - If it says `NOT recorded`, repeat its reason and what has to happen first. Do not retry.
+   - If it says `NOT recorded`, repeat its reason and what has to happen first. Do not retry. If the reason is
+     `send one approval per message`, tell the person to send the command alone, with no other text and no second
+     command, and to send each gate in its own message.
 2. Check where the feature stands and show the output unchanged:
 
    ```sh
@@ -24,7 +26,8 @@ to stand in for the person when the hook has run.
 
    An approval shows `pending` until Claude Code has written the person's prompt to the session
    transcript; run the check again after the next turn if it does. An approval that is `invalid`
-   or `unverifiable` does not count: tell the person to type the command again themselves.
+   or `unverifiable` does not count: tell the person to type the command again themselves, unless the person's earlier
+   verified approval of the same, unchanged files stands (`bdd approve <FEAT-n> --check` names it); then nothing more is needed.
    If the person typed `integrity #3,#4 <reason>` (or `integrity <reason>` with one violation open), the line
    names exactly the violations it covers, or why it covers none. Run
    `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" status` instead and show its `integrity:` line (none means nothing is open); the violations

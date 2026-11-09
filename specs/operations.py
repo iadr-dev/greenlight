@@ -74,6 +74,7 @@ FILES: dict[str, str] = {
     "helpers record": ".bdd/helpers.json",
     "docs record": ".bdd/features/FEAT-007-discounts/docs-consulted.json",
     "feature file": "features/discounts.feature",
+    "discounts state": ".bdd/features/FEAT-007-discounts/state.json",
     "step file": "steps/steps.py",
     "lock record": ".bdd/features/FEAT-007-discounts/lock.json",
     "second feature file": "features/refunds.feature",

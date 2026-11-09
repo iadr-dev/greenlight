@@ -213,12 +213,14 @@ def checks_of(root: Path, feature_id: str) -> dict:
 def approvals_of(root: Path, data: dict) -> list[dict]:
     rows = []
     for gate in approvals.GATES:
-        last = approvals._last(data, gate)
+        last = approvals.counted(root, data, gate)
         if last is None:
             continue
         problems = approvals.effective_problems(root, data, gate) if last["decision"] == "approve" else []
+        newest = approvals._last(data, gate)
+        note = f"a later approval ({approvals.provenance(newest)}) could not be verified and is not counted" if newest is not last else ""
         rows.append({"gate": gate, "decision": last["decision"], "origin": approvals.provenance(last), "at": last.get("at"),
-                     "valid": not problems and last["decision"] == "approve", "reason": last.get("reason", "")})
+                     "valid": not problems and last["decision"] == "approve", "reason": last.get("reason", ""), "note": note})
     return rows
 
 
@@ -357,7 +359,8 @@ def approval_line(approval: dict) -> str:
     word = DECISION_WORD.get(approval["decision"], approval["decision"])
     stale = " (NOT valid now)" if approval["decision"] == "approve" and not approval["valid"] else ""
     reason = f" - {cell(approval['reason'])}" if approval["reason"] else ""
-    return f"- {approval['gate']}: {word} via {approval['origin']}{stale}{reason}"
+    note = f" ({approval['note']})" if approval.get("note") else ""
+    return f"- {approval['gate']}: {word} via {approval['origin']}{stale}{reason}{note}"
 
 
 def lock_word(locks: dict) -> str:

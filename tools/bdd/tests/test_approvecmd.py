@@ -8,7 +8,7 @@ from bddlib import approvecmd, enforcement, state
 from tests.helpers import ProjectCase, typed
 
 
-class ApproveCommandTest(ProjectCase):
+class CommandCase(ProjectCase):
     def run_cmd(self, *args: str) -> tuple[int, str, str]:
         out, err, here = io.StringIO(), io.StringIO(), os.getcwd()
         os.chdir(self.root)
@@ -23,6 +23,8 @@ class ApproveCommandTest(ProjectCase):
         self.gate("discover")
         self.rules.write_text("# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n", encoding="utf-8", newline="\n")
 
+
+class ApproveCommandTest(CommandCase):
     def test_self_reported_approval_is_recorded_and_the_phase_reported(self):
         self.prepare_rules()
         code, out, err = self.run_cmd("FEAT-007", "rules", "--self-reported")
@@ -75,6 +77,54 @@ class ApproveCommandTest(ProjectCase):
         code, out, _ = self.run_cmd("FEAT-007", "--verify")
         self.assertEqual(code, 1)
         self.assertIn("#2 rules approve: pending", out)
+
+
+class SummaryCommandTest(CommandCase):
+    def test_the_summary_is_printed_and_nothing_is_written(self):
+        self.prepare_rules()
+        before = (self.feature_dir / "state.json").read_bytes()
+        code, out, err = self.run_cmd("FEAT-007", "rules", "--summary")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out.splitlines()[:2], ["FEAT-007 rules, not approved before: 1 rule.",
+                                                "  R-007.1  Orders of 1000 or more get 10% off."])
+        self.assertEqual((self.feature_dir / "state.json").read_bytes(), before)
+
+    def test_the_summary_needs_a_gate_and_takes_no_reason(self):
+        self.prepare_rules()
+        for args, message in ((("FEAT-007", "--summary"), "name the gate"),
+                              (("FEAT-007", "rules", "--summary", "--reject"), "only reads"),
+                              (("FEAT-007", "rules", "--summary", "--reason", "x"), "only reads")):
+            with self.subTest(args=args):
+                code, _, err = self.run_cmd(*args)
+                self.assertEqual(code, 2)
+                self.assertIn(message, err)
+
+    def test_the_summary_cannot_be_combined_with_a_flag_that_records_or_judges(self):
+        self.prepare_rules()
+        for flag in ("--self-reported", "--auto", "--verify", "--check"):
+            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as stop:
+                approvecmd.run(["FEAT-007", "rules", "--summary", flag])
+            self.assertEqual(stop.exception.code, 2)
+            self.assertIn("not allowed with", err.getvalue())
+        self.assertEqual(self.data()["approvals"], [])
+
+    def test_the_summary_takes_no_flag_that_does_not_exist(self):
+        self.prepare_rules()
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as stop:
+            approvecmd.run(["FEAT-007", "rules", "--summary", "--record"])
+        self.assertEqual(stop.exception.code, 2)
+        self.assertIn("unrecognized arguments: --record", err.getvalue())
+        self.assertEqual(self.data()["approvals"], [])
+
+    def test_a_summary_of_nothing_to_approve_is_refused_in_words(self):
+        code, _, err = self.run_cmd("FEAT-007", "rules", "--summary")
+        self.assertEqual(code, 2)
+        self.assertIn("there is nothing to summarise", err)
+
+    def test_the_summary_works_when_hard_enforcement_refuses_self_reporting(self):
+        self.prepare_rules()
+        self.config('enforcement = "hard"\n')
+        self.assertEqual(self.run_cmd("FEAT-007", "rules", "--summary")[0], 0)
 
 
 if __name__ == "__main__":

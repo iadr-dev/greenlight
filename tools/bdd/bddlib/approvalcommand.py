@@ -25,6 +25,10 @@ PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(
 INTEGRITY_PROMPT = re.compile(r"/greenlight:approve[ \t]+integrity(?:[ \t]+(\S.*))?")
 CODEX_COMMAND = "$greenlight-approve"
 CODEX_PROMPT = re.compile(r"\$greenlight-approve[ 	]+(FEAT-\d+)[ 	]+(rules|examples)(?:[ 	]+(reject)(?:[ 	]+(\S.*))?)?")
+_GATE_COMMAND = r"FEAT-\d+[ \t]+(?:rules|examples)"
+HOLDS_COMMAND = re.compile(r"/greenlight:approve[ \t]+(?:" + _GATE_COMMAND + r"|integrity)\b")
+CODEX_HOLDS_COMMAND = re.compile(r"\$greenlight-approve[ \t]+" + _GATE_COMMAND + r"\b")
+REJECT_AFTER = re.compile(r"[ \t]+reject\b")
 _EXPANDED = re.compile(r"<command-message>[^<\n]*</command-message>\s*<command-name>/greenlight:approve</command-name>"
                        r"\s*<command-args>([^<\n]*)</command-args>")
 
@@ -44,6 +48,16 @@ def parse_integrity(prompt: object) -> str | None:
     """The reason when the whole prompt is an integrity acknowledgement ("" when it gives none), else None."""
     match = INTEGRITY_PROMPT.fullmatch(prompt.strip()) if isinstance(prompt, str) else None
     return None if match is None else (match.group(1) or "").strip()
+
+
+def holds_command(prompt: object, pattern: re.Pattern[str] = HOLDS_COMMAND) -> re.Match[str] | None:
+    """The first complete approval command inside a prompt, whether or not the prompt is only that command.
+
+    A prompt that starts with ``<`` is a note the system injected (a finished agent's report quoting what to type), not
+    something the person sent, and is skipped."""
+    if not isinstance(prompt, str) or prompt.lstrip().startswith("<"):
+        return None
+    return pattern.search(prompt)
 
 
 def parse_codex(prompt: object) -> tuple[str, str, str | None] | None:

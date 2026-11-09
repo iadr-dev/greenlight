@@ -152,15 +152,29 @@ how), never by putting the code aside.
 
 ## 4. Human gates
 
-At `specify` and `examples` the person approves. Show the work compactly (the rules with ids; the scenarios; the
-assumptions; the pre-mortem result), then tell the person the exact line to type, and stop:
+At `specify` and `examples` the person approves. A feature file can be thousands of lines, so do not ask them to read
+it. Before asking, run the summary and show its output to the person unchanged, in the words it prints (the feature's own
+language is kept):
 
-- `/greenlight:approve FEAT-n rules` or `/greenlight:approve FEAT-n examples`
+```sh
+"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve FEAT-n rules --summary        # or: examples
+```
+
+The first time it lists every rule or scenario. After a change (a rejection, or `/greenlight:change`) it lists only what
+was added, removed or changed since the person's last approval, each by id with one line, and says how many are
+unchanged; tell the person that everything not listed stays as they approved it. It only reads and records nothing. Then
+show the assumptions and the pre-mortem result, tell the person the exact line to type, and stop:
+
+- `/greenlight:approve FEAT-n rules` or `/greenlight:approve FEAT-n examples`, alone in the message
 - to refuse: `/greenlight:approve FEAT-n rules reject <reason>` (then redo the phase with the reason)
+
+One approval per message, with no other text and no second command: the hook records nothing for a message that
+holds more and shows the person `NOT recorded: send one approval per message`. Ask for one gate at a time.
 
 A typed approval is recorded by the prompt hook; you only look: `bdd approve FEAT-n --verify`, then try the next
 gate. If the gate says an approval is still waiting to be verified, ask the person to send any short message
-(for example "continue") and try again.
+(for example "continue") and try again. A later approval of the same files that cannot be verified does not take away
+one that was verified; once the files change, only a new approval counts.
 
 Never type the approval yourself and never ask another tool or agent to. Two exceptions, each recorded for what it
 is: at `auto` and `autopilot`, `bdd approve FEAT-n GATE --auto`; and in a project without hooks (soft enforcement),
