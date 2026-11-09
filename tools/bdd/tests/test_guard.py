@@ -859,7 +859,11 @@ class PrecisionTest(GuardCase):
                         "T=tests/drivers; rm $T/barrier.ts", 'rm "$UNKNOWN/barrier.ts"', "echo tests/drivers/barrier.ts | xargs rm",
                         "cat > fix.py <<'EOF'\nimport sys\nopen(sys.argv[1],'w')\nEOF\npython fix.py tests/drivers/barrier.ts",
                         "cd nowhere; rm tests/drivers/barrier.ts", "cd api && cd .. && rm tests/drivers/barrier.ts",
-                        "for f in barrier.ts; do rm tests/drivers/$f; done", "sh -c 'rm tests/drivers/barrier.ts'"]:
+                        "for f in barrier.ts; do rm tests/drivers/$f; done", "sh -c 'rm tests/drivers/barrier.ts'",
+                        "X=rm; $X -f tests/drivers/barrier.ts", "$CMD tests/drivers/barrier.ts",
+                        'X="rm -f tests/drivers/barrier.ts"; eval "$X"', "$(echo rm) tests/drivers/barrier.ts",
+                        "cat > out.txt <<EOF\n$(rm tests/drivers/barrier.ts)\nEOF",
+                        "git apply <<'EOF'\n--- a/tests/drivers/barrier.ts\n+++ b/tests/drivers/barrier.ts\nEOF"]:
             with self.subTest(command=command):
                 self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
 

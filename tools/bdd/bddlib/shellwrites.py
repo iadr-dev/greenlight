@@ -85,8 +85,12 @@ class Word:
         only says how it runs or a version number (``python3.12`` is ``python``)."""
         if self.quoted and not self.text:
             return ""
-        segment = self.text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip("{}()").casefold()
-        return _VERSION.sub("", _SUFFIX.sub("", segment))
+        return program_name(self.text)
+
+
+def program_name(text: str) -> str:
+    segment = text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip("{}()").casefold()
+    return _VERSION.sub("", _SUFFIX.sub("", segment))
 
 
 @dataclass
@@ -94,6 +98,7 @@ class Simple:
     words: list[Word] = field(default_factory=list)
     redirects: list[Word] = field(default_factory=list)    # where its output goes
     bodies: list[str] = field(default_factory=list)        # its here-documents and here-strings
+    expands: bool = False                                  # a here-document body runs a command substitution
     joiner: str = ""                                       # the operator after it
     nested: list["Simple"] = field(default_factory=list)   # the commands of its command substitutions
 
@@ -153,7 +158,7 @@ class _Lexer:
         if role == "target":
             self.current.redirects.append(word)
         elif role == "delimiter":
-            self.heredocs.append((word.text, self._strip_tabs, self.current))
+            self.heredocs.append((word.text, self._strip_tabs, self.current, not word.quoted and word.parts[0][1] == "plain"))
         elif role == "string":
             self.current.bodies.append(word.text)
         elif role is None:
@@ -326,7 +331,7 @@ class _Lexer:
         self.next_is = {"<<": "delimiter", "<<-": "delimiter", "<<<": "string", "<": "drop", "<&": "drop"}.get(op, "target")
 
     def read_heredocs(self) -> None:
-        for delimiter, strip, owner in self.heredocs:
+        for delimiter, strip, owner, expands in self.heredocs:
             lines = []
             while True:
                 if self.at >= len(self.text):
@@ -338,6 +343,7 @@ class _Lexer:
                     break
                 lines.append(line)
             owner.bodies.append("\n".join(lines))
+            owner.expands = owner.expands or (expands and any("$(" in line or "`" in line for line in lines))
         self.heredocs = []
 
 
@@ -468,6 +474,9 @@ class _Reader:
         self.found.targets.append(Target(text, raw, pattern, tuple(self.dirs), names_only=names_only))
 
     def read_simple(self, simple: Simple, piped: bool, depth: int) -> None:
+        if simple.expands:
+            self.found.whole = True                                # `<<EOF` with `$(...)` in it runs that command
+            return
         for word in simple.redirects:
             self.target(word)
             if simple.bodies:                                  # `cat > fix.py <<EOF`: a script the command may run next
@@ -497,8 +506,13 @@ class _Reader:
         if program in MOVES:
             self.move(words[1:])
             return
+        try:
+            program_text = _expand(words[0], self.assigned, strict=True)[0]
+        except _Unknown:
+            self.found.whole = True                                # `$CMD x`, `$(...) x`: the program is not known
+            return
         names_only = any(not w.quoted and (w.text == "-C" or w.text.startswith(FOLDER_FLAGS)) for w in words)
-        names = [("" if w.quoted and at else w.name()) for at, w in enumerate(words)]
+        names = [program_text and program_name(program_text)] + [("" if w.quoted else w.name()) for w in words[1:]]
         if "xargs" in names and any(n in WRITE_VERBS or n in SHELLS or n in INTERPRETERS for n in names[names.index("xargs"):]):
             self.found.whole = True
             return
@@ -510,10 +524,9 @@ class _Reader:
                 interpreted = True
                 self.code(words, simple.bodies, piped and at == 0, AWK_WRITES if name in ("awk", "gawk") else CODE_WRITES)
             if name in WRITE_VERBS:
-                self.verb(name, words[at + 1:], names_only)
+                self.verb(name, words[at + 1:], names_only, simple.bodies)
             if name == "git" and any(n in GIT_WRITES for n in names[at + 1:at + 4]):
-                for word in words[at + 1:]:
-                    self.target(word, names_only)
+                self.verb(name, words[at + 1:], names_only, simple.bodies)
             if name == "sed" and any(_flag(w) and (re.fullmatch(r"-\w*i\S*", w.text) or w.text.startswith("--in-place"))
                                      for w in words[at + 1:]):
                 for word in words[at + 1:]:
@@ -570,7 +583,11 @@ class _Reader:
         self.chain = [folder]
 
     def shell(self, args: list[Word], bodies: list[str], piped: bool, depth: int) -> None:
-        inner = " ".join(w.text for w in args) + "".join("\n" + b for b in bodies)
+        try:
+            inner = " ".join(_expand(w, self.assigned, strict=True)[0] for w in args) + "".join("\n" + b for b in bodies)
+        except _Unknown:
+            self.found.whole = True                                # `eval "$X"`: the script is not known
+            return
         if not inner.strip():
             if piped:
                 self.found.whole = True                            # `... | sh`: the commands come from the pipe
@@ -604,7 +621,9 @@ class _Reader:
             if not word.quoted:
                 self.target(word)
 
-    def verb(self, name: str, args: list[Word], names_only: bool) -> None:
+    def verb(self, name: str, args: list[Word], names_only: bool, bodies: list[str] = ()) -> None:
+        for body in bodies:                                    # what a writing command reads can name what it writes
+            self.found.targets.append(Target(body, body.replace("\\", "/"), "", tuple(self.dirs), code=True))
         if name == "cp" and self.copy(args, names_only):
             return
         for word in args:
