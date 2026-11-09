@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import reportcmd, state, tripwire
+from bddlib import lockfile, reportcmd, state, tripwire
 
 from tests.helpers import ProjectCase
 
@@ -74,6 +74,26 @@ class TableTest(StatusCase):
             code, _, err = self.run_status(cwd=Path(tmp))
         self.assertEqual(code, 2)
         self.assertIn("not inside a greenlight project", err)
+
+
+class PlumbingStatusTest(StatusCase):
+    def test_the_plumbing_lock_is_shown_once_with_the_features_still_to_rerun(self):
+        self.config(tail='support = ["steps/conftest.py"]\n')
+        conftest = self.write("steps/conftest.py", "# shared\n")
+        lockfile.lock(self.root, self.feature_dir, "FEAT-007", "bind", [self.step])
+        other = state.create(self.root, "FEAT-008", "Refunds", "standard")
+        lockfile.lock(self.root, other, "FEAT-008", "bind", [self.write("steps/refunds.py", "# FEAT-008\n")])
+        _, out, _ = self.run_status()
+        self.assertEqual([line for line in out.splitlines() if line.startswith("plumbing:")][0].split(", since")[0],
+                         "plumbing: locked, 1 file(s)")
+        conftest.write_text("# shared, changed\n", encoding="utf-8")
+        lockfile.lock_plumbing(self.root, "changed", [], set())
+        self.write(".bdd/.runs/FEAT-008/latest.json", json.dumps({"plumbing": lockfile.plumbing_digest(self.root)}))
+        _, out, _ = self.run_status()
+        lines = [line for line in out.splitlines() if line.startswith("plumbing:")]
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].endswith("rerun once since it changed: FEAT-007"))
+        self.assertEqual(json.loads(self.run_status("--json")[1])["plumbing"]["rerun"], ["FEAT-007"])
 
 
 class BriefTest(StatusCase):

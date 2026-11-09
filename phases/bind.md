@@ -33,7 +33,13 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    `bdd run FEAT-n --shuffle` and `bdd run FEAT-n --isolated` (they must not depend on each other); run
    `bdd run FEAT-n` again last so the recorded run is the plain one.
 8. Report that the red is valid; after checking it, the orchestrator locks the bound files with `bdd lock FEAT-n
-   --scope bind --bound` (the adapter's step, driver and support files named in the configuration).
+   --scope bind --bound`. The feature's lock takes its own step and driver files: those no other feature's lock and
+   not the shared plumbing lock covers. The shared plumbing (support files, the files the adapter ships) is locked once
+   for the project, by the first feature bound.
+9. If this feature needs a change to the shared plumbing (a new operation in `operations`, a seam in `system`, a
+   runner setting), say so in the report instead of editing it: it is locked by the project, and changing it is its
+   own change (`bdd unlock --plumbing`, the edit, `bdd lock --plumbing`, every bound feature reruns once; see
+   `/greenlight:change`). No other feature is reopened.
 
 ## Output files
 

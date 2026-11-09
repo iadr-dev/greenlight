@@ -157,5 +157,62 @@ class LockCommandTest(unittest.TestCase):
         self.assertIn("no .feature file is tagged @FEAT-042", err)
 
 
+class PlumbingCommandTest(LockCommandTest):
+    def setUp(self):
+        super().setUp()
+        self.write(".bdd/config.toml", '[[adapters]]\nname = "x"\nfeatures = "features"\nsteps = "steps"\n'
+                                       'support = ["steps/conftest.py"]\n')
+        (store.features_dir(self.root) / "FEAT-008-other").mkdir()
+        self.conftest = self.write("steps/conftest.py", "# shared\n")
+
+    def test_binding_the_next_feature_leaves_the_first_one_intact(self):
+        code, out, _ = self.lock("--scope", "bind", "--bound")
+        self.assertEqual(code, 0)
+        self.assertIn("locked FEAT-007 bind: 1 file(s)", out)
+        self.assertIn("bound against the shared plumbing: 1 file(s)", out)
+        self.write("steps/other.py", "# FEAT-008\n")
+        code, out, _ = self.run_cmd(lockcmd.run_lock, "FEAT-008", "--scope", "bind", "--bound")
+        self.assertIn("left to FEAT-007: steps/steps.py", out)
+        self.assertNotIn("steps/conftest.py", out)                      # counted as the plumbing, not listed
+        self.assertIn("bound against the shared plumbing: 1 file(s)", out)
+        code, out, _ = self.lock("--check")
+        self.assertEqual((code, out.strip()), (0, "FEAT-007: locks intact (bind: 1 file(s)); plumbing: 1 file(s)"))
+
+    def test_a_plumbing_change_is_its_own_change_with_unlock_and_lock(self):
+        self.lock("--scope", "bind", "--bound")
+        code, out, _ = self.run_cmd(lockcmd.run_unlock, "--plumbing", "--reason", "a clock fixture")
+        self.assertEqual(code, 0)
+        code, out, _ = self.lock("--check", "--require", "--scope", "bind")
+        self.assertEqual(code, 1)
+        self.assertIn("[plumbing] the shared test plumbing was unlocked", out)
+        self.conftest.write_text("# shared, with a clock\n", encoding="utf-8", newline="\n")
+        code, out, _ = self.run_cmd(lockcmd.run_lock, "--plumbing", "--reason", "clock fixture added")
+        self.assertEqual(code, 0)
+        self.assertIn("1 changed", out)
+        self.assertIn("every bound feature reruns its scenarios once; none is reopened:\n  FEAT-007", out)
+        self.assertEqual(self.lock("--check", "--require", "--scope", "bind")[0], 0)
+        code, out, _ = self.run_cmd(lockcmd.run_lock, "--plumbing", "--reason", "again")
+        self.assertIn("the shared plumbing is unchanged", out)
+
+    def test_plumbing_usage_errors(self):
+        for runner, args, message in ((lockcmd.run_lock, ("--plumbing",), "--reason"),
+                                      (lockcmd.run_lock, ("--plumbing", "--check", "--reason", "x"), "--plumbing goes with"),
+                                      (lockcmd.run_unlock, ("--plumbing", "--reason", "x"), "not locked"),
+                                      (lockcmd.run_unlock, ("--reason", "x"), "name the feature")):
+            with self.subTest(args=args):
+                code, _, err = self.run_cmd(runner, *args)
+                self.assertEqual(code, 2)
+                self.assertIn(message, err)
+
+    def test_the_files_an_adapter_ships_are_plumbing(self):
+        self.write(".bdd/config.toml", '[[adapters]]\nname = "python-pytest-bdd"\nfeatures = "features"\n'
+                                       'steps = "tests/steps"\ndrivers = "tests/drivers"\n')
+        self.write("tests/drivers/api.py", "# shipped\n")
+        self.write("tests/drivers/mine.py", "# the project's own\n")
+        found = lockcmd.plumbing_candidates(self.root)
+        self.assertIn("tests/drivers/api.py", found)
+        self.assertNotIn("tests/drivers/mine.py", found)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -44,7 +44,7 @@ class SupportFilesTest(SupportFilesCase):
             with self.subTest(agent=agent):
                 self.assertIsNotNone(self.write_as(agent, "tests/conftest.py"))
 
-    def test_lock_bound_locks_steps_drivers_and_support_files(self):
+    def test_lock_bound_locks_steps_and_drivers_and_the_support_files_as_the_plumbing(self):
         out, here = io.StringIO(), os.getcwd()
         os.chdir(self.root)
         try:
@@ -53,7 +53,8 @@ class SupportFilesTest(SupportFilesCase):
         finally:
             os.chdir(here)
         files = set(lockfile.read_lock(self.feature_dir, "FEAT-007")["scopes"]["bind"]["files"])
-        self.assertEqual(files, {"steps/steps.py", "tests/conftest.py"})
+        self.assertEqual(files, {"steps/steps.py"})
+        self.assertEqual(set(lockfile.read_plumbing(self.root)["files"]), {"tests/conftest.py"})
 
     def test_lock_bound_goes_only_with_the_bind_scope_and_no_paths(self):
         for argv in (["lock", "FEAT-007", "--scope", "spec", "--bound"], ["lock", "FEAT-007", "--scope", "bind", "--bound", "steps"]):
@@ -447,8 +448,9 @@ class UnlockedBoundFileTest(SupportFilesCase):
         lockfile.lock(self.root, self.feature_dir, "FEAT-007", "bind", [self.root / rel for rel in lockfile.bound_files(self.root)])
         later = self.write("tests/extra/conftest.py", "# added after the lock\n")
         violations = lockfile.check(self.root, self.feature_dir, "FEAT-007", ("bind",), None, lockfile.bound_files(self.root))
-        self.assertEqual([(v.kind, v.path) for v in violations], [("added", later.relative_to(self.root).as_posix())])
-        self.assertIn("never locked", str(violations[0]))
+        self.assertEqual([(v.scope, v.kind, v.path) for v in violations],
+                         [("plumbing", "added", later.relative_to(self.root).as_posix())])
+        self.assertIn("the plumbing lock does not cover", str(violations[0]))
 
 
 class WatchedPackagesTest(ProjectCase):

@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest import mock
 
-from bddlib import cli, guard, migrate, state
+from bddlib import cli, guard, lockfile, migrate, state, store
 from bddlib import config as cfg
 from bddlib.errors import UsageError
 
@@ -91,6 +91,24 @@ class MigrateTest(MigrateCase):
         self.assertEqual(self.run_cli("status", "--brief")[0], 0)           # hooks are never blocked by it
         self.assertEqual(guard.evaluate({"tool_name": "Write", "cwd": str(self.root),
                                          "tool_input": {"file_path": str(self.root / "a.py")}}), None)
+
+    def test_old_bind_locks_are_converted_at_the_current_schema_with_a_backup(self):
+        self.config(tail='support = ["steps/conftest.py"]\n')
+        self.write("steps/conftest.py", "# shared\n")
+        files = {rel: lockfile.file_digest(self.root / rel) for rel in ("steps/steps.py", "steps/conftest.py")}
+        store.write_json(self.feature_dir / lockfile.LOCK_FILE, {"schema": 1, "feature": "FEAT-007", "history": [],
+                         "scopes": {"bind": {"locked_at": "2026-01-01T00:00:00+00:00", "files": files}}})
+        code, out, _ = self.run_cli("migrate", "--dry-run")
+        self.assertIn("would move the shared files of the bind locks of FEAT-007 into the plumbing lock", out)
+        self.assertEqual(lockfile.legacy_features(self.root), ["FEAT-007"])
+        code, out, _ = self.run_cli("migrate")
+        self.assertEqual(code, 0)
+        self.assertIn("backup: .bdd-backup-plumbing", out)
+        self.assertIn("locks: plumbing lock: 1 file(s)", out)
+        self.assertEqual(lockfile.legacy_features(self.root), [])
+        self.assertEqual(self.run_cli("lock", "FEAT-007", "--check")[1].strip(),
+                         "FEAT-007: locks intact (bind: 1 file(s)); plumbing: 1 file(s)")
+        self.assertEqual(self.run_cli("migrate")[1], "already at schema 1; nothing to do\n")
 
     def test_dry_run_changes_nothing(self):
         self.newer()

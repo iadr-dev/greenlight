@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Shared test plumbing is locked once for the project (D65, FEAT-111). `.bdd/plumbing.lock.json` holds the support files and the files the adapters ship; a feature's bind lock holds only its own step and driver files and the plumbing digest. Binding the next feature with a new driver no longer makes an earlier feature's lock incomplete. A plumbing change is its own change, `bdd unlock --plumbing` and `bdd lock --plumbing --reason`, after which every bound feature reruns its scenarios once and none is reopened; `bdd status` shows the plumbing lock and who still has to rerun. The guard refuses plumbing files as locked by the project. Old locks keep working; `bdd migrate` converts them (backup in `.bdd-backup-plumbing`).
+
 ## [1.2.1] - 2026-11-05
 
 A patch release made by the update automation: the language versions the workflows and the adapters' CI templates pin were brought up to date.

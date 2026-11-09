@@ -6,7 +6,8 @@ blocks (exit 2, reason on stderr, which the model sees).
 
 What it blocks inside a greenlight project:
 
-* edits to files locked by a feature (approved specs, bound steps and drivers);
+* edits to files locked by a feature (approved specs, bound steps and drivers) or by the project (the shared
+  test plumbing);
 * edits to the CLI-managed data files (``state.json``, ``lock.json``, ``.bdd/config.toml``,
   enforcement markers);
 * edits to what enforces all of this: the plugin's own files, and Claude Code settings or hooks
@@ -66,7 +67,7 @@ AGENT_WRITES = {
 # gets: it may never write the feature files or the steps, whichever tests are locked yet.
 FOREIGN_AGENT = "another agent"
 FOREIGN_WRITES = {"data", "production"}
-MANAGED_NAMES = {"state.json", "lock.json", "docs-consulted.json", sharedvocab.LOCK_NAME}
+MANAGED_NAMES = {"state.json", "lock.json", "docs-consulted.json", sharedvocab.LOCK_NAME, lockfile.PLUMBING_FILE}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
@@ -75,6 +76,7 @@ MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects 
 PERSON_FILES = (MANAGED_CONFIG, "standards.md")   # in .bdd/, edited by the person only
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
+PROJECT_OWNER = "the project"           # who holds the plumbing lock
 
 _APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b|\$greenlight-(?:approve|reject)\b", re.IGNORECASE)
 # Codex: its hook entry points are not for an agent to run (a made-up payload could fake an approval), and its home,
@@ -175,6 +177,10 @@ class Project:
                 for rel in entry.get("files", {}):
                     self.locked[path_key(self.root / rel)] = Locked(data.get("feature", feature_dir.name), scope,
                                                                     self.root / rel)
+        plumbing = lockfile.read_plumbing(self.root)                # StoreError propagates: fail closed
+        if not plumbing.get("unlocked"):
+            for rel in plumbing.get("files", {}):
+                self.locked[path_key(self.root / rel)] = Locked(PROJECT_OWNER, lockfile.PLUMBING, self.root / rel)
 
     def relative(self, path: Path) -> str:
         try:
@@ -208,6 +214,11 @@ class Project:
 
 
 def locked_message(project: Project, path: Path, lock: Locked) -> str:
+    if lock.scope == lockfile.PLUMBING:
+        return (f"greenlight: {project.relative(path)} is shared test plumbing, locked by the project. Every feature's "
+                "tests run on it, so a change to it is its own change: the person or the orchestrator releases it with "
+                "`bdd unlock --plumbing --reason \"...\"` and locks it again with `bdd lock --plumbing --reason \"...\"`, "
+                "after which every bound feature reruns its scenarios once.")
     return (f"greenlight: {project.relative(path)} is locked by {lock.feature} ({lock.scope}). Approved specs and "
             "bound steps are read-only while a feature is in progress. If the spec or a step is really wrong, "
             "stop and raise a change request with the user; unlocking needs a recorded reason "

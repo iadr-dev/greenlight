@@ -96,9 +96,12 @@ What this proves is narrow and stated plainly: a query count shows "no query per
 
 ## Locks
 
-Approving the examples locks the feature files; passing the bind gate locks the steps, drivers and the adapter's
-plumbing (`bdd lock FEAT-n --scope bind --bound`). A changed locked file blocks the implement and verify gates. The
-implementer can write production code but not tests.
+Approving the examples locks the feature files; passing the bind gate locks the feature's own steps and drivers
+(`bdd lock FEAT-n --scope bind --bound`). The shared test plumbing (the adapter's support files and the drivers and
+steps it ships) is locked once for the project in `.bdd/plumbing.lock.json`, so binding the next feature never reopens
+the one before it; changing the plumbing is its own change (`bdd unlock --plumbing`, `bdd lock --plumbing --reason`),
+after which every bound feature reruns its scenarios once (D65). A changed locked file blocks the implement and verify
+gates. The implementer can write production code but not tests.
 
 ## Adopting existing code
 
