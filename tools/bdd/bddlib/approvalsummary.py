@@ -29,8 +29,10 @@ OUTSIDE = {"rules": "text outside the rules (headings, out of scope, glossary or
 BULLET = re.compile(r"^\s*[-*+]\s+([^:]{1,40}):\s*(.*)$")
 HEADING = re.compile(r"^\s*#{1,6}\s")
 LABEL = {"rules": "statement", "examples": "title"}
+SHOWS_EXTRA = {"tags", "description", "all"}
 PART_WORDS = {"all": "other text of the item", "notes": "free text under the rule"}
 OUTSIDE_SHOWN = 12
+LINE_HASH = 12
 
 
 def significant(lines: list[str]) -> list[str]:
@@ -42,9 +44,12 @@ def digest(lines: list[str]) -> str:
     return hashlib.sha256("\n".join(significant(lines)).encode("utf-8")).hexdigest()[:16]
 
 
-def _item(text: str, parts: dict[str, list[str]], detail: list[str], lines: list[str], rule: str | None = None) -> dict:
+def _item(text: str, parts: dict[str, list[str]], detail: list[str], lines: list[str], rule: str | None = None,
+          extra: list[str] | None = None) -> dict:
+    """An item: its text, a hash of each part and of all its lines, and the lines that are only for showing (``detail`` always,
+    ``extra`` when a change to its tags, description or comments has to be read)."""
     item = {"text": " ".join(text.split()), "parts": {name: digest(values) for name, values in {**parts, "all": lines}.items()},
-            "detail": detail}
+            "detail": detail, "extra": extra or []}
     if rule:
         item["rule"] = rule
     return item
@@ -60,7 +65,22 @@ def unique(found: dict, key: str) -> str:
 
 
 def outside_of(lines: list[str]) -> dict:
-    return {"digest": digest(lines), "lines": significant(lines)}
+    """The text outside the items, with one short hash per line so that the lines that changed can be shown."""
+    words = significant(lines)
+    return {"lines": words, "hashes": [digest([line])[:LINE_HASH] for line in words]}
+
+
+def outside_diff(old: list[str], new: dict) -> tuple[list[str], int, bool]:
+    """(lines that are new, how many lines are gone, whether only their order differs) between the hashes kept with an
+    approval and the outside text now."""
+    left = list(old)
+    added = []
+    for line, hashed in zip(new["lines"], new["hashes"]):
+        if hashed in left:
+            left.remove(hashed)
+        else:
+            added.append(line)
+    return added, len(left), old != new["hashes"] and not added and not left
 
 
 # -- reading the files into items ------------------------------------------------------------
@@ -167,9 +187,11 @@ def scenario_items(files: list[Path]) -> tuple[dict[str, dict], dict]:
                 parts = {"steps": steps, "tags": node.tags, "description": node.description.splitlines()}
                 if tables:
                     parts["examples"] = [line for table in tables for line in table]
+                extra = ([f"tags: {' '.join(node.tags)}"] if node.tags else []) + [f"description: {line}" for line in significant(node.description.splitlines())]
+                extra += [f"comment: {' '.join(line.split())}" for line in span if line.lstrip().startswith("#")]
                 found[unique(found, tag_of(tags, tagcheck.EXAMPLE) or node.name)] = _item(
                     node.name, {name: values for name, values in parts.items() if values}, steps + [f"| {line} |" for table in tables for line in table],
-                    span, tag_of(tags, tagcheck.RULE))
+                    span, tag_of(tags, tagcheck.RULE), extra)
     return found, outside_of(outside)
 
 
@@ -179,22 +201,23 @@ def read(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict:
         path = feature_dir / "rules.md"
         if not path.is_file():
             raise UsageError(f"there is nothing to summarise: {path.relative_to(root).as_posix()} does not exist yet")
-        found, outside = rule_items(path)
-        return {"items": found, "outside": outside}
-    files = featurefiles.spec_files(root, feature_id)
-    if not files:
-        raise UsageError(f"there is nothing to summarise: no .feature file is tagged @{feature_id}")
+        reader, source = rule_items, path
+    else:
+        source = featurefiles.spec_files(root, feature_id)
+        if not source:
+            raise UsageError(f"there is nothing to summarise: no .feature file is tagged @{feature_id}")
+        reader = scenario_items
     try:
-        found, outside = scenario_items(files)
-    except ValueError as exc:                       # gherkin.ParseError
-        raise UsageError(f"cannot summarise the examples: {exc}") from exc
+        found, outside = reader(source)
+    except ValueError as exc:                       # gherkin.ParseError, or text that is not UTF-8
+        raise UsageError(f"cannot summarise the {gate}: {exc}") from exc
     return {"items": found, "outside": outside}
 
 
-def snapshot(reading: dict) -> tuple[dict[str, dict], str]:
-    """What is kept with an approval: the items without the lines that are only for showing, and the hash of the rest."""
-    kept = {key: {name: value for name, value in item.items() if name != "detail"} for key, item in reading["items"].items()}
-    return kept, reading["outside"]["digest"]
+def snapshot(reading: dict) -> tuple[dict[str, dict], list[str]]:
+    """What is kept with an approval: the items without the lines that are only for showing, and a hash per line of the rest."""
+    kept = {key: {name: value for name, value in item.items() if name not in ("detail", "extra")} for key, item in reading["items"].items()}
+    return kept, reading["outside"]["hashes"]
 
 
 # -- comparing -------------------------------------------------------------------------------
@@ -235,10 +258,12 @@ def summarise(gate: str, reading: dict, approval: dict | None, rejected: dict | 
     if approval.get("items") is None or approval.get("outside") is None:
         return {**base, "state": "unknown", "since": since, "added": [], "removed": [], "changed": {}, "unchanged": 0}
     diff = compare(gate, approval["items"], current)
-    outside_changed = approval["outside"] != reading["outside"]["digest"]
+    outside_added, outside_gone, outside_moved = outside_diff(approval["outside"], reading["outside"])
+    outside_changed = bool(outside_added or outside_gone or outside_moved)
     changed = diff["added"] or diff["removed"] or diff["changed"] or outside_changed or base["members"]
     return {**base, "state": "changed" if changed else "unchanged", "since": since, "old": approval["items"],
-            "outside_changed": outside_changed, **diff}
+            "outside_changed": outside_changed, "outside_added": outside_added, "outside_gone": outside_gone,
+            "outside_moved": outside_moved, **diff}
 
 
 # -- showing -------------------------------------------------------------------------------
@@ -257,7 +282,7 @@ def headline(summary: dict, feature: str) -> str:
                 f"all {count(summary['total'], gate)} are listed.")
     if state == "unchanged" and not summary["same_files"]:
         return (f"{feature} {gate}: no {NOUN[gate][0]} and no other text changed since the approval of {day}, but the file differs "
-                f"in spacing or line breaks, so it has to be approved again ({count(summary['total'], gate)}).")
+                f"in spacing, line breaks or the order of its parts, so it has to be approved again ({count(summary['total'], gate)}).")
     if state == "unchanged":
         return f"{feature} {gate}: no change since the approval of {day} ({count(summary['total'], gate)})."
     parts = []
@@ -297,6 +322,8 @@ def render(summary: dict, feature: str) -> str:
         lines.append("Changed:")
         for key, names in summary["changed"].items():
             lines += item_lines(key, current[key], True)
+            if SHOWS_EXTRA & set(names):
+                lines += [f"    {line}" for line in current[key].get("extra", [])]
             lines.append("    changed: " + ", ".join(PART_WORDS.get(name, name) for name in names))
             if LABEL[gate] in names:
                 lines.append(f"    was: {summary['old'][key]['text']}")
@@ -309,9 +336,12 @@ def render(summary: dict, feature: str) -> str:
         for key in summary["removed"]:
             lines += item_lines(key, summary["old"][key], False)
     if summary["outside_changed"]:
-        shown = summary["outside"]["lines"]
-        lines.append(f"Also changed: {OUTSIDE[gate]}. It now reads:")
-        lines += [f"  {line}" for line in shown[:OUTSIDE_SHOWN]] + ([f"  ... and {len(shown) - OUTSIDE_SHOWN} more lines"] if len(shown) > OUTSIDE_SHOWN else [])
+        added, gone = summary["outside_added"], summary["outside_gone"]
+        lines.append(f"Also changed: {OUTSIDE[gate]}.")
+        lines += [f"  now reads: {line}" for line in added[:OUTSIDE_SHOWN]]
+        lines += [f"  ... and {len(added) - OUTSIDE_SHOWN} more new lines"] if len(added) > OUTSIDE_SHOWN else []
+        lines += [f"  gone: {gone} line{'' if gone == 1 else 's'} that read otherwise"] if gone else []
+        lines += ["  the same lines in another order"] if summary["outside_moved"] else []
     lines += [f"Also changed: {problem}" for problem in summary["members"]]
     if state == "changed" and summary["unchanged"]:
         lines.append(f"Unchanged: {count(summary['unchanged'], gate)} (not shown).")

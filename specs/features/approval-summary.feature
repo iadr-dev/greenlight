@@ -118,7 +118,7 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "rules", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "outside": "2a20fd0ad0e0645c",
+                        "outside": ["2a20fd0ad0e0"],
                         "items": {"R-007.1": {"text": "Orders of 1000 or more get 10% off.",
                                               "parts": {"why": "dd0a316e18d40564", "all": "b15c15715ceaa47b"}},
                                   "R-007.2": {"text": "A discount code can be combined with a bulk discount.",
@@ -197,7 +197,7 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "examples", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "outside": "ddaf5a82ae082cad",
+                        "outside": ["df375ffbb1b8", "a36cba0f382a", "a9a40a89c7a5", "d99ee6806b8a"],
                         "items": {"EX-007.1.1": {"text": "An order of 1000 gets the discount", "rule": "R-007.1",
                                                  "parts": {"steps": "6b2ead113fac9d30", "tags": "86195f3385b5a389", "all": "7d4411f8cde3c4f1"}},
                                   "EX-007.1.2": {"text": "An order below 1000 gets no discount", "rule": "R-007.1",
@@ -265,7 +265,7 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "rules", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "outside": "b2803ea59fbdaddc",
+                        "outside": ["2a20fd0ad0e0", "bebd7495df22", "1f4f55efa696"],
                         "items": {"R-007.1": {"text": "Orders of 1000 or more get 10% off.",
                                               "parts": {"why": "dd0a316e18d40564", "notes": "af3c9c52dd293391", "all": "7ea7dbab38f0d063"}}},
                         "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",
@@ -285,11 +285,8 @@ Feature: A person can read what they approve and approve it in one step
             Orders in euros count at the rate of the order day.
             Why: big orders are rewarded
             changed: free text under the rule
-        Also changed: text outside the rules (headings, out of scope, glossary or notes). It now reads:
-          # Rules: FEAT-007 Discounts
-          ## Out of scope
-          - Gift cards
-          - Coupons
+        Also changed: text outside the rules (headings, out of scope, glossary or notes).
+          now reads: - Coupons
         """
 
     @EX-113.2.4
@@ -329,7 +326,7 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "examples", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "outside": "a3b350edbce6ecf6",
+                        "outside": ["7dfdecac8d4d", "df375ffbb1b8", "d684b81040bb", "a9a40a89c7a5", "4c8a796f66dd"],
                         "items": {"EX-007.1.1": {"text": "订单满1000元享受折扣", "rule": "R-007.1",
                                                  "parts": {"steps": "e87084caac8f896a", "tags": "86195f3385b5a389", "all": "87b87d2ef9d8ba8b"}}},
                         "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",

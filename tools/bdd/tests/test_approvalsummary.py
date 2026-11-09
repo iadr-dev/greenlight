@@ -1,5 +1,6 @@
 """What the person is asked to approve, and what changed since they last approved it."""
 import html
+import re
 import unittest
 from unittest import mock
 
@@ -143,7 +144,8 @@ class ItemsTest(SummaryCase):
         self.put_rules()
         kept, outside = approvalsummary.snapshot(self.reading("rules"))
         self.assertTrue(all(set(item) <= {"text", "parts", "rule"} for item in kept.values()))
-        self.assertRegex(outside, r"^[0-9a-f]{16}$")
+        self.assertEqual(len(outside), 4)
+        self.assertTrue(all(re.fullmatch(r"[0-9a-f]{12}", line) for line in outside))
 
 
 class CompareTest(unittest.TestCase):
@@ -238,6 +240,27 @@ class ChangedSummaryTest(SummaryCase):
         kept = [a["id"] for a in self.data()["approvals"] if a["items"]]
         self.assertEqual(kept, [1, 3, 4, 5])
         self.assertEqual(self.summary()["state"], "unchanged")
+
+    def test_approvals_the_summary_would_not_compare_with_do_not_push_out_the_one_it_does(self):
+        self.gate("discover")
+        self.put_rules()
+        self.approved_human("rules")
+        for number in range(2, 6):
+            path = self.transcript(headless(f"h-{number}"), name=f"h-{number}.jsonl")
+            self.approve("rules", grade="hook", session="s", prompt_id=f"h-{number}", transcript_path=str(path))
+            approvals.verify_origins(self.feature_dir)
+        self.assertEqual({a["origin"] for a in self.data()["approvals"][1:]}, {"headless"})
+        self.assertIsNotNone(self.data()["approvals"][0]["items"])
+        self.assertEqual(self.summary()["state"], "unchanged")
+
+    def test_an_approval_recorded_automatically_is_not_what_the_person_is_shown_changes_since(self):
+        self.gate("discover")
+        self.put_rules()
+        self.approved_human("rules")
+        state.switch_autonomy(self.feature_dir, "auto", "the person asked for it")
+        self.put_rules(RULES.replace("10%", "15%"))
+        self.approve("rules", grade="auto")
+        self.assertIn("1 rule changed", self.text())
 
     def test_items_that_changed_while_they_were_read_are_not_kept(self):
         self.gate("discover")
@@ -442,8 +465,38 @@ class NothingHidesTest(SummaryCase):
     def test_a_line_outside_every_rule_is_named_and_shown(self):
         text = self.after("rules", PROSE, "- Gift cards", "- Gift cards\n- Coupons")
         self.assertIn("Also changed: text outside the rules", text)
-        self.assertIn("  - Coupons", text)
+        self.assertIn("  now reads: - Coupons", text)
+        self.assertNotIn("Gift cards", text)
         self.assertIn("text outside the rules changed", text.splitlines()[0])
+
+    def test_only_the_lines_that_changed_outside_are_shown_among_many(self):
+        many = "\n".join(f"- item {n}" for n in range(1, 21))
+        old = f"# Rules\n\nR-007.1 A rule.\n\n## Out of scope\n\n{many}\n"
+        text = self.after("rules", old, "- item 17", "- item seventeen")
+        self.assertIn("  now reads: - item seventeen", text)
+        self.assertIn("  gone: 1 line that read otherwise", text)
+        self.assertNotIn("item 3", text)
+
+    def test_lines_that_only_changed_places_are_said_so(self):
+        text = self.after("rules", PROSE + "- Coupons\n", "- Gift cards\n- Coupons", "- Coupons\n- Gift cards")
+        self.assertIn("  the same lines in another order", text)
+
+    def test_a_removed_outside_line_is_counted(self):
+        text = self.after("rules", PROSE, "- Gift cards", "")
+        self.assertIn("  gone: 1 line that read otherwise", text)
+
+    def test_the_words_of_a_changed_comment_description_or_tag_are_shown(self):
+        text = self.after("examples", BACKGROUNDS, "# keep this one small", "# keep this one tiny")
+        self.assertIn("    comment: # keep this one tiny", text)
+        text = self.after("examples", BACKGROUNDS, "@EX-007.1.1 @smoke", "@EX-007.1.1 @smoke @slow")
+        self.assertIn("    tags: @EX-007.1.1 @smoke @slow", text)
+
+    def test_text_that_is_not_utf8_is_refused_in_words(self):
+        self.gate("discover")
+        self.rules.write_bytes(b"R-007.1 \xff\xfe broken\n")
+        with self.assertRaises(UsageError) as cm:
+            self.summary()
+        self.assertIn("cannot summarise the rules", str(cm.exception))
 
     def test_a_heading_changed_is_named(self):
         self.assertIn("Also changed: text outside the rules", self.after("rules", PROSE, "## Out of scope", "## Left out"))
