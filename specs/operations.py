@@ -54,6 +54,12 @@ COMMANDS: dict[str, list[str]] = {
     "subagent stop": [*BDD, "subagent-stop"],
     "doctor": [*BDD, "doctor"],
     "guard": [*BDD, "guard"],
+    "init": [*BDD, "init"],
+    "add the standards": [*BDD, "init", "--standards"],
+    "approve": [*BDD, "approve"],
+    "the prompt check": [*BDD, "tripwire", "--accept"],
+    "the tool-call check": [*BDD, "tripwire"],
+    "the approval hook": [*BDD, "approve", "--from-hook"],
 }
 
 LIB: dict[str, str] = {}
@@ -85,10 +91,20 @@ FILES: dict[str, str] = {
     "agent notes": ".bdd/.runs/agents.jsonl",
     "agent transcript": "transcripts/project/s/subagents/agent-x.jsonl",
     "session transcript": "transcripts/project/s.jsonl",
+    "plugin manifest": "plugin/.claude-plugin/plugin.json",
+    "plugin guard": "plugin/tools/bdd/bddlib/guard.py",
+    "updated plugin manifest": "claude-home/plugins/cache/gl/greenlight/1.2.2/.claude-plugin/plugin.json",
+    "copied plugin manifest": "plugin-copy/.claude-plugin/plugin.json",
+    "copied plugin guard": "plugin-copy/tools/bdd/bddlib/guard.py",
+    "acknowledging session transcript": "claude-home/projects/project/s.jsonl",
+    "integrity record": ".bdd/.integrity/violations.json",
+    "Claude Code plugin record": "claude-home/plugins/installed_plugins.json",
+    "call record": ".bdd/.integrity/calls.json",
 }
 
 ERRORS: dict[str, ErrorRule] = {
     "usage error": ErrorRule(exit_code=2),
     "violations found": ErrorRule(exit_code=1),
     "refused": ErrorRule(exit_code=2),
+    "integrity violation": ErrorRule(exit_code=2, text="integrity check failed"),
 }
