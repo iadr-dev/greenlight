@@ -8,6 +8,10 @@ it only has to turn version N data into version N+1 data. ``bdd migrate`` first 
 ``.bdd-backup-v<N>`` next to it (and refuses to go on if that exists), runs the chain, and bumps
 ``version`` after each step, so a failed step leaves the project at the last good version.
 
+Bind locks written before the shared plumbing lock existed are converted too, whatever the schema: the shared files
+they locked move to ``.bdd/plumbing.lock.json`` (see ``lockfile.migrate_legacy``), after a copy to
+``.bdd-backup-plumbing`` when no schema step made one.
+
 The hooks never use this check: a hook that fails would only get in the way.
 """
 from __future__ import annotations
@@ -20,6 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import config as cfg
+from . import lockcmd, lockfile
 from .errors import UsageError
 from .statecmd import guarded, project_root
 
@@ -44,8 +49,8 @@ def set_version(root: Path, version: int) -> None:
     path.write_text(top + (text[table.start():] if table else ""), encoding="utf-8", newline="\n")
 
 
-def backup(root: Path, version: int) -> Path:
-    target = root / f"{cfg.BDD_DIR}-backup-v{version}"
+def backup(root: Path, label: str) -> Path:
+    target = root / f"{cfg.BDD_DIR}-backup-{label}"
     if target.exists():
         raise UsageError(f"{target.name} already exists; move it away before migrating again")
     shutil.copytree(root / cfg.BDD_DIR, target)
@@ -74,21 +79,28 @@ def run(argv: list[str]) -> int:
 
 def do_migrate(root: Path, dry_run: bool) -> int:
     version = cfg.load(root).version                    # a newer project raises here, with the upgrade message
-    if version == cfg.SCHEMA_VERSION:
+    steps = plan(version) if version < cfg.SCHEMA_VERSION else []
+    legacy = lockfile.legacy_features(root)
+    if not steps and not legacy:
         print(f"already at schema {version}; nothing to do")
         return 0
-    steps = plan(version)
     if dry_run:
-        print(f"would migrate schema {version} to {cfg.SCHEMA_VERSION} in {len(steps)} step(s): "
-              + ", ".join(f"{v} -> {v + 1}" for v in steps))
+        if steps:
+            print(f"would migrate schema {version} to {cfg.SCHEMA_VERSION} in {len(steps)} step(s): "
+                  + ", ".join(f"{v} -> {v + 1}" for v in steps))
+        if legacy:
+            print(f"would move the shared files of the bind locks of {', '.join(legacy)} into the plumbing lock")
         return 0
-    saved = backup(root, version)
+    saved = backup(root, f"v{version}" if steps else "plumbing")
     print(f"backup: {saved.name}")
     for v in steps:
         for note in MIGRATIONS[v](root):
             print(f"  {v} -> {v + 1}: {note}")
         set_version(root, v + 1)
         print(f"schema {v + 1}")
+    if legacy:
+        for note in lockfile.migrate_legacy(root, lockcmd.plumbing_candidates(root)):
+            print(f"  locks: {note}")
     return 0
 
 

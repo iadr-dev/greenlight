@@ -298,7 +298,7 @@ def run_feature(root: Path, feature_id: str, scenarios: list[dict], adapters: li
             runs.append(entry)
             cases += found
     record = {"schema": SCHEMA, "feature": feature_id, "adapter": ", ".join(r.adapter for r in adapters), "at": store.utc_now(), "inputs": inputs_digest(root, feature_id),
-              "interpreter": interpreter_identity(root),
+              "interpreter": interpreter_identity(root), "plumbing": lockfile.plumbing_digest(root),
               "mode": "isolated" if isolated else "shuffle" if shuffle else "all", "seed": seed, "runs": runs,
               "cases": [{"name": c.name, "classname": c.classname, "outcome": c.outcome, "text": c.text} for c in cases]}
     if against_red is not None:

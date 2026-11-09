@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import agentcost, approvals, enforcement, scan, state, store, trace, tripwire
+from . import agentcost, approvals, enforcement, lockfile, runner, scan, state, store, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -67,6 +67,32 @@ def open_violation_count(root: Path) -> int | None:
         return len(tripwire.open_violations(root))
     except (StoreError, OSError, KeyError, TypeError, ValueError):
         return None
+
+
+def plumbing_status(root: Path) -> dict | None:
+    """The shared plumbing lock, and the bound features that have not rerun their scenarios since it last changed."""
+    data = lockfile.read_plumbing(root)
+    if "files" not in data:
+        return None
+    digest = lockfile.plumbing_digest(root)
+    rerun = []
+    for fid, (_, lock_data) in lockfile.feature_locks(root).items():
+        bound_against = lock_data["scopes"].get("bind", {}).get(lockfile.PLUMBING)
+        if bound_against is None or bound_against == digest:
+            continue
+        raw = runner.latest_bytes(root, fid)
+        if raw is None or json.loads(raw).get("plumbing") != digest:
+            rerun.append(fid)
+    return {"files": len(data["files"]), "locked_at": data.get("locked_at"), "unlocked": data.get("unlocked"),
+            "rerun": sorted(rerun)}
+
+
+def plumbing_line(info: dict) -> str:
+    if info["unlocked"]:
+        return (f"plumbing: unlocked at {info['unlocked']['at']} ({info['unlocked']['reason']}); "
+                "lock it again with `bdd lock --plumbing --reason \"...\"`")
+    line = f"plumbing: locked, {info['files']} file(s), since {info['locked_at']}"
+    return line + (f"; rerun once since it changed: {', '.join(info['rerun'])}" if info["rerun"] else "")
 
 
 def table(rows: list[dict]) -> str:
@@ -130,10 +156,13 @@ def run_brief() -> int:
 def do_status(root: Path, as_json: bool) -> int:
     rows = [feature_row(root, d) for d in feature_dirs(root)]
     violations = open_violation_count(root)
+    plumbing = plumbing_status(root)
     if as_json:
-        print(json.dumps({"features": rows, "open_violations": violations}, indent=2, ensure_ascii=False))
+        print(json.dumps({"features": rows, "open_violations": violations, "plumbing": plumbing}, indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
+    if plumbing is not None:
+        print(plumbing_line(plumbing))
     for row in rows:
         if row["missing_cost"]:
             print(f"cost: {row['feature']} passed {', '.join(row['missing_cost'])} with no cost recorded; "
