@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-09
+
+A patch release made by the update automation: the language versions the workflows and the adapters' CI templates pin were brought up to date.
+
 ### Changed
 - Pinned language versions moved to the newest supported release by the update automation: python 3.14 -> 3.15. The adapters' CI templates and guides name the new versions; their own CI proved them (D62).
 

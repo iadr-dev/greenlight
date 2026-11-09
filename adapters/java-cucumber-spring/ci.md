@@ -13,7 +13,7 @@ install):
 - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
   with:
     python-version: "3.15"
-- run: git clone --depth 1 --branch v1.2.1 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
+- run: git clone --depth 1 --branch v1.2.2 https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
 - name: Check every finished feature
   run: |
     bdd="$RUNNER_TEMP/greenlight/tools/bdd/bdd"
