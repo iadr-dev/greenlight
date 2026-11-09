@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest import mock
 
-from bddlib import approvalcommand, approvecmd, approvehook, enforcement
+from bddlib import approvalcommand, approvecmd, approvehook, enforcement, integrityack, tripwire
 
 from tests.helpers import ProjectCase, typed
 
@@ -93,6 +93,47 @@ class HookTest(ProjectCase):
         self.fire(self.payload("/greenlight:approve FEAT-007 rules", session_id="../../x"))
         self.assertFalse(os.path.exists(self.root / "x"))
         self.assertIsNone(self.data()["approvals"][0]["session"])
+
+
+class IntegrityAcknowledgementTest(ProjectCase):
+    payload, fire = HookTest.payload, HookTest.fire
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.root / "user-claude")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        tripwire.accept(self.root, None)
+        self.config('enforcement = "soft"\n')
+        tripwire.check(self.root, None, "Bash")
+
+    def test_parse(self):
+        self.assertEqual(approvalcommand.parse_integrity("/greenlight:approve integrity tools reinstalled"), "tools reinstalled")
+        self.assertEqual(approvalcommand.parse_integrity("/greenlight:approve integrity"), "")
+        for prompt in ("please /greenlight:approve integrity x", "/greenlight:approve integrityx", "/greenlight:approve FEAT-007 rules", None):
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(approvalcommand.parse_integrity(prompt))
+
+    def test_the_typed_command_is_recorded_pending_and_says_so(self):
+        code, out = self.fire(self.payload("/greenlight:approve integrity I changed it"))
+        self.assertEqual(code, 0)
+        self.assertIn("greenlight approval: integrity acknowledgement recorded (I changed it) for exactly: #1 ", out)
+        self.assertRegex(out, r"config\.toml \(enforcement file\) was changed \(sha256 [0-9a-f]{12}\)")
+        self.transcript(typed("p-1", "integrity I changed it", timestamp="2999-01-01T00:00:00Z"), name="sess-1.jsonl")
+        integrityack.settle(self.root)
+        self.assertEqual(tripwire.open_violations(self.root), [])
+
+    def test_without_a_reason_nothing_is_recorded(self):
+        code, out = self.fire(self.payload("/greenlight:approve integrity"))
+        self.assertIn("NOT recorded. Say why", out)
+        self.assertEqual(len(tripwire.open_violations(self.root)), 1)
+
+    def test_no_command_can_acknowledge(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(approvecmd.run(["integrity", "tools reinstalled"]), 2)
+        self.assertIn("only the person can acknowledge", err.getvalue())
+        self.assertEqual(len(tripwire.open_violations(self.root)), 1)
 
 
 if __name__ == "__main__":

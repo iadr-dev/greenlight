@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import agentcost, approvals, enforcement, lockfile, models, runner, scan, state, store, trace, tripwire
+from . import agentcost, approvals, enforcement, integrityack, lockfile, models, runner, scan, state, store, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -62,8 +62,10 @@ def feature_row(root: Path, feature_dir: Path) -> dict:
 
 
 def open_violation_count(root: Path) -> int | None:
-    """Open integrity violations, or None when the integrity data cannot be read."""
+    """Open integrity violations, or None when the integrity data cannot be read. The person's acknowledgements that the
+    transcript confirms by now are applied first."""
     try:
+        integrityack.safe_settle(root)
         return len(tripwire.open_violations(root))
     except (StoreError, OSError, KeyError, TypeError, ValueError):
         return None
@@ -198,9 +200,7 @@ def do_status(root: Path, as_json: bool) -> int:
     if violations is None:
         print("integrity: the data under .bdd/.integrity cannot be read")
     elif violations:
-        print(f"integrity: {violations} violation(s) open")
-        for v in tripwire.open_violations(root):
-            print(f"  #{v['id']} {tripwire.describe(v)}")
+        print(f"integrity: {violations} violation(s) open" + tripwire.show_open(root))
     return 0
 
 

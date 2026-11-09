@@ -11,7 +11,10 @@ where Claude Code stores a slash command in its expanded form:
     <command-args>FEAT-007 rules</command-args>
 
 Both must say the same thing, so an approval cannot borrow the prompt id of something else the person
-typed. Only a whole prompt in exactly this form counts.
+typed. Only a whole prompt in exactly this form counts. The same command acknowledges the open integrity
+violations:
+
+    /greenlight:approve integrity tools reinstalled
 """
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ import re
 
 COMMAND = "/greenlight:approve"
 PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(?:[ \t]+(reject)(?:[ \t]+(\S.*))?)?")
+INTEGRITY_PROMPT = re.compile(r"/greenlight:approve[ \t]+integrity(?:[ \t]+(\S.*))?")
 CODEX_COMMAND = "$greenlight-approve"
 CODEX_PROMPT = re.compile(r"\$greenlight-approve[ 	]+(FEAT-\d+)[ 	]+(rules|examples)(?:[ 	]+(reject)(?:[ 	]+(\S.*))?)?")
 _EXPANDED = re.compile(r"<command-message>[^<\n]*</command-message>\s*<command-name>/greenlight:approve</command-name>"
@@ -34,6 +38,12 @@ def parse(prompt: object, pattern: re.Pattern[str] = PROMPT) -> tuple[str, str, 
         return None
     feature, gate, reject, reason = match.groups()
     return feature, gate, (reason or "no reason given") if reject else None
+
+
+def parse_integrity(prompt: object) -> str | None:
+    """The reason when the whole prompt is an integrity acknowledgement ("" when it gives none), else None."""
+    match = INTEGRITY_PROMPT.fullmatch(prompt.strip()) if isinstance(prompt, str) else None
+    return None if match is None else (match.group(1) or "").strip()
 
 
 def parse_codex(prompt: object) -> tuple[str, str, str | None] | None:

@@ -83,6 +83,10 @@ def run(argv: list[str]) -> int:
     if argv == ["--from-hook"]:                     # UserPromptSubmit: cheap for every other prompt
         from . import approvehook
         return approvehook.main()
+    if argv[:1] == ["integrity"]:
+        print("bdd approve: only the person can acknowledge an integrity violation, by typing "
+              "/greenlight:approve integrity <reason>; no command records it", file=sys.stderr)
+        return 2
     args = build_parser().parse_args(argv)
     try:
         root = project_root()
