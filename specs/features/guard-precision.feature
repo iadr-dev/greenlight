@@ -192,7 +192,7 @@ Feature: The guard refuses what weakens greenlight and nothing else
       And the input file hook payload contains:
         """
         {"tool_name": "Edit", "tool_input": {"file_path": ".claude/settings.json",
-          "old_string": "{", "new_string": "{\"disableAllHooks\": true, "}}
+          "old_string": "\"permissions\"", "new_string": "\"disableAllHooks\": true, \"permissions\""}}
         """
       When alice runs the guard on the hook payload
       Then the command fails with refused

@@ -491,14 +491,13 @@ class EnforcementFilesTest(GuardCase):
                 self.assertIsNone(self.call("Write", file_path=str(self.root / rel)))
         self.assertIsNone(self.call("Bash", command="echo x > .cargo/config.toml"))
 
-    def test_claude_code_settings_cannot_be_edited_whatever_the_change_says(self):
+    def test_a_settings_change_that_can_switch_greenlight_off_is_refused_and_a_harmless_one_is_not(self):
         settings = str(self.root / ".claude" / "settings.json")
         local = str(self.root / ".claude" / "settings.local.json")
         home_settings = str(self.root / "home" / ".claude" / "settings.json")
         contents = [
             json.dumps({"disableAllHooks": True}),
             json.dumps({"enabledPlugins": {"greenlight@greenlight": False}}),
-            json.dumps({"permissions": {"allow": ["Bash(ls)"]}}),            # no hook words at all
             '{"hoo\\u006bs": {}, "disableAllHoo\\u006bs": true}',          # JSON escapes: the same keys, spelled differently
             "",
         ]
@@ -506,7 +505,9 @@ class EnforcementFilesTest(GuardCase):
             for content in contents:
                 with self.subTest(path=Path(path).name, content=content[:30]):
                     self.assertIn("is a Claude Code settings file", self.call("Write", file_path=path, content=content))
-        edit = self.call("Edit", file_path=settings, old_string="a", new_string="b")
+            with self.subTest(path=Path(path).name, content="allow"):
+                self.assertIsNone(self.call("Write", file_path=path, content=json.dumps({"permissions": {"allow": ["Bash(ls)"]}})))
+        edit = self.call("Edit", file_path=settings, old_string="a", new_string="b")       # nothing there to replace
         self.assertIn("is a Claude Code settings file", edit)
         multi = self.call("MultiEdit", file_path=local, edits=[{"old_string": "a", "new_string": "b"}])
         self.assertIn("is a Claude Code settings file", multi)
@@ -754,6 +755,262 @@ class PlumbingTest(unittest.TestCase):
     def test_an_unreadable_plumbing_lock_fails_closed(self):
         lockfile.plumbing_path(self.root).write_text("{not json", encoding="utf-8")
         self.assertIsNotNone(self.write_as("implementer", "src/app.py"))
+
+
+class FieldlyCorpusTest(unittest.TestCase):
+    """The tool calls the guard refused in the Fieldly run, each labelled: the legitimate work goes through, and what a
+    protection is for is still refused (``fieldly_corpus``)."""
+
+    def test_the_fieldly_refusals_replay_as_labelled(self):
+        from tests import fieldly_corpus
+        results = fieldly_corpus.replay(fieldly_corpus.rows())
+        wrong = [(row["id"], row["label"], (reason or "")[:120]) for row, reason in results
+                 if (reason is None) != (row["label"] == "allow")]
+        allowed = [row for row, _ in results if row["label"] == "allow"]
+        refused = [row for row, _ in results if row["label"] == "refuse"]
+        form = [row for row in refused if row["intent"] == "legitimate"]
+        print(f"\nallowed {len(allowed) - len([w for w in wrong if w[1] == 'allow'])} of {len(allowed)} legitimate, "
+              f"refused {len(refused) - len([w for w in wrong if w[1] == 'refuse'])} of {len(refused)} that a protection "
+              f"stops ({len(form)} of them legitimate work in a form the guard refuses, each told the form that passes)")
+        self.assertEqual(wrong, [])
+        self.assertEqual(len(results), 161)
+
+    def test_every_row_names_its_class_label_and_reason(self):
+        from tests import fieldly_corpus
+        for row in fieldly_corpus.rows():
+            with self.subTest(id=row["id"]):
+                self.assertIn(row["class"], {"a", "b", "c", "d", "e", "f", "g", "h", "rule"})
+                self.assertIn((row["label"], row["intent"]), {("allow", "legitimate"), ("refuse", "legitimate"),
+                                                              ("refuse", "protected")})
+                self.assertTrue(row["why"])
+                self.assertNotRegex(json.dumps(row), r"(?i)C:[\\/]+Users|/c/Users|Ray\.Shen")
+
+
+class PrecisionTest(GuardCase):
+    """What the guard now lets through, next to the protection each one sits beside."""
+
+    def setUp(self):
+        super().setUp()
+        self.plugin = self.root / "plugin"
+        self.write("plugin/tools/bdd/bdd", "#!/bin/sh\n")
+        self.write("plugin/tools/bdd/bddlib/guard.py", "# guard\n")
+        self.write("tests/drivers/barrier.ts", "export {};\n")
+        self.write("api/src/ports/.keep", "")
+        lockfile.unlock(self.feature_dir, "FEAT-001", "bind", "the driver joins the lock")
+        lockfile.lock(self.root, self.feature_dir, "FEAT-001", "bind", [self.step, self.root / "tests/drivers/barrier.ts"])
+        self.config_dir = self.root / "claude-home"
+        patch = mock.patch.dict(os.environ, {guard.PLUGIN_ROOT_ENV: str(self.plugin), "CLAUDE_CONFIG_DIR": str(self.config_dir)})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def bash(self, command: str, agent: str | None = "greenlight:implementer", cwd: Path | None = None) -> str | None:
+        return self.call("Bash", agent=agent, cwd=cwd, command=command)
+
+    def test_the_bdd_command_line_by_its_plugin_path_is_not_a_write_to_the_plugin(self):
+        bdd = (self.plugin / "tools" / "bdd" / "bdd").as_posix()
+        for command in [f'sh "{bdd}" trace FEAT-001 > /tmp/tr.txt',
+                        f'B="{bdd}"; "$B" assume FEAT-001 --text "Keep state.json" --alt "Move the identity"',
+                        f'B={bdd}; for f in FEAT-001; do sh "$B" run $f > /tmp/run.txt 2>&1; done',
+                        f'"{bdd}" lint features | tee /tmp/lint.txt']:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command, agent=None))
+
+    def test_a_write_into_the_plugin_is_refused_however_it_is_spelled(self):
+        bdd = (self.plugin / "tools" / "bdd" / "bdd").as_posix()
+        guard_file = (self.plugin / "tools" / "bdd" / "bddlib" / "guard.py").as_posix()
+        for command in [f'cp evil.sh "{bdd}"', f'B="{bdd}"; cp evil.sh "$B"', f"echo x > {guard_file}",
+                        f'sh "{bdd}" trace > {guard_file}', f"cd {self.plugin.as_posix()}/tools/bdd && cp evil bdd",
+                        f'"rm" -f "{bdd}"', f"python -c \"open('{guard_file}','w').write('')\"",
+                        "cp evil.sh plugin/tools/bdd/bdd", f"sed -i s/a/b/ {self.plugin.as_posix()}/hooks/hooks.json"]:
+            with self.subTest(command=command):
+                self.assertIn("what enforces greenlight", self.bash(command, agent=None) or "")
+
+    def test_a_quoted_argument_or_a_pattern_is_not_a_write(self):
+        for command in ['bdd assume FEAT-001 --text "Move it" --alt "rm the rest"', "grep -o '<h1[^>]*>' a.html",
+                        "cd .bdd/.runs && grep -o '<failure[^>]*>' report.xml",
+                        "python -c \"import json; print([v for v in json.load(open('.bdd/.integrity/violations.json')) if v>'a'])\"",
+                        "grep -iE \"pnpm|npx|node_modules\" brief.md", "git mv src/a.py src/b.py; grep -v node_modules x",
+                        "python -c \"import re; s=open('src/app.py').read(); open('src/app.py','w').write(re.sub(r' .*?', '', s))\"",
+                        "sed -i 's/.*x//' src/app.py", "export PATH=$PATH; ls"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_a_regular_expression_does_not_hide_a_real_codex_write(self):
+        for command in ["echo x > ~/.codex/hooks.json", "python -c \"open('.codex/config.toml','w')\"", "cp x .cod?x/hooks.json",
+                        "rm -rf .c*"]:
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.bash(command))
+
+    def test_a_file_named_like_a_locked_one_elsewhere_can_be_written(self):
+        for command, cwd in [("cat > api/src/ports/barrier.ts <<'EOF'\nexport {};\nEOF", None),
+                             ("cd api/src && cat > ports/barrier.ts <<'EOF'\nimport './../../tests/drivers/barrier.ts';\nEOF", None),
+                             ("python - <<'EOF'\np='ports/barrier.ts'\nopen(p,'w').write(\"export * from './ports/barrier.ts'\")\nEOF",
+                              self.root / "api" / "src"),
+                             ("cp tests/drivers/barrier.ts /tmp/copy.ts", None), ("T=$(mktemp -d); cp -r tests $T/", None)]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command, cwd=cwd), command)
+
+    def test_a_locked_file_is_refused_by_where_the_write_lands(self):
+        for command in ["cat > tests/drivers/barrier.ts <<'EOF'\nx\nEOF", "cd tests/drivers && cat > barrier.ts <<'EOF'\nx\nEOF",
+                        "cd tests && sed -i s/a/b/ drivers/barrier.ts", "python -c \"open('tests/drivers/barrier.ts','w')\"",
+                        "python -c \"import os; open(os.path.join('tests','drivers','barrier.ts'),'w')\"",
+                        "find tests -name barrier.ts -delete", "git -C tests checkout drivers/barrier.ts",
+                        "cp evil.ts tests/drivers/barrier.ts", "cp barrier.ts tests/drivers/", "ln -s /tmp/x tests/drivers/barrier.ts",
+                        "T=tests/drivers; rm $T/barrier.ts", 'rm "$UNKNOWN/barrier.ts"', "echo tests/drivers/barrier.ts | xargs rm",
+                        "cat > fix.py <<'EOF'\nimport sys\nopen(sys.argv[1],'w')\nEOF\npython fix.py tests/drivers/barrier.ts",
+                        "cd nowhere; rm tests/drivers/barrier.ts", "cd api && cd .. && rm tests/drivers/barrier.ts",
+                        "for f in barrier.ts; do rm tests/drivers/$f; done", "sh -c 'rm tests/drivers/barrier.ts'"]:
+            with self.subTest(command=command):
+                self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
+
+    def test_scratch_files_outside_every_project_are_anyones(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            script = str(Path(scratch) / "apply.py")
+            for agent in ("greenlight:qa-designer", "greenlight:code-reviewer", "Explore"):
+                with self.subTest(agent=agent):
+                    self.assertIsNone(self.call("Write", agent=agent, file_path=script))
+
+    def test_a_temp_folder_that_is_a_project_is_not_scratch(self):
+        with tempfile.TemporaryDirectory() as other:
+            (Path(other) / ".bdd").mkdir()
+            reason = self.call("Write", agent="greenlight:qa-designer", file_path=str(Path(other) / "src" / "app.py"))
+            self.assertIn("may not write production files", reason or "")
+        self.assertIn("may not write production files",
+                      self.call("Write", agent="greenlight:qa-designer", file_path=str(self.root / "scratch.py")) or "")
+
+    def test_a_memory_note_is_not_a_transcript(self):
+        memory = self.config_dir / "projects" / "p" / "memory"
+        self.assertIsNone(self.call("Write", file_path=str(memory / "notes.md"), content="note"))
+        self.assertIsNone(self.call("Edit", file_path=str(memory / "MEMORY.md"), old_string="", new_string="x"))
+        for path in (self.config_dir / "projects" / "p" / "s.jsonl", memory / ".." / "s.jsonl", self.config_dir / "projects" / "s.jsonl"):
+            with self.subTest(path=path):
+                self.assertIn("session transcript", self.call("Write", file_path=str(path)) or "")
+        self.assertIn("what enforces greenlight", self.bash(f"echo x >> {memory.as_posix()}/notes.md", agent=None) or "")
+
+    def test_a_memory_link_to_a_transcript_is_a_transcript(self):
+        memory = self.config_dir / "projects" / "p" / "memory"
+        memory.mkdir(parents=True)
+        transcript = self.write("claude-home/projects/p/s.jsonl", "{}\n")
+        try:
+            (memory / "link.md").symlink_to(transcript)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are not available here")
+        self.assertIn("session transcript", self.call("Write", file_path=str(memory / "link.md")) or "")
+
+    def test_running_an_installed_tool_is_not_installing_one(self):
+        for command in ["npx --no-install tsc -p tsconfig.json --noEmit", "npx --no tsc --noEmit",
+                        "node_modules/.bin/tsc --noEmit > /tmp/tc.txt", "./node_modules/.bin/vitest run 2>&1 | tail",
+                        "pnpm audit --dir api", "for p in fastify pnpm; do npm view $p version; done",
+                        "node --import ./tests/node_modules/tsx/dist/loader.mjs tests/node_modules/x/cli.js > /tmp/out.txt"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_a_real_install_is_still_refused(self):
+        for command in ["pnpm add left-pad", "npm install", "npx tsc", "npx --no-install npm install x", "pip install x",
+                        "rm -rf node_modules", "cp x node_modules/foo/index.js", "sh -c 'npm install x'", "npx -p x y",
+                        "pnpm audit --fix", "bash <<'EOF'\nnpm i x\nEOF"]:
+            with self.subTest(command=command):
+                self.assertIn("may not install packages", self.bash(command) or "", command)
+
+    def test_managed_files_are_still_refused_from_the_shell(self):
+        for command in ["echo {} > .bdd/features/FEAT-001-a/state.json", "cd .bdd/.integrity && rm violations.json",
+                        "python -c \"open('state.json','w')\"", "echo x > .bdd/config.toml", "cd .bdd; echo x > standards.md",
+                        "rm -rf .bdd/.i*"]:
+            with self.subTest(command=command):
+                self.assertIn("managed by the bdd command line", self.bash(command) or "", command)
+
+    def test_reading_a_managed_file_and_writing_elsewhere_is_fine(self):
+        for command in ["cat .bdd/features/FEAT-001-a/state.json > /tmp/state.json", "cp .bdd/config.toml /tmp/config.toml",
+                        "jq . .bdd/features/FEAT-001-a/lock.json > out/lock.json"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_an_agent_neither_corrects_costs_nor_releases_the_plumbing(self):
+        for command, said in [("bdd cost FEAT-001 --amend implement --tokens 1 --seconds 1 --reason x", "cost corrections"),
+                              ('sh "/p/tools/bdd/bdd" unlock --plumbing --reason x', "the person or the orchestrator releases it"),
+                              ("bdd lock --plumbing --reason x", "the person or the orchestrator releases it")]:
+            for agent in ("greenlight:implementer", "Explore"):
+                with self.subTest(command=command, agent=agent):
+                    self.assertIn(said, self.bash(command, agent=agent) or "")
+            with self.subTest(command=command, agent=None):
+                self.assertIsNone(self.bash(command, agent=None))
+
+    def test_the_deny_rules_line_is_the_persons_whoever_runs_it_from_a_tool(self):
+        for agent in (None, "greenlight:implementer"):
+            with self.subTest(agent=agent):
+                self.assertIn("the person's act", self.bash('sh "/p/tools/bdd/bdd" doctor --add-deny-rules', agent=agent) or "")
+        self.assertIsNone(self.bash('sh "/p/tools/bdd/bdd" doctor', agent=None))
+
+    def test_unreadable_commands_are_judged_as_before(self):
+        self.assertIn("is locked by FEAT-001", self.bash("echo 'oops > tests/drivers/barrier.ts") or "")
+        self.assertIn("is locked by FEAT-001", self.bash("cat > x <<EOF\nnever ends tests/drivers/barrier.ts") or "")
+
+
+class SettingsEffectTest(GuardCase):
+    """A file tool's change to Claude Code's settings is judged by the file it leaves; a shell's is refused."""
+
+    def setUp(self):
+        super().setUp()
+        self.settings = self.write(".claude/settings.json", json.dumps(
+            {"permissions": {"allow": ["Bash(ls)"], "deny": list(guard.claudepaths.RECOMMENDED_DENY)}, "env": {"A": "1"}}, indent=2))
+
+    def change(self, data: dict) -> str | None:
+        return self.call("Write", file_path=str(self.settings), content=json.dumps(data))
+
+    def current(self) -> dict:
+        return json.loads(self.settings.read_text(encoding="utf-8"))
+
+    def test_harmless_changes_pass(self):
+        base = self.current()
+        for data in [{**base, "env": {"A": "2", "TEST_DATABASE_URL": "x"}}, {**base, "model": "sonnet"},
+                     {**base, "permissions": {**base["permissions"], "allow": ["Bash(ls)", "Bash(npm test)"]}},
+                     {**base, "permissions": {**base["permissions"], "deny": [*base["permissions"]["deny"], "Bash(rm:*)"]}},
+                     {**base, "permissions": {**base["permissions"], "ask": ["Bash(git push:*)"]}}]:
+            with self.subTest(data=str(data)[:80]):
+                self.assertIsNone(self.change(data))
+        self.assertIsNone(self.call("Edit", file_path=str(self.settings), old_string='"A": "1"', new_string='"A": "3"'))
+
+    def test_a_change_that_can_switch_greenlight_off_is_refused_and_named(self):
+        base = self.current()
+        deny = [r for r in base["permissions"]["deny"] if "state.json" not in r]
+        for data, named in [({**base, "hooks": {}}, "hooks"), ({**base, "disableAllHooks": True}, "disableAllHooks"),
+                            ({**base, "enabledPlugins": {"greenlight@greenlight": False}}, "enabledPlugins"),
+                            ({**base, "permissions": {**base["permissions"], "defaultMode": "bypassPermissions"}},
+                             "permissions.defaultMode"),
+                            ({**base, "permissions": {**base["permissions"], "deny": deny}}, "permissions.deny"),
+                            ({**base, "statusLine": {"type": "command", "command": "x"}}, "statusLine"),
+                            ({**base, "apiKeyHelper": "x"}, "apiKeyHelper"), ({**base, "env": {"A": "1", "PATH": "/x"}}, "env.PATH"),
+                            ({**base, "env": {"A": "1", "CLAUDE_CONFIG_DIR": "/x"}}, "env.CLAUDE_CONFIG_DIR"),
+                            ({**base, "env": {"A": "1", "path": "/x"}}, "env.path"), ({**base, "unknownFutureKey": 1}, "unknownFutureKey")]:
+            with self.subTest(named=named):
+                self.assertIn(named, self.change(data) or "")
+        self.assertIn("bdd doctor --add-deny-rules", self.change({**base, "permissions": {**base["permissions"], "deny": deny}}))
+
+    def test_spellings_that_are_the_same_key_are_the_same_key(self):
+        for content in ['{"hoo\\u006bs": {}}', '{"env": {}, "env": {"PATH": "/x"}}', '{"hooks": {}, "hooks": null}', "{", "[]",
+                        "// comment\n{}"]:
+            with self.subTest(content=content):
+                self.assertIn("is a Claude Code settings file", self.call("Write", file_path=str(self.settings), content=content))
+
+    def test_the_new_file_is_computed_as_the_tool_writes_it(self):
+        path = str(self.settings)
+        self.assertIn("hooks", self.call("MultiEdit", file_path=path, edits=[
+            {"old_string": '"A": "1"', "new_string": '"A": "2"'}, {"old_string": '"env":', "new_string": '"hooks": {}, "env":'}]) or "")
+        self.assertIn("cannot be judged", self.call("Edit", file_path=path, old_string="Bash", new_string="Bash") or "")   # twice
+        self.assertIsNone(self.call("Edit", file_path=path, old_string="Bash(ls)", new_string="Bash(cat)", replace_all=True))
+        self.assertIn("cannot be judged", self.call("NotebookEdit", notebook_path=path, new_source="{}") or "")
+        self.settings.write_text("{not json", encoding="utf-8")
+        self.assertIn("not valid JSON now", self.call("Write", file_path=path, content="{}") or "")
+
+    def test_claude_codes_own_settings_file_is_a_settings_file_whatever_its_folder_is_called(self):
+        home = self.root / "claude-config"
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home)}):
+            self.assertIn("disableAllHooks", self.call("Write", file_path=str(home / "settings.json"),
+                                                       content='{"disableAllHooks": true}') or "")
+            self.assertIsNone(self.call("Write", file_path=str(home / "settings.json"), content='{"model": "opus"}'))
+
+    def test_shell_writes_to_the_settings_stay_refused(self):
+        self.assertIn("what enforces greenlight", self.call("Bash", command="echo '{\"env\": {}}' > .claude/settings.json") or "")
 
 
 class PerformanceTest(unittest.TestCase):

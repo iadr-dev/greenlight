@@ -10,11 +10,15 @@ What it blocks inside a greenlight project:
   test plumbing);
 * edits to the CLI-managed data files (``state.json``, ``lock.json``, ``.bdd/config.toml``,
   enforcement markers);
-* edits to what enforces all of this: the plugin's own files, and Claude Code settings or hooks
-  (``.claude/settings*.json``) when the change involves hooks or plugins;
-* writes outside what the calling agent is allowed to touch (see ``AGENT_WRITES``);
+* edits to what enforces all of this: the plugin's own files, Claude Code's hook scripts and session transcripts, and
+  the parts of Claude Code's settings that could switch greenlight off (``claudepaths.settings_view``); a file tool's
+  settings change is judged by the file it would leave, a shell's is refused;
+* writes outside what the calling agent is allowed to touch (see ``AGENT_WRITES``); a script in the system temp folder,
+  outside every project, is scratch and anyone's;
 * shell commands that write to any of the above (best effort: a shell can always do things
-  a hook cannot foresee, which is why ``bdd lock --check`` remains the guarantee);
+  a hook cannot foresee, which is why ``bdd lock --check`` remains the guarantee). Only what a command writes to counts
+  (``shellwrites``): its redirections, the arguments of the commands that change files and the code of an interpreter
+  that writes, not a quoted argument, a regular expression or the bdd command line's own path;
 * scheduling, sending or running anything that contains an approval command, in a tool call or in
   a shell command (for example a nested ``claude -p``), because such a prompt would reach the
   approval hook looking exactly like something the user typed.
@@ -35,12 +39,13 @@ import json
 import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import claudepaths, codexsession
 from . import config as cfg
-from . import enforcement, lockfile, reviewlog, roles, sharedvocab, store
+from . import enforcement, lockfile, reviewlog, roles, sharedvocab, shellwrites, store
 from .config import ConfigError
 from .errors import StoreError
 
@@ -74,7 +79,7 @@ ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and p
 INSTALLED_PACKAGES = "node_modules"             # installed packages of a node project, wherever the folder is
 MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects have config.toml files too
 PERSON_FILES = (MANAGED_CONFIG, "standards.md")   # in .bdd/, edited by the person only
-SETTINGS_NAMES = {"settings.json", "settings.local.json"}
+SETTINGS_NAMES = claudepaths.SETTINGS_NAMES
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 PROJECT_OWNER = "the project"           # who holds the plumbing lock
 
@@ -133,6 +138,18 @@ def path_key(path: Path | str) -> str:
     resolved = os.path.realpath(path)
     key = resolved.replace("\\", "/")
     return key.casefold() if CASE_INSENSITIVE_FS else key
+
+
+SCRATCH = "scratch"
+
+
+def is_scratch(key: str, root: Path) -> bool:
+    """Is the file (by its ``path_key``) under the system temp folder and outside every greenlight project, this one
+    included? Then it is a scratch file: no project's tests run on it and no project's rules cover it."""
+    temp = path_key(tempfile.gettempdir())
+    if not key.startswith(temp + "/") or key.startswith(path_key(root) + "/"):
+        return False
+    return cfg.find_root(Path(key).parent) is None
 
 
 @dataclass(frozen=True)
@@ -199,6 +216,8 @@ class Project:
 
     def category(self, path: Path) -> str:
         key = path_key(path)
+        if is_scratch(key, self.root):
+            return SCRATCH
         if key.startswith(path_key(self.root / cfg.BDD_DIR) + "/"):
             return "data"
         if any(key.startswith(path_key(self.root / name) + "/") for name in ENVIRONMENT_DIRS) or INSTALLED_PACKAGES in key.split("/"):
@@ -237,27 +256,93 @@ def enforcement_message(path: Path, what: str) -> str:
             "can change it themselves outside the agent.")
 
 
-def check_enforcement_files(path: Path) -> str | None:
-    """Protect what enforces greenlight: the plugin's own files and Claude Code's settings.
+def check_enforcement_files(path: Path, change: dict | None = None) -> str | None:
+    """Protect what enforces greenlight: the plugin's own files, Claude Code's hook scripts, its session transcripts
+    (not the memory notes next to them) and the parts of its settings that could switch greenlight off.
 
-    Settings files are refused whatever the change says. Inspecting the new content for hook
-    settings can be dodged (JSON escapes such as ``"hoo\\u006bs"`` mean the same key), and the
-    person can still edit them, or use Claude Code's own /permissions and /hooks screens."""
+    A settings change made with a file tool (``change`` is the tool call) is judged by the file it would leave
+    (``settings_refusal``); one made any other way, such as a shell, is refused."""
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
     key = path_key(path)
     if plugin_root and key.startswith(path_key(plugin_root) + "/"):
         return enforcement_message(path, "is part of the greenlight plugin")
     if "/.claude/hooks/" in key:
         return enforcement_message(path, "is a Claude Code hook")
-    if any(key.startswith(path_key(root) + "/") for root in claudepaths.transcript_roots()):
+    if any(key.startswith(path_key(root) + "/") and not is_memory(key, path_key(root)) for root in claudepaths.transcript_roots()):
         return enforcement_message(path, "is a Claude Code session transcript, which approvals are verified against")
-    # Both spellings: the path as written (a `.claude` that is itself a symlink to somewhere else
-    # resolves to a path without `.claude` in it) and the resolved path (a symlink *to* `.claude`).
-    for parts in (path.parts, Path(os.path.realpath(path)).parts):
-        names = [part.casefold() for part in parts]
-        if ".claude" in names[:-1] and names[-1] in SETTINGS_NAMES:
+    if claudepaths.is_settings_file(path):
+        if change is None:
             return enforcement_message(path, "is a Claude Code settings file")
+        return settings_refusal(path, change)
     return None
+
+
+def is_memory(key: str, root: str) -> bool:
+    """Is the file (by its ``path_key``) a memory note, ``<projects>/<project>/memory/...``? Claude Code keeps its
+    auto-memory there; transcripts are looked up only one folder down (``approvals.find_transcript``)."""
+    parts = key[len(root) + 1:].split("/")
+    return len(parts) >= 3 and parts[1] == "memory"
+
+
+def settings_refusal(path: Path, change: dict) -> str | None:
+    """Refuse a file tool's change to a Claude Code settings file when the file it would leave differs from the file now
+    in a part that could switch greenlight off (``claudepaths.settings_view``), or when either cannot be read as
+    JSON. The new file is computed the way the tool writes it: Write's content, Edit's exact replacement."""
+    what = "is a Claude Code settings file"
+    target = Path(os.path.realpath(path))
+    try:
+        old = target.read_text(encoding="utf-8") if target.exists() else None
+    except (OSError, UnicodeDecodeError) as exc:
+        return enforcement_message(path, f"{what} that cannot be read ({exc})")
+    try:
+        new = changed_text(old, change)
+    except ValueError as exc:
+        return enforcement_message(path, f"{what}, and this change cannot be judged: {exc}")
+    try:
+        before = claudepaths.parse_settings(old) if old is not None else {}
+    except ValueError as exc:
+        return enforcement_message(path, f"{what} that is not valid JSON now ({exc}), so a change cannot be judged")
+    try:
+        after = claudepaths.parse_settings(new)
+    except ValueError as exc:
+        return enforcement_message(path, f"{what}, and the change would leave it invalid JSON ({exc})")
+    differs = claudepaths.view_differences(before, after)
+    if not differs:
+        return None
+    deny = (" greenlight's own deny rules are added by the person with `bdd doctor --add-deny-rules`."
+            if "permissions.deny" in differs else "")
+    return enforcement_message(path, f"{what}, and this change touches {', '.join(differs)}, which can switch off "
+                               "greenlight's checks") + deny
+
+
+def changed_text(old: str | None, change: dict) -> str:
+    """The file a Write, Edit or MultiEdit would leave. Edit replaces ``old_string`` exactly as Claude Code does: it must
+    be found, and only once unless ``replace_all``; otherwise the tool fails, and the change is not judged."""
+    tool, tool_input = change.get("tool_name"), change.get("tool_input") or {}
+    if tool == "Write":
+        if not isinstance(tool_input.get("content"), str):
+            raise ValueError("Write has no content")
+        return tool_input["content"]
+    edits = [tool_input] if tool == "Edit" else tool_input.get("edits") if tool == "MultiEdit" else None
+    if not isinstance(edits, list):
+        raise ValueError(f"{tool} is not a Write, Edit or MultiEdit")
+    text = old
+    for edit in edits:
+        if not isinstance(edit, dict) or not isinstance(edit.get("old_string"), str) or not isinstance(edit.get("new_string"), str):
+            raise ValueError("an edit has no old_string or new_string")
+        before, after = edit["old_string"], edit["new_string"]
+        if text is None:
+            if before:
+                raise ValueError("the file does not exist")
+            text = after
+            continue
+        count = text.count(before) if before else 0
+        if count == 0 or (count > 1 and not edit.get("replace_all")):
+            raise ValueError("old_string is not found exactly once")
+        text = text.replace(before, after) if edit.get("replace_all") else text.replace(before, after, 1)
+    if text is None:
+        raise ValueError("no edit")
+    return text
 
 
 _INSTALL = re.compile(r"\b(?:pip3?|pipx|poetry|pipenv|conda)\s+(?:install|add|sync|i)\b|-m\s+pip3?\s+install\b"
@@ -273,7 +358,9 @@ SCRIPT_SUFFIXES = {"cmd", "exe", "ps1", "js", "cjs", "mjs"}
 SAFE_SUBCOMMANDS = {"run", "run-script", "test", "t", "ls", "list", "why", "view", "info", "outdated"}
 VERSION_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
 QUIET_FLAGS = {"--silent", "-s", "--no-color", "--no-progress"}
-AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=")      # all that `audit` may be given
+AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=", "--dir=", "--prefix=")   # all `audit` may be given
+AUDIT_FOLDER_FLAGS = {"--dir", "--prefix", "-c"}                          # and these, each with the folder after it
+NO_INSTALL_FLAGS = {"--no-install", "--no"}
 CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
                   "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
                   "exec", "dlx", "x", "init", "create", "publish", "global"}
@@ -288,8 +375,9 @@ INSTALL_MESSAGE = ("greenlight: an agent may not install packages or change the 
                    "requirement instead.")
 NODE_MESSAGE = ("greenlight: an agent may not install packages or run package-manager commands other than scripts and "
                 "read-only ones (run, test, ls, list, why, view, info, outdated, audit, --version), and may not use npx, pnpx, "
-                "bunx or corepack. Put the subcommand first and the flags after it (`npm run typecheck --prefix tests`). "
-                "Installing is the person's decision; report the missing requirement instead.")
+                "bunx or corepack except `npx --no-install <tool>` for a tool that is installed already. Put the subcommand "
+                "first and the flags after it (`npm run typecheck --prefix tests`). Installing is the person's decision; "
+                "report the missing requirement instead.")
 
 
 _PIN_COMMAND = re.compile(r"\bvocabulary\s+pin\b|--shared-vocabulary\b", re.IGNORECASE)
@@ -300,6 +388,18 @@ _HELPERS_INSTALL = re.compile(r"\bbdd\b[^;&|\n]*\bhelpers\b[^;&|\n]*\binstall\b"
 HELPERS_MESSAGE = ("greenlight: installing the helper plugins changes the person's Claude Code settings (which the tripwire "
                    "watches), so it is the person's act and no tool call may do it. Show them `bdd helpers`, which prints the "
                    "line to type: in Claude Code they type `! ` followed by the command.")
+_DENY_RULES = re.compile(r"--add-deny-rules\b", re.IGNORECASE)
+DENY_RULES_MESSAGE = ("greenlight: adding the deny rules changes the person's Claude Code settings, so it is the person's act "
+                      "and no tool call may do it. Show them `bdd doctor`, which prints the line to type: in Claude Code "
+                      "they type `! ` followed by the command.")
+_BDD = r"(?:\bbdd\b|\bmain\.py\b)"
+_COST_AMEND = re.compile(_BDD + r"[^;&|\n]*\bcost\b[^;&|\n]*--amend\b", re.IGNORECASE)
+COST_AMEND_MESSAGE = ("greenlight: cost corrections are made by the person or the orchestrator, from what Claude Code "
+                      "counted, not by the agent whose cost it is. Say what is wrong in your report instead.")
+_PLUMBING = re.compile(_BDD + r"[^;&|\n]*\b(?:un)?lock\b[^;&|\n]*--plumbing\b", re.IGNORECASE)
+PLUMBING_MESSAGE = ("greenlight: the shared test plumbing is every feature's, so the person or the orchestrator releases it "
+                    "(`bdd unlock --plumbing`) and locks it again (`bdd lock --plumbing`), not an agent. Say in your report "
+                    "which file has to change and why.")
 _PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
 PR_FILE = "PULL_REQUEST.md"
 
@@ -337,8 +437,22 @@ def node_arguments_are_safe(args: list[str]) -> bool:
     if words[0] in VERSION_FLAGS:
         return True
     if words[0] == "audit":
-        return all(word.startswith(AUDIT_FLAGS) for word in words[1:])
+        rest = words[1:]
+        while rest:
+            if rest[0] in AUDIT_FOLDER_FLAGS and len(rest) > 1 and not rest[1].startswith("-"):
+                rest = rest[2:]                              # `--dir <folder>`: which project to report on
+            elif rest[0].startswith(AUDIT_FLAGS):
+                rest = rest[1:]
+            else:
+                return False
+        return True
     return words[0] in SAFE_SUBCOMMANDS
+
+
+def runs_installed(word: str, args: list[str]) -> bool:
+    """``npx --no-install <tool>`` (or ``--no``) runs a tool that is already installed and never fetches one; the tool
+    it runs is then judged as a command of its own."""
+    return _last_segment(word).split(".", 1)[0] == "npx" and bool(args) and args[0] in NO_INSTALL_FLAGS
 
 
 def _command_refuses(simple: str, interpreting: bool) -> bool:
@@ -353,6 +467,8 @@ def _command_refuses(simple: str, interpreting: bool) -> bool:
             continue
         run_by_interpreter = any(_last_segment(earlier) in INTERPRETERS for earlier in words[:at])   # flags may sit in between
         program = node_program(word, run_by_interpreter)
+        if program == "fetch" and runs_installed(word, words[at + 1:]):
+            continue
         if program == "fetch" or (program and not node_arguments_are_safe(words[at + 1:])):
             return True
     return False
@@ -433,7 +549,9 @@ def record_review(project: Project, payload: dict, target: Path, agent: str | No
     return None
 
 
-def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
+def check_file_write(project: Project, path: Path, agent: str | None, change: dict | None = None) -> str | None:
+    """Why ``agent`` may not write ``path``, or None. ``change`` is the file tool's call, when it is one: a settings
+    change is judged by its effect only then."""
     lock = project.locked.get(path_key(path))
     if lock:
         return locked_message(project, path, lock)
@@ -447,7 +565,7 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
     if agent is not None and is_tasks_file(project, path):
         return (f"greenlight: {project.relative(path)} is written by the orchestrator; an agent may not change the tasks, "
                 "because the reviews are routed from them.")
-    protected = check_enforcement_files(path)
+    protected = check_enforcement_files(path, change)
     if not protected and any(_CODEX_STATE.search(spelling.replace("\\", "/"))       # as written, and with links followed
                              for spelling in (path.as_posix(), os.path.realpath(path))):
         protected = CODEX_STATE_MESSAGE
@@ -455,7 +573,7 @@ def check_file_write(project: Project, path: Path, agent: str | None) -> str | N
         return protected
     allowed = (FOREIGN_WRITES if agent == FOREIGN_AGENT else AGENT_WRITES.get(agent)) if agent else None
     category = project.category(path)
-    if allowed is not None and category not in allowed:
+    if allowed is not None and category not in allowed and category != SCRATCH:
         what = ", ".join(sorted(allowed)) or "nothing (it is read-only)"
         who = ("an agent that is not one of greenlight's" if agent == FOREIGN_AGENT else f"the {agent} agent")
         return (f"greenlight: {who} may not write {category} files ({project.relative(path)}); "
@@ -520,9 +638,11 @@ def names_codex_state(text: str) -> bool:
     return bool(_CODEX_STATE.search(text)) or segment_glob_reaches(text, CODEX_FOLDER_NAME) or glob_reaches_rollout(text)
 
 
-def names_segment(text: str, name: str) -> bool:
-    """Does ``name`` appear in the command as a whole path segment, spelled out or reached by a glob?"""
-    return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None or segment_glob_reaches(text, name)
+def names_segment(text: str, name: str, globs: str | None = None) -> bool:
+    """Does ``name`` appear in the command as a whole path segment, spelled out in ``text`` or reached by a glob in
+    ``globs`` (the same text unless only some of it is expanded by the shell)?"""
+    return (re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None
+            or segment_glob_reaches(text if globs is None else globs, name))
 
 
 STANDARDS_NAME = "standards.md"
@@ -548,51 +668,188 @@ def cwd_inside(project: Project, cwd: Path | None, folder: str = "") -> bool:
     return key == base or key.startswith(base + "/")
 
 
-def mentioned_protected(project: Project, command: str, cwd: Path | None = None) -> tuple[Path, Locked | None] | None:
-    """A locked or managed file that the command names, if there is one.
+@dataclass(frozen=True)
+class Spelled:
+    """What a shell command writes to, in every way a shell could read it: ``texts`` for names, ``patterns`` for globs
+    (where only the shell's own globs are left), and the targets they came from (None: the whole command counts)."""
+    texts: list[str]
+    patterns: list[str]
+    found: shellwrites.Writes | None
 
-    Matches on the file name anywhere in the command text, whatever the quoting or slash style
-    (``features/a.feature``, ``'a.feature'`` inside a Python one-liner, a backslash path), so a
-    command that ``cd``s first or builds the path in a script is still recognised. A false alarm
-    only produces a clear refusal; a miss would defeat the point."""
-    by_name = {lock.path.name.casefold(): lock for lock in project.locked.values()}
-    names = sorted(set(by_name) | MANAGED_NAMES | {STANDARDS_NAME}, key=len, reverse=True)
-    pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w-])")
-    for reading in shell_readings(command):
-        text = reading.casefold()
-        for match in pattern.finditer(text):
-            name = match.group(0)
-            if name == STANDARDS_NAME and clearly_elsewhere(text[:match.start()]):
-                continue
-            lock = by_name.get(name)
-            return (lock.path if lock else project.root / cfg.BDD_DIR / name), lock
+
+def spellings(target: shellwrites.Target) -> list[str]:
+    """The ways a written target can be read: as the shell reads it and with backslashes as folder separators, and for a
+    shell word its brace expansions (a script's braces are code)."""
+    if target.code:
+        return list(dict.fromkeys((target.text, target.raw)))
+    return list(dict.fromkeys(expand_braces(target.text) + expand_braces(target.raw)))
+
+
+def spelled(command: str, found: shellwrites.Writes) -> Spelled:
+    if found.whole:
+        readings = shell_readings(_NOISE.sub(" ", command))
+        return Spelled(readings, readings, None)
+    texts, patterns = [], []
+    for folder in found.context:
+        texts += expand_braces(folder)
+        patterns += expand_braces(folder)
+    for target in found.targets:
+        texts += spellings(target)
+        patterns += [] if target.code else expand_braces(target.pattern)
+    return Spelled([" ".join(texts)], [" ".join(patterns)], found)
+
+
+_PATH_TOKENS = re.compile(r"[\s;&|(){}`<>=,\"']+")
+
+
+def target_places(token: str, target: shellwrites.Target, bare: bool = False) -> list[Path] | None:
+    """Where a written path lands: one place for each folder the command may be in at that point. None when that cannot
+    be told: a pattern (a find name, a glob), a variable, a folder option, an unknown folder; a path in a script whose
+    folder does not exist (it could be the end of a longer one); and, unless ``bare``, a name with no folder of its own
+    (``name``, ``./name``, ``../name``), which could be anywhere: the shell may be in another folder than the call says,
+    and a script may join it to any. ``bare`` is for a check that only refuses more when it places more."""
+    word = token.replace("\\", "/")
+    if target.names_only or _GLOB.search(word) or "$" in word or not word.strip("/."):
+        return None
+    segments = [part for part in word.split("/")[:-1] if part not in ("", ".", "..")]
+    if not segments and not word.startswith("/") and not re.match(r"[A-Za-z]:/", word) and not (bare and not target.code):
+        return None
+    if word.startswith("~/"):
+        word = Path.home().as_posix() + word[1:]
+    path = Path(shellwrites.windows_path(word))
+    if path.is_absolute() or path.anchor:
+        places = [path]
+    elif any(folder is None for folder in target.dirs):
+        return None
+    else:
+        places = [folder / path for folder in target.dirs]
+    if target.code and not all(place.parent.is_dir() for place in places):
+        return None
+    return places
+
+
+def written_tokens(spelled_: Spelled):
+    """Each path-like token of each written target, with its target."""
+    for target in spelled_.found.targets if spelled_.found else ():
+        for spelling in spellings(target):
+            for token in _PATH_TOKENS.split(spelling):
+                if token:
+                    yield token, target
+
+
+def locked_target(project: Project, spelled_: Spelled) -> tuple[Path, Locked] | None:
+    """A locked file the command writes. A written path is compared by where it lands; a name that cannot be placed
+    (a bare name in a script, a pattern, a variable) counts as the locked file of that name. When the targets are not
+    known, any locked file's name anywhere in the command counts."""
+    by_name: dict[str, Locked] = {}
+    for lock in project.locked.values():
+        by_name.setdefault(lock.path.name.casefold(), lock)
+    if not by_name:
+        return None
+    if spelled_.found is None:
+        pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in sorted(by_name, key=len, reverse=True)) + r")(?![\w-])")
+        for text in spelled_.texts:
+            match = pattern.search(text.casefold())
+            if match:
+                return by_name[match.group(0)].path, by_name[match.group(0)]
+        return None
+    for token, target in written_tokens(spelled_):
+        named = by_name.get(token.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold())
+        if named is None:
+            continue
+        places = target_places(token, target)
+        if places is None:
+            return named.path, named
+        for place in places:
+            lock = project.locked.get(path_key(place))
+            if lock:
+                return lock.path, lock
+    return None
+
+
+def managed_target(project: Project, spelled_: Spelled) -> Path | None:
+    """A managed data file the command writes (``state.json``, ``lock.json``, ``standards.md`` ...). Like a locked file:
+    by where a written path lands, or by name when that cannot be told."""
+    names = MANAGED_NAMES | {STANDARDS_NAME}
+    if spelled_.found is None:
+        pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")(?![\w-])")
+        for reading in spelled_.texts:
+            text = reading.casefold()
+            for match in pattern.finditer(text):
+                if not (match.group(0) == STANDARDS_NAME and clearly_elsewhere(text[:match.start()])):
+                    return project.root / cfg.BDD_DIR / match.group(0)
+        return None
+    for token, target in written_tokens(spelled_):
+        word = token.replace("\\", "/").rstrip("/").casefold()
+        name = word.rsplit("/", 1)[-1]
+        if name not in names:
+            continue
+        places = target_places(token, target)
+        if places is None:
+            if not (name == STANDARDS_NAME and clearly_elsewhere(word[:-len(name)])):
+                return project.root / cfg.BDD_DIR / name
+        elif any(cfg.BDD_DIR in path_key(place).casefold().split("/") for place in places):
+            return project.root / cfg.BDD_DIR / name                  # this project's or another's (a workspace member)
+    return None
+
+
+def mentioned_protected(project: Project, spelled_: Spelled, cwd: Path | None = None) -> tuple[Path, Locked | None] | None:
+    """A locked or managed file that the command writes, if there is one.
+
+    A locked file is found by where the written path lands (``locked_target``). A managed file is found by its name
+    anywhere in what is written, whatever the quoting or slash style (``'state.json'`` inside a Python one-liner, a
+    backslash path), with the folders the command moves into, so a command that ``cd``s first or builds the path in a
+    script is still recognised. A false alarm only produces a clear refusal; a miss would defeat the point."""
+    locked = locked_target(project, spelled_)
+    if locked:
+        return locked
+    managed = managed_target(project, spelled_)
+    if managed:
+        return managed, None
+    for reading, globs in zip(spelled_.texts, spelled_.patterns):
+        text, globs = reading.casefold(), globs.casefold()
         # `cd .bdd && echo x > config.toml`, a call that already runs inside .bdd, and `.b*/config.toml` all name a person
         # file by its bare name or through a glob
-        in_bdd = names_segment(text, cfg.BDD_DIR) or cwd_inside(project, cwd)
+        in_bdd = names_segment(text, cfg.BDD_DIR, globs) or cwd_inside(project, cwd)
         for person_file in PERSON_FILES:
             if f".bdd/{person_file}" in text or (in_bdd and re.search(rf"(?<![\w.-]){re.escape(person_file)}(?![\w-])", text)):
                 return project.root / cfg.BDD_DIR / person_file, None
         for managed in MANAGED_DIRS:
-            if names_segment(text, managed) or cwd_inside(project, cwd, managed):
+            if names_segment(text, managed, globs) or cwd_inside(project, cwd, managed):
                 return project.root / cfg.BDD_DIR / managed, None
         for shared in project.shared.values():                      # an included vocabulary, by its bare name or a glob
-            if names_segment(text, shared.name.casefold()):
+            if names_segment(text, shared.name.casefold(), globs):
                 return shared, None
     return None
 
 
-def command_touches_enforcement(command: str) -> bool:
-    """Does a (write-like) shell command target Claude Code's hook settings or the plugin itself?"""
+def touches_enforcement(spelled_: Spelled) -> str | None:
+    """Does what the command writes include Claude Code's settings, hooks or transcripts, or the plugin itself? By name
+    and glob in what is written, and by where each written path lands. The reason, or None."""
     plugin_root = os.environ.get(PLUGIN_ROOT_ENV)
     named_places = [path_key(root) for root in claudepaths.transcript_roots()]
     if plugin_root:
         named_places.append(path_key(plugin_root))
-    for text in shell_readings(command):
-        if _SETTINGS_TEXT.search(text) or _CLAUDE_DIR_ARG.search(text) or glob_reaches_claude(text):
-            return True
-        if any(place in text.casefold() for place in named_places):
-            return True
-    return False
+    shell_message = enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
+                                        "(Claude Code hook settings or the plugin itself)")
+    for text in spelled_.texts:
+        if _SETTINGS_TEXT.search(text) or _CLAUDE_DIR_ARG.search(text):
+            return shell_message
+        if any(place in text.casefold().replace("\\", "/") for place in named_places):
+            return shell_message
+    if any(glob_reaches_claude(pattern) for pattern in spelled_.patterns):
+        return shell_message
+    for token, target in written_tokens(spelled_):
+        for place in (target_places(token, target, bare=True) or []) if not target.code else []:
+            if check_enforcement_files(place):
+                return shell_message
+    return None
+
+
+def command_touches_enforcement(command: str, cwd: Path | None = None) -> bool:
+    """Does a shell command write to Claude Code's hook settings, its transcripts or the plugin itself?"""
+    found = shellwrites.writes(command, cwd)
+    return found is not None and touches_enforcement(spelled(command, found)) is not None
 
 
 def decode_ansi_c(text: str) -> str:
@@ -690,19 +947,26 @@ NESTED_SESSION_MESSAGE = (
 
 
 def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
-    """What only an agent is refused: writing the pull-request description outside its write matrix, installing packages."""
+    """What only an agent is refused: writing the pull-request description outside its write matrix, correcting a cost,
+    releasing the shared test plumbing, installing packages. Installs are looked for in the command without its data
+    (``shellwrites.program_view``): a package tool named in a quoted pattern or a here-document runs nothing."""
     if _PR_WRITE.search(scrubbed):                                 # `bdd pr --write` writes a file in the project root
         written = check_file_write(project, project.root / PR_FILE, agent)
         if written:
             return written
-    if _INSTALL.search(scrubbed):
+    if _COST_AMEND.search(scrubbed):
+        return COST_AMEND_MESSAGE
+    if _PLUMBING.search(scrubbed):
+        return PLUMBING_MESSAGE
+    programs = shellwrites.program_view(scrubbed)
+    if _INSTALL.search(programs):
         return INSTALL_MESSAGE
-    return NODE_MESSAGE if refuses_node_packages(scrubbed) else None
+    return NODE_MESSAGE if refuses_node_packages(programs) else None
 
 
 def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
-    """Best effort: block a command that runs an approval or a nested Claude session, or that both
-    names a protected file and looks like it writes."""
+    """Best effort: block a command that runs an approval or a nested Claude session, or that writes to a protected
+    file (``shellwrites`` reads where it writes)."""
     injection = check_injection({"command": command})
     if injection:
         return injection
@@ -720,28 +984,39 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
         return PIN_MESSAGE
     if _HELPERS_INSTALL.search(scrubbed):
         return HELPERS_MESSAGE
+    if _DENY_RULES.search(scrubbed):
+        return DENY_RULES_MESSAGE
     refused = check_agent_command(project, scrubbed, agent) if agent else None
     if refused:
         return refused
-    if not _SHELL_WRITES.search(scrubbed):
+    found = shellwrites.writes(command, cwd)
+    if found is None:
         return None
-    if any(names_codex_state(_NOISE.sub(" ", reading)) for reading in readings):
+    return check_writes(project, spelled(command, found), agent, cwd)
+
+
+def check_writes(project: Project, written: Spelled, agent: str | None, cwd: Path | None) -> str | None:
+    """The protections a shell command's writes are held to, checked against what it writes to."""
+    if (any(_CODEX_STATE.search(text.replace("\\", "/")) for text in written.texts)
+            or any(segment_glob_reaches(p.replace("\\", "/"), CODEX_FOLDER_NAME) or glob_reaches_rollout(p.replace("\\", "/"))
+                   for p in written.patterns)):
         return CODEX_STATE_MESSAGE
-    if agent and _ENVIRONMENT_PATH.search(scrubbed):
+    if agent and any(_ENVIRONMENT_PATH.search(text) for text in written.texts):
         return INSTALL_MESSAGE
-    if command_touches_enforcement(scrubbed):
-        return enforcement_message(Path("the targeted file"), "is part of what enforces greenlight "
-                                   "(Claude Code hook settings or the plugin itself)")
-    for reading in shell_readings(scrubbed):
-        text = reading.casefold()
+    enforced = touches_enforcement(written)
+    if enforced:
+        return enforced
+    for reading, globs in zip(written.texts, written.patterns):
+        text, globs = reading.casefold(), globs.casefold()
         names_report = re.search(r"(?<![\w.-])t-\d+\.\d+-(?:" + "|".join(roles.REVIEWERS) + r")\.md(?![\w-])", text)
-        if names_report or (names_segment(text, cfg.BDD_DIR) and names_segment(text, roles.REVIEWS_DIR)) or in_reviews(project, cwd):
+        if (names_report or (names_segment(text, cfg.BDD_DIR, globs) and names_segment(text, roles.REVIEWS_DIR, globs))
+                or in_reviews(project, cwd)):
             return ("greenlight: review reports are written only by each reviewer with its file tool, never from the "
                     "shell. (This shell command looks like it writes into a reviews/ folder.)")
         if agent and re.search(r"(?<![\w.-])tasks\.md(?![\w-])", text):
             return ("greenlight: tasks.md is written by the orchestrator; an agent may not change the tasks. "
                     "(This shell command looks like it writes to it.)")
-    hit = mentioned_protected(project, scrubbed, cwd)
+    hit = mentioned_protected(project, written, cwd)
     if hit is None:
         return None
     target, lock = hit
@@ -768,7 +1043,7 @@ def evaluate_in_project(root: Path, payload: dict, cwd: Path) -> str | None:
         raw = Path(tool_input[WRITE_TOOLS[tool]])
         target = raw if raw.is_absolute() else cwd / raw
         owner, agent = project.owner_of(target), agent_name(payload)
-        return check_file_write(owner, target, agent) or record_review(owner, payload, target, agent)
+        return check_file_write(owner, target, agent, payload) or record_review(owner, payload, target, agent)
     if tool == "Bash" and tool_input.get("command"):
         return check_bash(project, tool_input["command"], agent_name(payload), cwd)
     return None
