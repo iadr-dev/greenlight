@@ -62,9 +62,12 @@ Verdict: PASS | FINDINGS
 
 Only the reviewer itself writes its report: the guard refuses the writers, the orchestrator, other agents and any shell
 command, and where the hooks run the gate accepts a report only with exactly the content its reviewer last wrote, in the implement phase (the reviewer writes the whole report with the Write tool; if a report is changed afterwards, or an old one put back, the reviewer runs again). `FINDINGS` when *Must fix* is not empty. The must-fix items go back to the task's writer; the reviewer then runs again
-and writes its report fresh. Where the hooks run, the gate also refuses a report older than the code: when a production
-file of the task (the files its `Areas:` line in `tasks.md` names, or every changed file when it has none) changed after
-the reviewer finished, the reviewer runs again. A finding needs evidence from the files: a reviewer that could not check something says so
+and writes its report fresh. Where the hooks run, the gate also refuses a report older than the code: when the reviewer finishes, its report is
+sealed with the hashes of the task's production files (the changed files that the paths of the task's `Areas:` line in
+`tasks.md` name; a feature of one task with no matching paths uses every changed file; a feature of several tasks needs
+`Areas:` paths that name real files, or its reviews are not judged). A file that changed after the seal makes the report
+stale and the reviewer runs again, unless another report of the same kind of reviewer was sealed with that file as it is
+now. A report with no seal is stale too. A finding needs evidence from the files: a reviewer that could not check something says so
 under *Not checked* instead of passing it or inventing a finding. Reviewers never edit code or tests, and use a helper
 plugin only to report, never in a mode that fixes.
 

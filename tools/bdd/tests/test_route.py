@@ -5,7 +5,7 @@ import io
 import json
 import os
 
-from bddlib import gates, reviewlog, route
+from bddlib import agentcost, gates, reviewlog, route
 from bddlib.errors import UsageError
 
 from tests.helpers import ProjectCase
@@ -142,11 +142,13 @@ class GateTest(RouteCase):
         """What happens in a real run: the guard sees the reviewer's Write first, then the file is written."""
         from bddlib import guard
         path = route.review_path(self.feature_dir, "T-007.1", reviewer)
-        payload = {"tool_name": "Write", "agent_type": f"greenlight:{reviewer}", "cwd": str(self.root),
-                   "tool_input": {"file_path": str(path), "content": content}}
+        payload = {"tool_name": "Write", "agent_type": f"greenlight:{reviewer}", "agent_id": f"a-{reviewer}",
+                   "cwd": str(self.root), "tool_input": {"file_path": str(path), "content": content}}
         self.assertIsNone(guard.evaluate(payload))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="\n")
+        agentcost.note_agent({"agent_type": f"greenlight:{reviewer}", "agent_id": f"a-{reviewer}", "cwd": str(self.root),
+                              "session_id": "s", "duration_ms": 1})
 
     def test_where_the_hooks_run_a_report_counts_only_as_its_reviewer_wrote_it(self):
         self.write_reviews()                                     # written past the guard: no reviewer wrote them
