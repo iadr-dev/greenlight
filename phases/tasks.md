@@ -10,8 +10,9 @@ Agent: the **orchestrator** (the main session). Cards: `story-splitting`.
 ## Steps
 
 1. Group the examples into vertical slices, in build order. Each task starts with its id (`T-<feature>.<n>`)
-   and names the examples it turns green (`Covers: EX-...`), the areas it will touch, its dependencies and its
-   size (S, M or L).
+   and names the examples it turns green (`Covers: EX-...`), the areas it will touch (folders or files, comma-separated:
+   the implement gate judges the task's reviews against the production files there), its dependencies and its size
+   (S, M or L).
 2. Put the thinnest end-to-end path first, so the plumbing is proved before the exceptions.
 3. Every example is owned by exactly one task. Check with `bdd trace FEAT-n`: an unowned example is gap `T006`,
    an unknown example in a task `T005`.

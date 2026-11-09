@@ -4,8 +4,9 @@ The guard adds a line when it lets a reviewer write its own report (``.bdd/.runs
 write). Where the hooks run, the implement gate accepts a report only when its content now hashes to the *latest* line
 recorded for that file and that reviewer, written while the feature was in the implement phase by an agent that Claude
 Code then reported as finished, so a report written or changed any other way (another agent, the orchestrator, a shell
-command, a later edit), or an old report put back, does not count, whatever command made the change. Kept light: the
-guard imports it on every call.
+command, a later edit), or an old report put back, does not count, whatever command made the change. When the reviewer
+finishes, its line also gets the hashes of the production files of its task (``seal``), so a report older than the code
+it covers is found too. Kept light: the guard imports it on every call.
 """
 from __future__ import annotations
 
@@ -37,21 +38,47 @@ def record(root: Path, path: Path, reviewer: str, content: str, agent_id: object
         handle.write(json.dumps(line) + "\n")
 
 
-def recorded(root: Path) -> dict[tuple[str, str], dict]:
-    """{(report path, reviewer): the latest line that reviewer recorded for it}. An earlier line is replaced, so a report
-    put back to what it once was does not match."""
+def seal(root: Path, agent_id: object) -> bool:
+    """When a reviewer finishes, add to the line of the report it wrote the hashes of the production files of that task as
+    it leaves them (``reviewfresh``), so the gate finds a report older than the code it covers. The SubagentStop hook does
+    it, not the guard when the report is written, because reading the code takes git calls the guard has no time for.
+    Best effort: a report that cannot be sealed is judged as before, and a failure here never reaches the agent."""
+    try:
+        from . import reviewfresh
+        mine = [line for line in _lines(root) if str(line.get("agent_id")) == str(agent_id)]
+        if not mine or mine[-1].get("code") is not None:
+            return False
+        report = root / str(mine[-1]["path"])
+        task = reviewfresh.task_of(report)
+        code = None if task is None else reviewfresh.scope(root, report.parent.parent, task.upper())
+        if code is None:
+            return False
+        with (root / LOG).open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps({**mine[-1], "code": code}) + "\n")
+        return True
+    except Exception:
+        return False
+
+
+def _lines(root: Path) -> list[dict]:
     log = root / LOG
-    found: dict[tuple[str, str], dict] = {}
     if not log.is_file():
-        return found
+        return []
+    found = []
     for raw in log.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             line = json.loads(raw)
         except ValueError:
             continue
         if isinstance(line, dict) and {"path", "reviewer", "sha256"} <= set(line):
-            found[(str(line["path"]), str(line["reviewer"]))] = line
+            found.append(line)
     return found
+
+
+def recorded(root: Path) -> dict[tuple[str, str], dict]:
+    """{(report path, reviewer): the latest line that reviewer recorded for it}. An earlier line is replaced, so a report
+    put back to what it once was does not match."""
+    return {(str(line["path"]), str(line["reviewer"])): line for line in _lines(root)}
 
 
 def written_by(root: Path, path: Path, reviewer: str, log: dict[tuple[str, str], dict] | None = None,

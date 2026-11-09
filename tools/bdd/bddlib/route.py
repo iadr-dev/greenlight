@@ -26,7 +26,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import config as cfg
-from . import featurefiles, gherkin, reviewlog, roles, store, trace, vocabulary
+from . import featurefiles, gherkin, reviewfresh, reviewlog, roles, store, trace, vocabulary
 from .errors import StoreError, UsageError
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -143,13 +143,36 @@ def _finished_agents(root: Path) -> dict[str, str]:
     return {str(e["agent_id"]): str(e.get("agent", "")) for e in agentcost.read_entries(root)}
 
 
+def _code_now(root: Path, feature_dir: Path, task: str) -> dict[str, str] | None:
+    try:
+        return reviewfresh.scope(root, feature_dir, task)
+    except (UsageError, StoreError, cfg.ConfigError, OSError, ValueError):
+        return None                                        # what the code is now cannot be told here: the report stands
+
+
+def _older_than_code(rel: str, reviewer: str, line: dict | None, now: dict[str, str] | None) -> str | None:
+    """The problem when the production files of the report's task changed after its reviewer finished (the hashes
+    ``reviewlog.seal`` kept); None when they did not, or when either side cannot be told."""
+    then = line.get("code") if line else None
+    if not isinstance(then, dict) or now is None:
+        return None
+    changed = reviewfresh.changed_since(then, now)
+    if not changed:
+        return None
+    shown = ", ".join(changed[:3]) + (f" and {len(changed) - 3} more" if len(changed) > 3 else "")
+    return (f"{rel} is older than the code it covers: {shown} changed after the {reviewer} finished; "
+            f"run the {reviewer} again on it")
+
+
 def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False) -> list[str]:
     """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
-    hooks run, its content is not what that reviewer wrote to that file (``reviewlog``)."""
+    hooks run, its content is not what that reviewer wrote to that file (``reviewlog``), or the production files of its
+    task changed after the reviewer finished (``reviewfresh``)."""
     problems: list[str] = []
     log = reviewlog.recorded(root) if hooks_seen else {}
     finished = _finished_agents(root) if hooks_seen else {}
     for route in routes(root, feature_dir, feature_id):
+        now = _code_now(root, feature_dir, route.task) if hooks_seen else None
         for reviewer in route.reviewers:
             path = review_path(feature_dir, route.task, reviewer)
             rel = path.relative_to(feature_dir).as_posix()
@@ -160,6 +183,10 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
             elif hooks_seen and not reviewlog.written_by(root, path, reviewer, log, finished):
                 problems.append(f"{rel} is not what the {reviewer} agent wrote: a report counts only as its own reviewer "
                                 "wrote it, unchanged; run the reviewer again")
+            elif hooks_seen:
+                older = _older_than_code(rel, reviewer, log.get((reviewlog.key(root, path), reviewer)), now)
+                if older:
+                    problems.append(older)
     return problems
 
 

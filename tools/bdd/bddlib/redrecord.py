@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import lockfile, store
@@ -99,9 +100,11 @@ def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: st
     """Production files added or modified since ``commit``, committed or not, that still exist."""
     if not _COMMIT.fullmatch(commit):
         raise UsageError("the recorded red commit is not a commit id")
-    tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--").split("\0")
-    untracked = [n for n in git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
-                 if not is_generated_bytecode(n)]
+    with ThreadPoolExecutor(max_workers=2) as pool:             # side by side: a hook has no time for two git processes in turn
+        diff = pool.submit(git, root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--")
+        others = pool.submit(git, root, "ls-files", "-z", "--others", "--exclude-standard")
+        tracked = diff.result().split("\0")
+        untracked = [n for n in others.result().split("\0") if not is_generated_bytecode(n)]
     excluded = excluded_prefixes(root, test_dirs)
     return sorted(n for n in {*tracked, *untracked} if n and is_production(n, excluded) and (root / n).is_file())
 
