@@ -36,8 +36,10 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | Symptom | Cause and fix |
 |---|---|
 | `NOT recorded` after `/greenlight:approve` | The line says why; typically the feature is not at that gate yet, or the typed text does not match (`FEAT-n` and `rules` or `examples` exactly). Type it again yourself. |
+| `NOT recorded: send one approval per message` | The message held an approval command together with other text, or two commands, so nothing was recorded. Send the command alone, one gate per message. |
 | Approval shows `pending` | Claude Code has not yet written your prompt to the transcript. It settles after the next turn; check with `bdd approve FEAT-n --verify`. |
-| Approval `invalid` or `unverifiable` | Type the command again yourself; it only counts when it comes from your keyboard. |
+| Approval `invalid` or `unverifiable` | Type the command again yourself; it only counts when it comes from your keyboard. If you had approved the same, unchanged file before and that approval was verified, it still stands and `bdd approve FEAT-n --check` says so; once the file changed, only a new approval counts. |
+| You want to see what you are approving | `bdd approve FEAT-n rules --summary` (or `examples`) prints the rules or scenarios in plain words, and after a change only what changed since your last approval. It only reads. `bdd report FEAT-n` shows the same in its "Approval summary" section. |
 | `... changed since it was locked` | A locked file differs from its lock. Restore it (for example `git checkout`), or if the change is intended, use `/greenlight:change`. |
 | `... neither a feature's bind lock nor the plumbing lock covers it` | A step or driver file was created after every feature was bound. The next feature's bind lock takes it (`bdd lock FEAT-n --scope bind --bound`); otherwise remove it. |
 | `... is shared test plumbing and changed since the project locked it` | A shared support or driver file changed. Restore it, or, if the change is intended, make it a plumbing change: `bdd lock --plumbing --reason "..."`, then rerun every bound feature once. |

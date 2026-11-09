@@ -51,9 +51,11 @@ The person decides what changes. Never reopen the specification because an agent
    Show its output unchanged. Write the request in `change-requests.md` with its status.
 
 5. **Redo the phases from there**, for the affected items only, following the playbooks in `phases/` with the
-   same agents and the same gates. Give each agent the old and the new wording. At every human gate show the
-   difference between the old and the new rules or scenarios, and let the person approve again with
-   `/greenlight:approve FEAT-n rules` or `examples`. Approving the examples locks the new text.
+   same agents and the same gates. Give each agent the old and the new wording. At every human gate run
+   `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve FEAT-n rules --summary` (or `examples`) and show its output unchanged:
+   it lists what was added, removed or changed since the person's last approval, each by id with one line, and says how
+   many items are unchanged. Then let the person approve again with `/greenlight:approve FEAT-n rules` or `examples`,
+   alone in the message. Approving the examples locks the new text.
 
 6. **Run the checks again.** The red gate again after a rebind (`bdd run`, `bdd classify --expect red`, lock the
    bound files, `bdd gate FEAT-n bind --result pass --record-red`), and `bdd run` and the green check after the
