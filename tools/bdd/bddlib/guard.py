@@ -137,7 +137,17 @@ def path_key(path: Path | str) -> str:
     """A comparison key that is the same for every spelling of the same file."""
     resolved = os.path.realpath(path)
     key = resolved.replace("\\", "/")
+    if sys.platform == "win32":                    # Windows drops trailing dots and spaces: `a.feature.` is `a.feature`
+        key = "/".join(part.rstrip(". ") or part for part in key.split("/"))
     return key.casefold() if CASE_INSENSITIVE_FS else key
+
+
+def file_name(token: str) -> str:
+    """The file name a written path ends in, compared the way the file system compares it."""
+    name = token.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    if sys.platform == "win32":
+        name = name.rstrip(". ") or name
+    return name.casefold()
 
 
 SCRATCH = "scratch"
@@ -388,15 +398,14 @@ _HELPERS_INSTALL = re.compile(r"\bbdd\b[^;&|\n]*\bhelpers\b[^;&|\n]*\binstall\b"
 HELPERS_MESSAGE = ("greenlight: installing the helper plugins changes the person's Claude Code settings (which the tripwire "
                    "watches), so it is the person's act and no tool call may do it. Show them `bdd helpers`, which prints the "
                    "line to type: in Claude Code they type `! ` followed by the command.")
-_DENY_RULES = re.compile(r"--add-deny-rules\b", re.IGNORECASE)
+_DENY_RULES = re.compile(r"\bdoctor\b[^;&|\n]*--add-deny-rules\b", re.IGNORECASE)
 DENY_RULES_MESSAGE = ("greenlight: adding the deny rules changes the person's Claude Code settings, so it is the person's act "
                       "and no tool call may do it. Show them `bdd doctor`, which prints the line to type: in Claude Code "
                       "they type `! ` followed by the command.")
-_BDD = r"(?:\bbdd\b|\bmain\.py\b)"
-_COST_AMEND = re.compile(_BDD + r"[^;&|\n]*\bcost\b[^;&|\n]*--amend\b", re.IGNORECASE)
+_COST_AMEND = re.compile(r"\bcost\b[^;&|\n]*--amend\b", re.IGNORECASE)
 COST_AMEND_MESSAGE = ("greenlight: cost corrections are made by the person or the orchestrator, from what Claude Code "
                       "counted, not by the agent whose cost it is. Say what is wrong in your report instead.")
-_PLUMBING = re.compile(_BDD + r"[^;&|\n]*\b(?:un)?lock\b[^;&|\n]*--plumbing\b", re.IGNORECASE)
+_PLUMBING = re.compile(r"\b(?:un)?lock\b[^;&|\n]*--plumbing\b", re.IGNORECASE)
 PLUMBING_MESSAGE = ("greenlight: the shared test plumbing is every feature's, so the person or the orchestrator releases it "
                     "(`bdd unlock --plumbing`) and locks it again (`bdd lock --plumbing`), not an agent. Say in your report "
                     "which file has to change and why.")
@@ -451,8 +460,11 @@ def node_arguments_are_safe(args: list[str]) -> bool:
 
 def runs_installed(word: str, args: list[str]) -> bool:
     """``npx --no-install <tool>`` (or ``--no``) runs a tool that is already installed and never fetches one; the tool
-    it runs is then judged as a command of its own."""
-    return _last_segment(word).split(".", 1)[0] == "npx" and bool(args) and args[0] in NO_INSTALL_FLAGS
+    it runs is then judged as a command of its own. Any other flag before the tool (``--yes``, ``-p``) may fetch."""
+    if _last_segment(word).split(".", 1)[0] != "npx" or not args or args[0] not in NO_INSTALL_FLAGS:
+        return False
+    flags = [arg for arg in args[:next((at for at, arg in enumerate(args) if not arg.startswith("-")), len(args))]]
+    return all(flag in NO_INSTALL_FLAGS for flag in flags)
 
 
 def _command_refuses(simple: str, interpreting: bool) -> bool:
@@ -475,8 +487,10 @@ def _command_refuses(simple: str, interpreting: bool) -> bool:
 
 
 def refuses_node_packages(command: str) -> bool:
-    """Does any reading of the command run a package tool in a way an agent may not?"""
-    for reading in shell_readings(_CONTINUATION.sub("", command)):
+    """Does any reading of the command run a package tool in a way an agent may not? A long here-document a shell does
+    not run is read once as it is, quotes dropped, and not in every spelling (that would take seconds)."""
+    whole = _CONTINUATION.sub("", command)
+    for reading in [whole.replace('"', "").replace("'", ""), *shell_readings(shellwrites.without_data(whole))]:
         commands = _SIMPLE_COMMANDS.split(reading)
         interpreting = any(_last_segment(word) in INTERPRETERS for simple in commands for word in simple.split())
         if any(_command_refuses(simple, interpreting) for simple in commands):
@@ -694,7 +708,7 @@ def spelled(command: str, found: shellwrites.Writes) -> Spelled:
         texts += expand_braces(folder)
         patterns += expand_braces(folder)
     for target in found.targets:
-        texts += spellings(target)
+        texts += [*spellings(target), target.source]           # as written too: `$CODEX_HOME/x` names what it is
         patterns += [] if target.code else expand_braces(target.pattern)
     return Spelled([" ".join(texts)], [" ".join(patterns)], found)
 
@@ -702,10 +716,12 @@ def spelled(command: str, found: shellwrites.Writes) -> Spelled:
 _PATH_TOKENS = re.compile(r"[\s;&|(){}`<>=,\"']+")
 
 
-def target_places(token: str, target: shellwrites.Target, bare: bool = False) -> list[Path] | None:
+def target_places(token: str, target: shellwrites.Target, bare: bool = False,
+                  made: frozenset[Path] = frozenset()) -> list[Path] | None:
     """Where a written path lands: one place for each folder the command may be in at that point. None when that cannot
-    be told: a pattern (a find name, a glob), a variable, a folder option, an unknown folder; a path in a script whose
-    folder does not exist (it could be the end of a longer one); and, unless ``bare``, a name with no folder of its own
+    be told: a pattern (a find name, a glob), a variable, a folder option, an unknown folder; a path whose folder does
+    not exist and is not one the command makes (it could be the end of a longer path in a script, or go through a link
+    the command makes first); and, unless ``bare``, a name with no folder of its own
     (``name``, ``./name``, ``../name``), which could be anywhere: the shell may be in another folder than the call says,
     and a script may join it to any; except after a `cd` to an absolute folder. ``bare`` is for a check that only refuses
     more when it places more."""
@@ -725,7 +741,7 @@ def target_places(token: str, target: shellwrites.Target, bare: bool = False) ->
         return None
     else:
         places = [folder / path for folder in target.dirs]
-    if target.code and not all(place.parent.is_dir() for place in places):
+    if not bare and not all(place.parent.is_dir() or (not target.code and place.parent in made) for place in places):
         return None
     return places
 
@@ -745,7 +761,7 @@ def locked_target(project: Project, spelled_: Spelled) -> tuple[Path, Locked] | 
     known, any locked file's name anywhere in the command counts."""
     by_name: dict[str, Locked] = {}
     for lock in project.locked.values():
-        by_name.setdefault(lock.path.name.casefold(), lock)
+        by_name.setdefault(file_name(lock.path.name), lock)
     if not by_name:
         return None
     if spelled_.found is None:
@@ -756,10 +772,10 @@ def locked_target(project: Project, spelled_: Spelled) -> tuple[Path, Locked] | 
                 return by_name[match.group(0)].path, by_name[match.group(0)]
         return None
     for token, target in written_tokens(spelled_):
-        named = by_name.get(token.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold())
+        named = by_name.get(file_name(token))
         if named is None:
             continue
-        places = target_places(token, target)
+        places = target_places(token, target, made=frozenset(spelled_.found.made))
         if places is None:
             return named.path, named
         for place in places:
@@ -783,12 +799,12 @@ def managed_target(project: Project, spelled_: Spelled) -> Path | None:
         return None
     for token, target in written_tokens(spelled_):
         word = token.replace("\\", "/").rstrip("/").casefold()
-        name = word.rsplit("/", 1)[-1]
+        name = file_name(token)
         if name not in names:
             continue
-        places = target_places(token, target)
+        places = target_places(token, target, made=frozenset(spelled_.found.made))
         if places is None:
-            if not (name == STANDARDS_NAME and clearly_elsewhere(word[:-len(name)])):
+            if not (name == STANDARDS_NAME and clearly_elsewhere(word.rsplit("/", 1)[0] + "/" if "/" in word else "")):
                 return project.root / cfg.BDD_DIR / name
         elif any(cfg.BDD_DIR in path_key(place).casefold().split("/") for place in places):
             return project.root / cfg.BDD_DIR / name                  # this project's or another's (a workspace member)
@@ -965,8 +981,9 @@ NESTED_SESSION_MESSAGE = (
 
 def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
     """What only an agent is refused: writing the pull-request description outside its write matrix, correcting a cost,
-    releasing the shared test plumbing, installing packages. Installs are looked for in the command without its data
-    (``shellwrites.program_view``): a package tool named in a quoted pattern or a here-document runs nothing."""
+    releasing the shared test plumbing, installing packages. An install the whole command shows is refused unless the
+    command without its data shows none (``shellwrites.program_view``): a package tool named in a quoted pattern or a
+    here-document runs nothing. A command that runs a shell, an interpreter or a runner keeps all of it."""
     if _PR_WRITE.search(scrubbed):                                 # `bdd pr --write` writes a file in the project root
         written = check_file_write(project, project.root / PR_FILE, agent)
         if written:
@@ -976,9 +993,9 @@ def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | No
     if _PLUMBING.search(scrubbed):
         return PLUMBING_MESSAGE
     programs = shellwrites.program_view(scrubbed)
-    if _INSTALL.search(programs):
+    if _INSTALL.search(scrubbed) and _INSTALL.search(programs):
         return INSTALL_MESSAGE
-    return NODE_MESSAGE if refuses_node_packages(programs) else None
+    return NODE_MESSAGE if refuses_node_packages(scrubbed) and refuses_node_packages(programs) else None
 
 
 def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
@@ -987,7 +1004,7 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     injection = check_injection({"command": command})
     if injection:
         return injection
-    readings = [command, *shell_readings(command)]
+    readings = [command, *shell_readings(shellwrites.without_data(command))]
     if any(_CODEX_HOOK_ENTRY.search(reading) for reading in readings):
         return CODEX_HOOK_MESSAGE
     strict = project.config.accept_codex

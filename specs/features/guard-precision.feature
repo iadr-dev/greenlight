@@ -73,7 +73,7 @@ Feature: The guard refuses what weakens greenlight and nothing else
       And the input file hook payload contains:
         """
         {"tool_name": "Bash", "agent_type": "greenlight:implementer", "tool_input": {
-          "command": "cat > api/src/ports/barrier.ts <<'EOF'\nexport {};\nEOF"}}
+          "command": "mkdir -p api/src/ports && cat > api/src/ports/barrier.ts <<'EOF'\nexport {};\nEOF"}}
         """
       When alice runs the guard on the hook payload
       Then the command succeeds

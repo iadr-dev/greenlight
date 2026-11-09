@@ -37,6 +37,9 @@ FEATURES = {"FEAT-001": ("company-workspace-and-sign-in", "Company workspace and
 DRIVERS = ("api", "system", "work-orders-book", "world", "features/customers", "features/work-orders")
 LOCKED_DRIVERS = ("clock", "errors", "feature-driver", "work-order-barrier")
 SPEC_RELEASED = "spec released"
+TEMP_FOLDERS = ("cr0033-check/tests/features", "cr0033-check/tests/drivers", "cr0033-check/.bdd/features/FEAT-003-work-order-lifecycle",
+                "cr0033-script", "tmp.I0X5p3aOK8/repo/tests/features", "tmp.I0X5p3aOK8/scripts", "crv", "secrev", "qa-fmt",
+                "feat003-gen", "cr0021")
 FOLDERS = ("api/src/application/ports", "api/src/application/work-order", "api/src/application/customer",
            "api/src/application/sign-in", "api/src/domain/shared", "api/src/domain/work-order", "api/src/domain/customer",
            "api/src/testing", "api/src/interfaces/http/routes", "api/src/infrastructure/postgres", "api/node_modules",
@@ -82,7 +85,9 @@ def build(base: Path, locks: str = "") -> dict[str, Path]:
         _write(places["plugin"] / name)
     (places["config"] / "projects" / "project-key" / "memory").mkdir(parents=True)
     (places["home"] / "other-folder" / ".claude" / "hooks").mkdir(parents=True)
-    places["temp"] = Path(tempfile.gettempdir())
+    places["temp"] = base / "temp"                  # under the system temp folder and outside every project
+    for folder in TEMP_FOLDERS:                      # the scratch folders the run's earlier calls had made
+        (places["temp"] / folder).mkdir(parents=True, exist_ok=True)
     return places
 
 

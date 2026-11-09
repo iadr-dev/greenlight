@@ -29,6 +29,7 @@ STEERING_ENV = re.compile(
     r"HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|ALLUSERSPROFILE|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|"
     r"TMPDIR|LD_.*|DYLD_.*|PYTHON.*|PERL.*|RUBY.*|NODE_.*|GIT_.*|MSYS.*|MINGW.*|CHERE_INVOKING|XDG_.*|CLAUDE.*|"
     r"ANTHROPIC.*|GREENLIGHT.*|CODEX.*", re.IGNORECASE)
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")      # a name any shell takes as one, with a text value
 
 
 def config_dir() -> Path:
@@ -60,6 +61,10 @@ def is_settings_file(path: Path) -> bool:
     return resolved.name.casefold() in SETTINGS_NAMES and resolved.parent == Path(os.path.realpath(config_dir()))
 
 
+def _not_json(value: str) -> None:
+    raise ValueError(f"{value} is not JSON")
+
+
 def _no_duplicates(pairs: list[tuple[str, object]]) -> dict:
     keys = [key for key, _ in pairs]
     if len(set(keys)) != len(keys):
@@ -69,8 +74,8 @@ def _no_duplicates(pairs: list[tuple[str, object]]) -> dict:
 
 def parse_settings(text: str) -> dict:
     """A settings file as Claude Code reads it: strict JSON, an object at the top. A key given twice is refused, so no
-    reader can take a different one of the two."""
-    data = json.loads(text, object_pairs_hook=_no_duplicates)
+    reader can take a different one of the two; so are ``NaN`` and ``Infinity``, which JavaScript does not read."""
+    data = json.loads(text, object_pairs_hook=_no_duplicates, parse_constant=_not_json)
     if not isinstance(data, dict):
         raise ValueError("the settings are not a JSON object")
     return data
@@ -82,7 +87,8 @@ def settings_view(data: dict) -> dict:
     view = {key: value for key, value in data.items() if key not in HARMLESS_KEYS}
     env = data.get("env")
     if isinstance(env, dict):
-        steering = {name: value for name, value in env.items() if STEERING_ENV.fullmatch(name)}
+        steering = {name: value for name, value in env.items()
+                    if STEERING_ENV.fullmatch(name) or not _ENV_NAME.fullmatch(name) or not isinstance(value, str)}
         if steering:
             view["env"] = steering
     elif env is not None:

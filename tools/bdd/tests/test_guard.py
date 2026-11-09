@@ -873,6 +873,73 @@ class PrecisionTest(GuardCase):
             with self.subTest(command=command):
                 self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
 
+    def test_writes_the_first_review_found_are_refused(self):
+        """Each of these got past an earlier version of the reader; trunk refused each by name."""
+        locked = [
+            "rm features/a.feature\necho done >", "mv evil/a.feature features/", "mv /tmp/evil/barrier.ts tests/drivers",
+            "mv -t features evil/a.feature", "cp -t features evil/a.feature", "cp --target-directory=features evil/a.feature",
+            "install -t features evil/a.feature", "install /tmp/evil/barrier.ts tests/drivers/",
+            "ln -sf /tmp/evil/barrier.ts tests/drivers/", "ln -sf -t features /tmp/a.feature",
+            "pwsh -c 'Copy-Item evil/a.feature -Destination features'", "cmd //c copy evil\\a.feature features\\",
+            "cat <(rm -f features/a.feature)", "diff <(echo x) <(cp evil features/a.feature)",
+            "echo pwned > >(tee features/a.feature)", 'echo features/a.feature | xargs "rm"',
+            "echo pwned | xargs -0 'tee' features/a.feature", "parallel 'rm' ::: features/a.feature",
+            "cat > /tmp/r.sh <<'EOF'\nrm features/a.feature\nEOF\nsh /tmp/r.sh", "cat > /tmp/r.sh <<'EOF'\nrm features/a.feature\nEOF\n. /tmp/r.sh",
+            "cat > r.sh <<'EOF'\nrm features/a.feature\nEOF\nchmod +x r.sh && ./r.sh",
+            "printf \"open('features/a.feature','w').write('x')\" > /tmp/x.py; python /tmp/x.py",
+            "echo \"open('features/a.feature','w')\" > /tmp/x.py && python /tmp/x.py",
+            "cd tests || cd nowhere && rm drivers/barrier.ts", "{ cd tests; } && rm drivers/barrier.ts",
+            "export CDPATH=tests; cd drivers && rm ../drivers/barrier.ts",
+            'C="open(\'features/a.feature\',\'w\').write(\'x\')"; python -c "$C"',
+            "python -c open\"('features/a.feature','w').write('x')\"", "perl -e 'system \"rm features/a.feature\"'",
+            "perl -e '`rm features/a.feature`'", "ruby -e '`rm features/a.feature`'",
+            "lua -e \"io.open('features/a.feature','w'):write('x')\"", "pythonw -c \"open('features/a.feature','w')\"",
+            "python -c \"import os; getattr(os,'re'+'move')('features/a.feature')\"",
+            "D=src; if true; then D=tests; fi; rm $D/drivers/barrier.ts", "D=src; read D <<< tests; rm $D/drivers/barrier.ts",
+            "D=src; printf -v D tests; rm $D/drivers/barrier.ts", "D=src; mapfile -t D <<< tests; rm $D/drivers/barrier.ts",
+            "D=te; D+=sts; rm $D/drivers/barrier.ts", "D=src; D=tests sh -c 'rm $D/drivers/barrier.ts'",
+            "D=src; f() { D=tests; }; f; rm $D/drivers/barrier.ts", "echo tests | while read D; do rm $D/drivers/barrier.ts; done",
+            "ln -s features f; rm f/a.feature"]
+        for command in locked:
+            with self.subTest(command=command):
+                self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
+        for command in ["mv /tmp/x/state.json .bdd/features/FEAT-001-a/", "cp -t .bdd/features/FEAT-001-a /tmp/x/state.json",
+                        "ln -sf /tmp/x/lock.json .bdd/features/FEAT-001-a/"]:
+            with self.subTest(command=command):
+                self.assertIn("managed by the bdd command line", self.bash(command) or "", command)
+        self.assertIsNone(self.bash("echo x >"))                                      # no target: read as before, no hang
+        self.assertIsNone(self.bash("cat <<"))
+
+    def test_codexs_home_named_by_its_variable_is_still_codexs(self):
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codexhome")}):
+            for command in ['cp evil.json "$CODEX_HOME/hooks.json"', "echo {} > $CODEX_HOME/config.toml", "rm -rf $CODEX_HOME/sessions"]:
+                with self.subTest(command=command):
+                    self.assertIn("Codex's home folder", self.bash(command) or "")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows drops a trailing dot from a file name")
+    def test_a_trailing_dot_names_the_same_file_on_windows(self):
+        self.assertIn("is locked by FEAT-001", self.bash("python -c \"open('features/a.feature.','w').write('x')\"") or "")
+        self.assertIn("managed by", self.bash("python -c \"open('.bdd/features/FEAT-001-a/state.json.','w')\"") or "")
+        self.assertIn("is locked by FEAT-001", self.call("Write", file_path=str(self.spec) + ".") or "")
+
+    def test_installs_the_first_review_found_are_refused(self):
+        for command in ["python -c \"import os; os.system('pip install left-pad')\"",
+                        "node -e \"require('child_process').execSync('npm install left-pad')\"",
+                        "python - <<'EOF'\nimport subprocess\nsubprocess.run('npm install left-pad', shell=True)\nEOF",
+                        "X='pip install left-pad'; $X", "echo 'npm install left-pad' | sh -c \"$(cat)\"",
+                        "echo 'npm i x' > /tmp/i.sh; bash /tmp/i.sh", "echo 'npm i x' > /tmp/i.sh; . /tmp/i.sh",
+                        "printf 'pip install x' > /tmp/i.sh && sh /tmp/i.sh",
+                        "npx --no-install tsx -e \"require('child_process').execSync('npm i x')\"", "npx --no-install --yes cowsay"]:
+            with self.subTest(command=command):
+                self.assertIn("may not install packages", self.bash(command) or "", command)
+
+    def test_the_bdd_command_line_by_a_variable_is_still_the_bdd_command_line(self):
+        self.assertIn("cost corrections", self.bash('B="/p/tools/bdd/bdd"; "$B" cost FEAT-001 --amend implement --tokens 1 '
+                                                    '--seconds 1 --reason x') or "")
+        self.assertIn("releases it", self.bash('B="/p/tools/bdd/bdd"; "$B" unlock --plumbing --reason x') or "")
+        self.assertIsNone(self.bash("grep -rn -- --add-deny-rules docs", agent=None))
+        self.assertIsNone(self.bash(".venv/bin/python -c \"open('src/out.txt','w').write('x')\""))
+
     def test_scratch_files_outside_every_project_are_anyones(self):
         with tempfile.TemporaryDirectory() as scratch:
             script = str(Path(scratch) / "apply.py")
@@ -931,7 +998,7 @@ class PrecisionTest(GuardCase):
 
     def test_reading_a_managed_file_and_writing_elsewhere_is_fine(self):
         for command in ["cat .bdd/features/FEAT-001-a/state.json > /tmp/state.json", "cp .bdd/config.toml /tmp/config.toml",
-                        "jq . .bdd/features/FEAT-001-a/lock.json > out/lock.json"]:
+                        "jq . .bdd/features/FEAT-001-a/lock.json > src/lock.json"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command), command)
 
@@ -998,7 +1065,8 @@ class SettingsEffectTest(GuardCase):
 
     def test_spellings_that_are_the_same_key_are_the_same_key(self):
         for content in ['{"hoo\\u006bs": {}}', '{"env": {}, "env": {"PATH": "/x"}}', '{"hooks": {}, "hooks": null}', "{", "[]",
-                        "// comment\n{}"]:
+                        "// comment\n{}", '{"env": {"A": NaN}}', '{"model": Infinity}', '{"env": {"PATH=/evil:": "x"}}',
+                        '{"env": {"A": 1}}']:
             with self.subTest(content=content):
                 self.assertIn("is a Claude Code settings file", self.call("Write", file_path=str(self.settings), content=content))
 
