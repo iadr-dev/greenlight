@@ -644,6 +644,17 @@ class HookTest(CodexCase):
         recorded = self.data()["approvals"][-1]
         self.assertEqual((recorded["grade"], recorded["origin"], recorded["prompt_id"]), ("codex", "codex-unverified", f"codex:{TURN}"))
 
+    def test_a_codex_approval_with_other_text_records_nothing_and_says_why(self):
+        opt_in(self)
+        self.gate("discover")
+        self.rules.write_text("# Rules\n\nR-007.1 Something.\n", encoding="utf-8", newline="\n")
+        payload = {"hook_event_name": "UserPromptSubmit", "session_id": SESSION, "cwd": str(self.root), "turn_id": TURN,
+                   "prompt": APPROVE + " and then continue", "transcript_path": None}
+        code, out, _ = run_hook(payload)
+        self.assertEqual(code, 0)
+        self.assertIn("NOT recorded: send one approval per message", json.loads(out)["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual(self.data()["approvals"], [])
+
     def test_the_two_spellings_do_not_cross_over(self):
         self.assertIsNone(approvalcommand.parse(APPROVE))
         self.assertIsNone(approvalcommand.parse_codex("/greenlight:approve FEAT-007 rules"))

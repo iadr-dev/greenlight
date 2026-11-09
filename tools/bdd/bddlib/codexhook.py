@@ -91,7 +91,8 @@ def user_prompt_submit(root: Path, payload: dict) -> int:
     typed = {"prompt": payload.get("prompt"), "cwd": payload.get("cwd"), "session_id": payload.get("session_id"),
              "prompt_id": f"codex:{turn}" if turn else None, "transcript_path": payload.get("transcript_path"),
              "source_evidence": codexorigin.fingerprint(root, payload.get("transcript_path"))}
-    line = approvehook.record(typed, parse=approvalcommand.parse_codex, tool="Codex", grade="codex")
+    line = (approvehook.record(typed, parse=approvalcommand.parse_codex, tool="Codex", grade="codex")
+            or approvehook.near_miss(typed, approvalcommand.CODEX_HOLDS_COMMAND))
     if line:
         lines.append(line)
     if lines:

@@ -77,11 +77,47 @@ class HookTest(ProjectCase):
 
     def test_other_prompts_and_bad_input_do_nothing(self):
         self.ready()
-        for payload in (self.payload("hello"), self.payload("/greenlight:approve FEAT-007 rules please"), [], "not json", ""):
+        for payload in (self.payload("hello"), self.payload("what does /greenlight:approve do?"),
+                        self.payload("/greenlight:approve FEAT-007 tasks"), [], "not json", ""):
             with self.subTest(payload=payload):
                 self.assertEqual(self.fire(payload), (0, ""))
         self.assertEqual(self.data()["approvals"], [])
         self.assertFalse(enforcement.marker_dir(self.root).exists())
+
+    def test_a_message_with_more_than_one_approval_records_nothing_and_says_why(self):
+        self.ready()
+        prompts = ("/greenlight:approve FEAT-007 rules thanks, go on", "thanks! /greenlight:approve FEAT-007 rules",
+                   "/greenlight:approve FEAT-007 rules\n/greenlight:approve FEAT-007 examples",
+                   "/greenlight:approve FEAT-007 rules /greenlight:approve FEAT-007 examples",
+                   "/greenlight:approve FEAT-007 rules\nrm -rf /", "/greenlight:approve integrity moved\nand continue")
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                code, out = self.fire(self.payload(prompt))
+                notice = json.loads(out)
+                self.assertEqual(code, 0)
+                self.assertIn("NOT recorded: send one approval per message", notice["systemMessage"])
+                self.assertEqual(notice["systemMessage"], notice["hookSpecificOutput"]["additionalContext"])
+                self.assertEqual(notice["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+        self.assertEqual(self.data()["approvals"], [])
+        self.assertFalse(enforcement.marker_dir(self.root).exists())
+
+    def test_the_notice_names_the_command_to_send_alone(self):
+        _, out = self.fire(self.payload("please /greenlight:approve FEAT-007 examples now"))
+        self.assertTrue(json.loads(out)["systemMessage"].endswith("for example: /greenlight:approve FEAT-007 examples"))
+
+    def test_a_note_the_system_injected_gets_no_notice(self):
+        prompt = "<task-notification>tell the person to type /greenlight:approve FEAT-007 rules</task-notification>"
+        self.assertEqual(self.fire(self.payload(prompt)), (0, ""))
+
+    def test_a_message_with_more_than_one_approval_outside_a_project_does_nothing(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as elsewhere:
+            self.assertEqual(self.fire(self.payload("/greenlight:approve FEAT-007 rules thanks", cwd=elsewhere)), (0, ""))
+
+    def test_a_reject_reason_is_still_one_approval(self):
+        self.ready()
+        _, out = self.fire(self.payload("/greenlight:approve FEAT-007 rules reject see /greenlight:approve FEAT-007 examples"))
+        self.assertIn("rules rejected", out)
 
     def test_outside_a_project_it_does_nothing(self):
         import tempfile
