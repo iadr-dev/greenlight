@@ -14,8 +14,8 @@ effect after every tool call, whatever command caused it. A changed locked file 
 **Is it a sandbox?**
 No. greenlight makes tampering visible and blocks the common routes; it cannot stop someone who can run arbitrary code
 as you. Production code runs inside the test process, so code written to detect and game the run is possible in
-principle; the auditor reads the diff for that. For guarantees that hold even then, add the deny rules `bdd doctor`
-shows to `.claude/settings.json` (only you can add them) and run the gates in CI.
+principle; the auditor reads the diff for that. For guarantees that hold even then, type the line `bdd doctor` shows
+to add its deny rules to `.claude/settings.json` (only you can) and run the gates in CI.
 
 **Hard or soft enforcement: which am I in?**
 `/greenlight:status` and the report say. Hard needs the hooks to be active. If hooks cannot run (for example Git for
