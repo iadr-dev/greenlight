@@ -167,6 +167,7 @@ class Config:
     stability_runs: int = 0                  # [stability] runs: how often the verify gate wants the feature rerun (0: not asked)
     workspace: tuple[Member, ...] = ()       # the other repositories of a feature that spans several
     lint_ignore: tuple[str, ...] = ()        # [lint] ignore: style warnings (never errors) the project silences
+    lint_projected_records: tuple[str, ...] = ()  # [lint] projected_records: entities (or "*") whose driver compares only the columns a table lists
     models: tuple[tuple[str, str], ...] = ()  # [models]: (agent, model) the person chose; checked by `bdd doctor`
 
     @property
@@ -355,6 +356,14 @@ def _lint_ignore(data: dict, path: Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(codes))
 
 
+def _lint_projected_records(data: dict, path: Path) -> tuple[str, ...]:
+    table = data.get("lint", {})
+    names = table.get("projected_records", []) if isinstance(table, dict) else None
+    if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
+        raise ConfigError(f'{path}: [lint] projected_records must be a list of entity names, or ["*"] for all')
+    return tuple(dict.fromkeys(" ".join(name.casefold().split()) for name in names))
+
+
 def _models(data: dict, path: Path) -> tuple[tuple[str, str], ...]:
     """The ``[models]`` table as written. Which names are agents and models is checked by ``bdd doctor`` and shown by
     ``bdd status``, not here, so a misspelt model never stops the guard or a gate."""
@@ -459,5 +468,6 @@ def load(root: Path | str | None) -> Config:
         stability_runs=_stability_runs(data, path),
         workspace=_workspace(root, data, path),
         lint_ignore=_lint_ignore(data, path),
+        lint_projected_records=_lint_projected_records(data, path),
         models=_models(data, path),
     )

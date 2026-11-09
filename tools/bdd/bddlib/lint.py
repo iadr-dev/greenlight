@@ -18,6 +18,9 @@ Every finding has a stable code so reports can refer to it:
     L014 error    two project or shared steps define the very same pattern
     L015 to L025 warning  style of the feature file (order of steps, length, placeholder data, layout, ...):
                   see stylecheck.py; a project can silence them with `[lint] ignore` in .bdd/config.toml
+    L026 error    two exact record tables (`the X records are:`) of one entity have different column sets in a
+                  feature (columncheck.py); `[lint] projected_records` in .bdd/config.toml names the entities whose
+                  driver compares only the columns a table lists
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config as cfg
-from . import denylist, gherkin, sharedvocab, stylecheck, tagcheck, vocabcheck, vocabulary
+from . import columncheck, denylist, gherkin, sharedvocab, stylecheck, tagcheck, vocabcheck, vocabulary
 from .errors import UsageError
 from .featurefiles import collect_files
 from .issues import ERROR, WARNING, Issue
@@ -73,9 +76,9 @@ def shape_problem(requires: str, step: gherkin.Step) -> str | None:
 
 class Linter:
     def __init__(self, vocab: vocabulary.Vocabulary, profiles: tuple[str, ...] = cfg.ALL_PROFILES,
-                 trace_tags: bool = True, ignore: tuple[str, ...] = ()):
+                 trace_tags: bool = True, ignore: tuple[str, ...] = (), projected_records: tuple[str, ...] = ()):
         self.vocab, self.profiles, self.trace_tags = vocab, set(profiles), trace_tags
-        self.ignore = frozenset(ignore)
+        self.ignore, self.projected_records = frozenset(ignore), frozenset(projected_records)
 
     def check_step(self, step: gherkin.Step, language: str, path: str) -> list[Issue]:
         details = [Issue(path, step.line, ERROR, "L004",
@@ -142,6 +145,7 @@ class Linter:
             issues += self.check_outline(scenario, path)
         if self.trace_tags:
             issues += tagcheck.check_trace_tags(feature, path)
+        issues += columncheck.check_feature(feature, self.vocab, path, self.projected_records)
         return issues
 
     def lint_text(self, text: str, path: str = "<string>") -> list[Issue]:
@@ -211,7 +215,8 @@ def prepare(args: argparse.Namespace) -> Plan:
     targets = args.paths or list(config.feature_dirs)
     if not targets:
         raise UsageError("no paths given and no feature directories configured")
-    linter = Linter(vocab, profiles, trace_tags=not args.no_trace_tags, ignore=config.lint_ignore)
+    linter = Linter(vocab, profiles, trace_tags=not args.no_trace_tags, ignore=config.lint_ignore,
+                    projected_records=config.lint_projected_records)
     return Plan(linter, collect_files(targets),
                 check_project_vocabulary(vocab, vocab_path, config, profiles))
 
