@@ -32,7 +32,8 @@ GRADES = ("hook", "self-reported", "auto", "codex")
 PREREQUISITE_GATES = {"rules": ("discover",), "examples": ("test-design",)}
 PHASE_OF = {"rules": "specify", "examples": "examples"}
 PENDING_TIMEOUT = timedelta(minutes=10)
-ITEMS_KEPT = 3                       # approvals of one gate that keep their list of items; older ones keep none, so state.json stays small
+ITEMS_KEPT = 3
+UNVERIFIED = ("pending", "unverifiable", "invalid")
 TRANSCRIPT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
 
 
@@ -105,15 +106,17 @@ def _last(data: dict, gate: str, decision: str | None = None) -> dict | None:
     return last if last and (decision is None or last["decision"] == decision) else None
 
 
-def items_of(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict | None:
-    """The record of the items an approval covers, kept with it for the summary of the next one. An approval is never
-    refused for want of it: files the summary cannot read leave it out."""
+def items_of(root: Path, feature_dir: Path, feature_id: str, gate: str, artifacts: dict[str, str]) -> tuple[dict, str] | tuple[None, None]:
+    """The record of the items an approval covers and the hash of the text outside them, kept with it for the summary of the
+    next one. An approval is never refused for want of it: files the summary cannot read, or that changed while they were
+    read, leave it out."""
     from . import approvalsummary
 
     try:
-        return approvalsummary.snapshot(approvalsummary.items(root, feature_dir, feature_id, gate))
+        kept = approvalsummary.snapshot(approvalsummary.read(root, feature_dir, feature_id, gate))
+        return kept if artifact_hashes(root, feature_dir, feature_id, gate) == artifacts else (None, None)
     except (UsageError, OSError, ValueError):
-        return None
+        return None, None
 
 
 # -- recording -----------------------------------------------------------------------------
@@ -154,10 +157,10 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
             ensure_spec_locked(root, feature_dir, feature_id, artifacts)
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
-    items = items_of(root, feature_dir, feature_id, gate) if decision == "approve" else None
+    items, outside = items_of(root, feature_dir, feature_id, gate, artifacts) if decision == "approve" else (None, None)
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
              "origin": {"hook": "pending", "codex": "codex-unverified"}.get(grade, grade), "artifacts": artifacts, "members": members,
-             "items": items, "session": session,
+             "items": items, "outside": outside, "session": session,
              "prompt_id": prompt_id, "transcript_path": transcript_path, "source": source,
              "mode": cfg.load(root).enforcement, "hooks_seen": bool(data.get("hooks_seen"))}
 
@@ -165,8 +168,7 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
         entry["autonomy"] = current["autonomy"]["level"]
         entry["id"] = len(current["approvals"]) + 1
         current["approvals"].append(entry)
-        for old in [a for a in current["approvals"] if a["gate"] == gate and a.get("items")][:-ITEMS_KEPT]:
-            old["items"] = None
+        prune_items(current["approvals"], gate)
         if decision == "approve":
             state.advance_phase(current, gate)
         else:
@@ -174,6 +176,17 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
 
     state.update(feature_dir, mutate)
     return entry
+
+
+def prune_items(records: list[dict], gate: str) -> None:
+    """Keep the list of items on the newest approvals of ``gate`` and on the newest one whose origin is settled, which the
+    summary compares with; older approvals keep none, so state.json does not grow with every approval."""
+    with_items = [a for a in records if a["gate"] == gate and a.get("items")]
+    settled = next((a for a in reversed(with_items) if a["origin"] not in UNVERIFIED), None)
+    keep = {a["id"] for a in with_items[-ITEMS_KEPT:]} | ({settled["id"]} if settled else set())
+    for old in with_items:
+        if old["id"] not in keep:
+            old["items"] = old["outside"] = None
 
 
 def self_reported_problem(root: Path, data: dict) -> str | None:
@@ -383,9 +396,6 @@ def codex_notes(data: dict, feature_dir: Path) -> dict[int, str]:
 
 
 # -- are the human gates satisfied? -------------------------------------------------------
-UNVERIFIED = ("pending", "unverifiable", "invalid")
-
-
 def earlier_verified(root: Path, data: dict, gate: str, last: dict) -> dict | None:
     """The newest verified approval of ``gate`` before ``last`` that covers exactly the files ``last`` covers.
 
@@ -465,12 +475,13 @@ def summary_for(root: Path, feature_dir: Path, gate: str) -> dict:
     if gate not in GATES:
         raise UsageError(f"only the human gates have a summary: {', '.join(GATES)}")
     data = state.load(feature_dir)
-    current = approvalsummary.items(root, feature_dir, data["feature"], gate)
+    reading = approvalsummary.read(root, feature_dir, data["feature"], gate)
     records = [a for a in data["approvals"] if a["gate"] == gate]
     accepted = next((a for a in reversed(records) if a["decision"] == "approve" and not grade_problems(root, data, gate, a)), None)
     rejected = records[-1] if records and records[-1]["decision"] == "reject" else None
     same = accepted is None or accepted["artifacts"] == artifact_hashes(root, feature_dir, data["feature"], gate)
-    return approvalsummary.summarise(gate, current, accepted, rejected, same)
+    others = member_problems(root, data["feature"], accepted.get("members", {})) if accepted and gate == "examples" else []
+    return approvalsummary.summarise(gate, reading, accepted, rejected, same, others)
 
 
 # -- the check that needs no session ---------------------------------------------------------

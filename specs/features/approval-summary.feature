@@ -118,9 +118,12 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "rules", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "items": {"R-007.1": {"text": "Orders of 1000 or more get 10% off.", "parts": {"why": "dd0a316e18d40564"}},
-                                  "R-007.2": {"text": "A discount code can be combined with a bulk discount.", "parts": {"why": "cfb731472200b3af"}},
-                                  "R-007.3": {"text": "Gift cards give no discount.", "parts": {}}},
+                        "outside": "2a20fd0ad0e0645c",
+                        "items": {"R-007.1": {"text": "Orders of 1000 or more get 10% off.",
+                                              "parts": {"why": "dd0a316e18d40564", "all": "b15c15715ceaa47b"}},
+                                  "R-007.2": {"text": "A discount code can be combined with a bulk discount.",
+                                              "parts": {"why": "cfb731472200b3af", "all": "4fbb0b795ca750e0"}},
+                                  "R-007.3": {"text": "Gift cards give no discount.", "parts": {"all": "ae3b48f53860b6f9"}}},
                         "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",
                         "hooks_seen": true, "autonomy": "standard"}]}
         """
@@ -181,15 +184,11 @@ Feature: A person can read what they approve and approve it in one step
               When the order is priced
               Then the discount is 10%
 
-          @R-007.2
-          Rule: A discount code gives 5 off
-
-            @EX-007.2.1
-            Scenario: A valid code takes 5 off
-              Given an order of 100
-              And the code SAVE5
+            @EX-007.1.4
+            Scenario: An order of 1500 gets the discount
+              Given an order of 1500
               When the order is priced
-              Then the total is 95
+              Then the discount is 10%
         """
       And the input file discounts state contains:
         """
@@ -198,9 +197,13 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "examples", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "items": {"EX-007.1.1": {"text": "An order of 1000 gets the discount", "parts": {"steps": "6b2ead113fac9d30"}, "rule": "R-007.1"},
-                                  "EX-007.1.2": {"text": "An order below 1000 gets no discount", "parts": {"steps": "932adb482621a63e"}, "rule": "R-007.1"},
-                                  "EX-007.1.3": {"text": "An order of 5000 gets the discount", "parts": {"steps": "f27ed820e3ecf3a9"}, "rule": "R-007.1"}},
+                        "outside": "ddaf5a82ae082cad",
+                        "items": {"EX-007.1.1": {"text": "An order of 1000 gets the discount", "rule": "R-007.1",
+                                                 "parts": {"steps": "6b2ead113fac9d30", "tags": "86195f3385b5a389", "all": "7d4411f8cde3c4f1"}},
+                                  "EX-007.1.2": {"text": "An order below 1000 gets no discount", "rule": "R-007.1",
+                                                 "parts": {"steps": "932adb482621a63e", "tags": "1d025f4c86c315c9", "all": "7e6956944fdea0f9"}},
+                                  "EX-007.1.3": {"text": "An order of 5000 gets the discount", "rule": "R-007.1",
+                                                 "parts": {"steps": "f27ed820e3ecf3a9", "tags": "f9f82d69eb5de311", "all": "5fb213324250f4f0"}}},
                         "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",
                         "hooks_seen": true, "autonomy": "standard"}]}
         """
@@ -226,15 +229,70 @@ Feature: A person can read what they approve and approve it in one step
             changed: title
             was: An order of 5000 gets the discount
         Added:
-          EX-007.2.1  A valid code takes 5 off  (R-007.2)
-            Given an order of 100
-            And the code SAVE5
+          EX-007.1.4  An order of 1500 gets the discount  (R-007.1)
+            Given an order of 1500
             When the order is priced
-            Then the total is 95
+            Then the discount is 10%
         Unchanged: 1 scenario (not shown).
         """
 
     @EX-113.2.3
+    Scenario: A sentence added inside a rule and a line changed outside every rule are named too
+      Given the input file project config contains:
+        """
+        [[adapters]]
+        name = "x"
+        features = "features"
+        steps = "steps"
+        """
+      And the input file rules contains:
+        """
+        # Rules: FEAT-007 Discounts
+
+        R-007.1 Orders of 1000 or more get 10% off.
+        Orders in euros count at the rate of the order day.
+        - Why: big orders are rewarded
+
+        ## Out of scope
+
+        - Gift cards
+        - Coupons
+        """
+      And the input file discounts state contains:
+        """
+        {"schema": 1, "feature": "FEAT-007", "kind": "feature", "title": "Discounts", "created_at": "2026-11-08T10:00:00+00:00",
+         "phase": "specify", "autonomy": {"level": "standard", "switches": []}, "gates": {}, "assumptions": [], "cost": {},
+         "red": null, "hooks_seen": true, "changes": [],
+         "approvals": [{"id": 1, "gate": "rules", "decision": "approve", "grade": "hook", "origin": "human",
+                        "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
+                        "outside": "b2803ea59fbdaddc",
+                        "items": {"R-007.1": {"text": "Orders of 1000 or more get 10% off.",
+                                              "parts": {"why": "dd0a316e18d40564", "notes": "af3c9c52dd293391", "all": "7ea7dbab38f0d063"}}},
+                        "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",
+                        "hooks_seen": true, "autonomy": "standard"}]}
+        """
+      When alice runs approve with:
+        | key | value     |
+        | arg | FEAT-007  |
+        | arg | rules     |
+        | arg | --summary |
+      Then the command succeeds
+      And the stdout output contains:
+        """
+        FEAT-007 rules, since the approval of 2026-11-08: 1 rule changed, text outside the rules changed.
+        Changed:
+          R-007.1  Orders of 1000 or more get 10% off.
+            Orders in euros count at the rate of the order day.
+            Why: big orders are rewarded
+            changed: free text under the rule
+        Also changed: text outside the rules (headings, out of scope, glossary or notes). It now reads:
+          # Rules: FEAT-007 Discounts
+          ## Out of scope
+          - Gift cards
+          - Coupons
+        """
+
+    @EX-113.2.4
     Scenario: Scenarios written in Chinese keep their keywords and words
       Given the input file project config contains:
         """
@@ -271,7 +329,9 @@ Feature: A person can read what they approve and approve it in one step
          "red": null, "hooks_seen": true, "changes": [],
          "approvals": [{"id": 1, "gate": "examples", "decision": "approve", "grade": "hook", "origin": "human",
                         "at": "2026-11-08T10:30:00+00:00", "reason": "", "artifacts": {}, "members": {},
-                        "items": {"EX-007.1.1": {"text": "订单满1000元享受折扣", "parts": {"steps": "e87084caac8f896a"}, "rule": "R-007.1"}},
+                        "outside": "a3b350edbce6ecf6",
+                        "items": {"EX-007.1.1": {"text": "订单满1000元享受折扣", "rule": "R-007.1",
+                                                 "parts": {"steps": "e87084caac8f896a", "tags": "86195f3385b5a389", "all": "87b87d2ef9d8ba8b"}}},
                         "session": null, "prompt_id": "p1", "transcript_path": null, "source": null, "mode": "auto",
                         "hooks_seen": true, "autonomy": "standard"}]}
         """

@@ -105,6 +105,15 @@ class HookTest(ProjectCase):
         _, out = self.fire(self.payload("please /greenlight:approve FEAT-007 examples now"))
         self.assertTrue(json.loads(out)["systemMessage"].endswith("for example: /greenlight:approve FEAT-007 examples"))
 
+    def test_a_multi_line_rejection_keeps_its_reject_in_the_example(self):
+        _, out = self.fire(self.payload("/greenlight:approve FEAT-007 rules reject\nthe boundary is missing"))
+        self.assertTrue(json.loads(out)["systemMessage"].endswith(
+            "for example: /greenlight:approve FEAT-007 rules reject <the reason, on one line>"))
+
+    def test_an_integrity_acknowledgement_with_other_text_is_refused_too(self):
+        _, out = self.fire(self.payload("/greenlight:approve integrity moved\nand continue"))
+        self.assertIn("for example: /greenlight:approve integrity", json.loads(out)["systemMessage"])
+
     def test_a_note_the_system_injected_gets_no_notice(self):
         prompt = "<task-notification>tell the person to type /greenlight:approve FEAT-007 rules</task-notification>"
         self.assertEqual(self.fire(self.payload(prompt)), (0, ""))

@@ -99,12 +99,21 @@ class SummaryCommandTest(CommandCase):
                 self.assertEqual(code, 2)
                 self.assertIn(message, err)
 
-    def test_the_summary_cannot_be_combined_with_anything_that_records(self):
+    def test_the_summary_cannot_be_combined_with_a_flag_that_records_or_judges(self):
         self.prepare_rules()
-        for flag in ("--self-reported", "--auto", "--verify", "--check", "--record"):
-            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
-                self.run_cmd("FEAT-007", "rules", "--summary", flag)
+        for flag in ("--self-reported", "--auto", "--verify", "--check"):
+            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as stop:
+                approvecmd.run(["FEAT-007", "rules", "--summary", flag])
             self.assertEqual(stop.exception.code, 2)
+            self.assertIn("not allowed with", err.getvalue())
+        self.assertEqual(self.data()["approvals"], [])
+
+    def test_the_summary_takes_no_flag_that_does_not_exist(self):
+        self.prepare_rules()
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as stop:
+            approvecmd.run(["FEAT-007", "rules", "--summary", "--record"])
+        self.assertEqual(stop.exception.code, 2)
+        self.assertIn("unrecognized arguments: --record", err.getvalue())
         self.assertEqual(self.data()["approvals"], [])
 
     def test_a_summary_of_nothing_to_approve_is_refused_in_words(self):

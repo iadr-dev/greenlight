@@ -61,9 +61,9 @@ def do_check(root, feature_dir) -> int:
         print(f"{data['feature']}: {gate}: {'NOT valid' if problems else 'valid'} ({how})")
         for problem in problems:
             print(f"  - {problem}")
-        if standing is not last and not problems:
-            print(f"  - note: the latest approval (#{last['id']}) could not be verified; the verified approval #{standing['id']} "
-                  "of the same file stands")
+        if standing is not last:
+            print(f"  - note: the latest approval (#{last['id']}, origin {last['origin']}) could not be verified; the verified "
+                  f"approval #{standing['id']} of the same file is the one that counts")
         if last and last["grade"] == "codex":
             print("  - note: typed in Codex, where nothing proves who typed it; a reviewer has to confirm this approval "
                   "(review the committed record and protect the branch)" + (f"\n    {last['evidence']}" if last.get("evidence") else ""))

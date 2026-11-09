@@ -1,5 +1,7 @@
 """What the person is asked to approve, and what changed since they last approved it."""
+import html
 import unittest
+from unittest import mock
 
 from bddlib import approvals, approvalsummary, state
 from bddlib.errors import UsageError
@@ -68,6 +70,12 @@ class SummaryCase(ProjectCase):
     def put_feature(self, text: str = FEATURE) -> None:
         self.write("features/discounts.feature", text)
 
+    def reading(self, gate: str) -> dict:
+        return approvalsummary.read(self.root, self.feature_dir, "FEAT-007", gate)
+
+    def items(self, gate: str) -> dict:
+        return self.reading(gate)["items"]
+
     def summary(self, gate: str = "rules") -> dict:
         return approvals.summary_for(self.root, self.feature_dir, gate)
 
@@ -84,35 +92,36 @@ class SummaryCase(ProjectCase):
 class ItemsTest(SummaryCase):
     def test_rules_are_read_with_their_reason_and_the_other_lines_are_left_out(self):
         self.put_rules()
-        items = approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "rules")
+        items = self.items("rules")
         self.assertEqual(list(items), ["R-007.1", "R-007.2", "N-007.1"])
         self.assertEqual(items["R-007.1"]["text"], "Orders of 1000 or more get 10% off.")
         self.assertEqual(items["R-007.1"]["detail"], ["Why: big orders are rewarded", "Source: the shop owner"])
-        self.assertEqual(set(items["R-007.1"]["parts"]), {"why", "source"})
+        self.assertEqual(set(items["R-007.1"]["parts"]), {"why", "source", "all"})
         self.assertEqual(items["N-007.1"]["detail"], [])
 
-    def test_a_bullet_under_another_heading_belongs_to_no_rule(self):
+    def test_a_bullet_under_another_heading_belongs_to_no_rule_and_is_outside_text(self):
         self.put_rules()
-        items = approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "rules")
-        self.assertNotIn("Gift cards", str(items))
+        reading = self.reading("rules")
+        self.assertNotIn("Gift cards", str(reading["items"]))
+        self.assertEqual(reading["outside"]["lines"], ["# Rules: FEAT-007 Discounts", "## Business rules", "## Out of scope", "- Gift cards"])
 
     def test_scenarios_are_read_by_their_example_tag_with_their_rule_and_steps(self):
         self.put_feature()
-        items = approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "examples")
-        self.assertEqual(list(items), ["Background", "EX-007.1.1", "EX-007.1.2"])
+        items = self.items("examples")
+        self.assertEqual(list(items), ["Background (discounts.feature)", "EX-007.1.1", "EX-007.1.2"])
         first = items["EX-007.1.1"]
         self.assertEqual((first["text"], first["rule"]), ("An order of 1000 gets the discount", "R-007.1"))
         self.assertEqual(first["detail"], ["Given an order of 1000", "When the order is priced", "Then the discount is 10%"])
-        self.assertEqual(set(items["EX-007.1.2"]["parts"]), {"steps", "examples"})
+        self.assertEqual(set(items["EX-007.1.2"]["parts"]), {"steps", "tags", "examples", "all"})
         self.assertIn("| amount | discount |", items["EX-007.1.2"]["detail"])
 
     def test_a_scenario_without_a_tag_is_named_by_its_title(self):
         self.put_feature("@FEAT-007\nFeature: F\n  Scenario: Plain\n    Then ok\n")
-        self.assertEqual(list(approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "examples")), ["Plain"])
+        self.assertEqual(list(self.items("examples")), ["Plain"])
 
     def test_two_scenarios_with_one_tag_are_both_kept(self):
         self.put_feature("@FEAT-007\nFeature: F\n  @EX-7.1.1\n  Scenario: A\n    Then ok\n  @EX-7.1.1\n  Scenario: B\n    Then ok\n")
-        self.assertEqual(list(approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "examples")),
+        self.assertEqual(list(self.items("examples")),
                          ["EX-7.1.1", "EX-7.1.1 (2)"])
 
     def test_nothing_to_summarise_is_said_in_words(self):
@@ -132,8 +141,9 @@ class ItemsTest(SummaryCase):
 
     def test_the_kept_record_holds_no_lines_that_are_only_for_showing(self):
         self.put_rules()
-        kept = approvalsummary.snapshot(approvalsummary.items(self.root, self.feature_dir, "FEAT-007", "rules"))
+        kept, outside = approvalsummary.snapshot(self.reading("rules"))
         self.assertTrue(all(set(item) <= {"text", "parts", "rule"} for item in kept.values()))
+        self.assertRegex(outside, r"^[0-9a-f]{16}$")
 
 
 class CompareTest(unittest.TestCase):
@@ -219,6 +229,30 @@ class ChangedSummaryTest(SummaryCase):
         self.approve("rules", decision="reject", reason="no")
         self.assertEqual([a["id"] for a in self.data()["approvals"] if a["items"]], [3, 4, 5])
 
+    def test_the_newest_approval_that_is_settled_keeps_its_items_whatever_followed_it(self):
+        self.gate("discover")
+        self.put_rules()
+        self.approved_human("rules")
+        for number in range(2, 6):
+            self.approve("rules", grade="hook", session="s", prompt_id=f"q-{number}", transcript_path=str(self.transcripts / "none.jsonl"))
+        kept = [a["id"] for a in self.data()["approvals"] if a["items"]]
+        self.assertEqual(kept, [1, 3, 4, 5])
+        self.assertEqual(self.summary()["state"], "unchanged")
+
+    def test_items_that_changed_while_they_were_read_are_not_kept(self):
+        self.gate("discover")
+        self.put_rules()
+        real = approvalsummary.snapshot
+
+        def snapshot_then_edit(reading):
+            kept = real(reading)
+            self.put_rules(RULES + "\nR-007.9 Written while the approval was being recorded.\n")
+            return kept
+
+        with mock.patch.object(approvalsummary, "snapshot", snapshot_then_edit):
+            entry = self.approve("rules")
+        self.assertEqual((entry["items"], entry["outside"]), (None, None))
+
     def test_a_rejection_keeps_no_record_of_items(self):
         self.gate("discover")
         self.put_rules()
@@ -230,10 +264,11 @@ class ChangedSummaryTest(SummaryCase):
         self.assertEqual(self.summary()["state"], "unchanged")
         self.assertRegex(self.text(), r"^FEAT-007 rules: no change since the approval of \d{4}-\d\d-\d\d \(3 rules\)\.$")
 
-    def test_a_file_edited_around_the_rules_is_not_called_unchanged(self):
+    def test_a_file_that_differs_only_in_spacing_is_said_to_need_a_new_approval(self):
         self.approved_rules()
-        self.put_rules(RULES + "\n<!-- a note -->\n")
-        self.assertIn("no rule changed", self.text())
+        self.put_rules(RULES.replace("R-007.2 A discount", "R-007.2   A  discount") + "\n\n")
+        self.assertEqual(self.summary()["state"], "unchanged")
+        self.assertIn("no rule and no other text changed", self.text())
         self.assertIn("has to be approved again", self.text())
 
     def test_only_what_changed_is_listed(self):
@@ -307,6 +342,146 @@ class ChangedSummaryTest(SummaryCase):
         before = (self.feature_dir / "state.json").read_bytes()
         self.summary()
         self.assertEqual((self.feature_dir / "state.json").read_bytes(), before)
+
+
+PROSE = """# Rules: FEAT-007 Discounts
+
+R-007.1 Orders of 1000 or more get 10% off.
+Orders in euros count at the rate of the order day.
+- Why: big orders are rewarded
+- Why: they cost less to ship per item
+- Orders under 10 are refused
+
+## Out of scope
+
+- Gift cards
+"""
+BACKGROUNDS = """# language: en
+@FEAT-007
+Feature: Order discounts
+  Orders are priced in the shop's currency.
+
+  @R-007.1
+  Rule: Orders of 1000 or more get 10% off
+    A rule description.
+
+    Background:
+      Given the currency is EUR
+
+    @EX-007.1.1 @smoke
+    Scenario: An order of 1000 gets the discount
+      # keep this one small
+      Given an order with:
+        \"\"\"
+        {"amount": 1000}
+        \"\"\"
+      When the order is priced
+      Then the discount is 10%
+
+    @EX-007.1.2
+    Scenario Outline: Orders get a discount by size
+      Given an order of <amount>
+      Examples:
+        | amount |
+        | 999    |
+"""
+
+
+class NothingHidesTest(SummaryCase):
+    """No word of an approved file can change without the summary naming it, for the rules, the scenarios and the report."""
+
+    def approved(self, gate: str, text: str) -> None:
+        self.gate("discover")
+        if gate == "rules":
+            self.put_rules(text)
+            self.approved_human("rules")
+        else:
+            self.put_rules()
+            self.approved_human("rules")
+            self.gate("test-design")
+            self.put_feature(text)
+            self.approved_human("examples", "p-2")
+
+    def after(self, gate: str, old: str, new: str, replacement: str) -> str:
+        self.approved(gate, old)
+        (self.put_rules if gate == "rules" else self.put_feature)(old.replace(new, replacement))
+        text = self.text(gate)
+        from bddlib import htmlreport
+        report = htmlreport.approval_section({"approval_summaries": htmlreport.approval_summaries(self.root, self.feature_dir)})
+        shown = html.unescape("\n".join(report))
+        for line in text.splitlines():
+            self.assertIn(line.strip(), shown, "the report shows what the command shows")
+        return text
+
+    def test_a_sentence_of_a_rule_that_is_not_a_bullet_is_named(self):
+        text = self.after("rules", PROSE, "rate of the order day", "rate of the payment day")
+        self.assertIn("changed: free text under the rule", text)
+        self.assertIn("Orders in euros count at the rate of the payment day.", text)
+
+    def test_a_bullet_without_a_label_is_named(self):
+        text = self.after("rules", PROSE, "Orders under 10 are refused", "Orders under 50 are refused")
+        self.assertIn("changed: free text under the rule", text)
+
+    def test_a_repeated_label_keeps_every_value(self):
+        self.approved("rules", PROSE)
+        shown = self.items("rules")["R-007.1"]["detail"]
+        self.assertEqual([line for line in shown if line.startswith("Why")], ["Why: big orders are rewarded", "Why: they cost less to ship per item"])
+        text = self.after("rules", PROSE, "they cost less to ship per item", "they weigh more")
+        self.assertIn("changed: why", text)
+        self.assertIn("Why: they weigh more", text)
+
+    def test_a_repeated_rule_id_is_an_item_of_its_own(self):
+        twice = PROSE + "\nR-007.1 A second rule with the same id.\n"
+        self.approved("rules", PROSE)
+        self.put_rules(twice)
+        text = self.text()
+        self.assertIn("1 added", text)
+        self.assertIn("  R-007.1 (2)  A second rule with the same id.", text)
+        self.assertEqual(list(self.items("rules")), ["R-007.1", "R-007.1 (2)"])
+
+    def test_a_line_outside_every_rule_is_named_and_shown(self):
+        text = self.after("rules", PROSE, "- Gift cards", "- Gift cards\n- Coupons")
+        self.assertIn("Also changed: text outside the rules", text)
+        self.assertIn("  - Coupons", text)
+        self.assertIn("text outside the rules changed", text.splitlines()[0])
+
+    def test_a_heading_changed_is_named(self):
+        self.assertIn("Also changed: text outside the rules", self.after("rules", PROSE, "## Out of scope", "## Left out"))
+
+    def test_a_tag_added_to_a_scenario_is_named(self):
+        text = self.after("examples", BACKGROUNDS, "@EX-007.1.1 @smoke", "@EX-007.1.1 @smoke @slow")
+        self.assertIn("changed: tags", text)
+
+    def test_a_comment_inside_a_scenario_is_named(self):
+        text = self.after("examples", BACKGROUNDS, "# keep this one small", "# keep this one tiny")
+        self.assertIn("changed: other text of the item", text)
+
+    def test_a_doc_string_and_an_examples_table_are_named(self):
+        self.assertIn("changed: steps", self.after("examples", BACKGROUNDS, '{"amount": 1000}', '{"amount": 1001}'))
+        self.assertIn("changed: examples", self.after("examples", BACKGROUNDS, "| 999    |", "| 998    |"))
+
+    def test_a_background_inside_a_rule_is_named(self):
+        text = self.after("examples", BACKGROUNDS, "the currency is EUR", "the currency is USD")
+        self.assertIn("Background (discounts.feature, R-007.1)", text)
+        self.assertIn("Given the currency is USD", text)
+
+    def test_the_names_and_descriptions_around_the_scenarios_are_named(self):
+        for old, new in (("Rule: Orders of 1000 or more get 10% off", "Rule: Orders of 500 or more get 10% off"),
+                         ("A rule description.", "Another rule description."),
+                         ("Orders are priced in the shop's currency.", "Orders are priced in euros."),
+                         ("Feature: Order discounts", "Feature: Discounts for orders")):
+            with self.subTest(old=old):
+                self.setUp()
+                text = self.after("examples", BACKGROUNDS, old, new)
+                self.assertIn("Also changed: text outside the scenarios", text)
+                self.assertIn(new, text)
+
+    def test_an_added_file_and_a_removed_scenario_are_named(self):
+        self.approved("examples", BACKGROUNDS)
+        self.write("features/more.feature", "@FEAT-007\nFeature: More\n  @EX-007.2.1\n  Scenario: Extra\n    Then ok\n")
+        self.assertIn("EX-007.2.1  Extra", self.text("examples"))
+        self.put_feature(BACKGROUNDS.split("    @EX-007.1.2")[0])
+        self.assertIn("Removed:\n  EX-007.1.2", self.text("examples"))
 
 
 class FallbackTest(SummaryCase):
@@ -398,7 +573,35 @@ class FallbackTest(SummaryCase):
             os.chdir(here)
         self.assertEqual(code, 0)
         self.assertIn("rules: valid (hook, origin human)", out.getvalue())
-        self.assertIn("the latest approval (#2) could not be verified; the verified approval #1 of the same file stands", out.getvalue())
+        self.assertIn("the latest approval (#2, origin unverifiable) could not be verified; the verified approval #1 of the same file is "
+                      "the one that counts", out.getvalue())
+
+    def test_the_check_names_the_unverified_approval_also_when_the_verified_one_no_longer_matches_the_file(self):
+        import contextlib
+        import io
+        import os
+
+        from bddlib import approvecmd
+        self.second(age=True)
+        self.put_rules(RULES.replace("10%", "15%"))
+        out, here = io.StringIO(), os.getcwd()
+        os.chdir(self.root)
+        try:
+            with contextlib.redirect_stdout(out):
+                code = approvecmd.run(["FEAT-007", "--check"])
+        finally:
+            os.chdir(here)
+        self.assertEqual(code, 1)
+        self.assertIn("the latest approval (#2, origin unverifiable) could not be verified", out.getvalue())
+
+    def test_the_report_and_the_pull_request_say_that_a_later_approval_is_not_counted(self):
+        from bddlib import htmlreport, pr
+        self.second(age=True)
+        (row,) = pr.approvals_of(self.root, self.data())
+        self.assertEqual((row["origin"], row["valid"]), ("human", True))
+        self.assertIn("a later approval (unverifiable) could not be verified and is not counted", row["note"])
+        self.assertIn("not counted", pr.approval_line(row))
+        self.assertIn("not counted", "".join(htmlreport.approval_row(row)))
 
 
 if __name__ == "__main__":

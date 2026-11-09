@@ -6,7 +6,8 @@
 
 Only a prompt that is *exactly* one of these forms counts; a message that holds one together with other text, or a
 second one, records nothing and is answered with "NOT recorded: send one approval per message", shown to the
-person as the hook's ``systemMessage`` and given to the model as context. The hook also fires for prompts the system injects (platform notes), so it cannot tell who wrote
+person as the hook's ``systemMessage`` and given to the model as context. (A rejection whose reason, on the same line,
+mentions another command is still one rejection.) The hook also fires for prompts the system injects (platform notes), so it cannot tell who wrote
 the text: it records the approval as ``pending`` with the prompt id and transcript path, and the gates
 verify it against the transcript later. It always exits 0 so the prompt still reaches the model, and
 prints one line the ``approve`` skill relays.
@@ -93,8 +94,11 @@ def near_miss(payload: dict, pattern=approvalcommand.HOLDS_COMMAND) -> str | Non
 
     if config.find_root(Path(payload.get("cwd") or ".")) is None:
         return None
+    example = found.group(0)
+    if approvalcommand.REJECT_AFTER.match(payload["prompt"], found.end()):
+        example += " reject <the reason, on one line>"
     return (f"{PREFIX} NOT recorded: {ONE_PER_MESSAGE}. This message holds an approval command together with other text or "
-            f"another command, so nothing was recorded. Send the command alone, for example: {found.group(0)}")
+            f"another command, so nothing was recorded. Send the command alone, for example: {example}")
 
 
 def main() -> int:

@@ -233,7 +233,8 @@ def standing_badge(approval: dict) -> str:
 
 
 def approval_row(approval: dict) -> list[str]:
-    return [esc(approval["gate"]), decision_badge(approval), esc(approval["origin"]), standing_badge(approval), esc(approval["reason"])]
+    reason = "; ".join(part for part in (approval["reason"], approval.get("note")) if part)
+    return [esc(approval["gate"]), decision_badge(approval), esc(approval["origin"]), standing_badge(approval), esc(reason)]
 
 
 def lock_badge(locks: dict) -> str:

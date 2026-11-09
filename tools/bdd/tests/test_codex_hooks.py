@@ -655,6 +655,11 @@ class HookTest(CodexCase):
         self.assertIn("NOT recorded: send one approval per message", json.loads(out)["hookSpecificOutput"]["additionalContext"])
         self.assertEqual(self.data()["approvals"], [])
 
+    def test_codex_has_no_integrity_command_so_one_with_text_gets_no_notice_about_a_second_command(self):
+        payload = {"hook_event_name": "UserPromptSubmit", "session_id": SESSION, "cwd": str(self.root), "turn_id": TURN,
+                   "prompt": "$greenlight-approve integrity moved", "transcript_path": None}
+        self.assertEqual(run_hook(payload)[1], "")
+
     def test_the_two_spellings_do_not_cross_over(self):
         self.assertIsNone(approvalcommand.parse(APPROVE))
         self.assertIsNone(approvalcommand.parse_codex("/greenlight:approve FEAT-007 rules"))

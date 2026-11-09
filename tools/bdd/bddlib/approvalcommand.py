@@ -25,9 +25,10 @@ PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(
 INTEGRITY_PROMPT = re.compile(r"/greenlight:approve[ \t]+integrity(?:[ \t]+(\S.*))?")
 CODEX_COMMAND = "$greenlight-approve"
 CODEX_PROMPT = re.compile(r"\$greenlight-approve[ 	]+(FEAT-\d+)[ 	]+(rules|examples)(?:[ 	]+(reject)(?:[ 	]+(\S.*))?)?")
-_COMMAND_BODY = r"[ \t]+(?:FEAT-\d+[ \t]+(?:rules|examples)|integrity)\b"
-HOLDS_COMMAND = re.compile(r"/greenlight:approve" + _COMMAND_BODY)
-CODEX_HOLDS_COMMAND = re.compile(r"\$greenlight-approve" + _COMMAND_BODY)
+_GATE_COMMAND = r"FEAT-\d+[ \t]+(?:rules|examples)"
+HOLDS_COMMAND = re.compile(r"/greenlight:approve[ \t]+(?:" + _GATE_COMMAND + r"|integrity)\b")
+CODEX_HOLDS_COMMAND = re.compile(r"\$greenlight-approve[ \t]+" + _GATE_COMMAND + r"\b")
+REJECT_AFTER = re.compile(r"[ \t]+reject\b")
 _EXPANDED = re.compile(r"<command-message>[^<\n]*</command-message>\s*<command-name>/greenlight:approve</command-name>"
                        r"\s*<command-args>([^<\n]*)</command-args>")
 
