@@ -258,8 +258,9 @@ def collect(root: Path, feature_dir: Path) -> dict:
 
 
 def describe_amendment(amendment: dict) -> str:
-    was = amendment["was"]
-    return f"{amendment['phase']} corrected from {was['tokens']:,} tokens, {was['seconds']:.1f} s: {amendment['reason']}"
+    was, now = amendment["was"], amendment["now"]
+    return (f"{amendment['phase']} corrected from {was['tokens']:,} tokens, {was['seconds']:.1f} s: {amendment['reason']} "
+            f"(now {now['tokens']:,} tokens, {now['seconds']:.1f} s)")
 
 
 # -- Markdown ---------------------------------------------------------------------------------

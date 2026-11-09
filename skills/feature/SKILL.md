@@ -69,9 +69,10 @@ this one needs. Tell it to read the playbook first.
 - **The model.** Read the `models:` line once when the feature starts, and again after the person changes
   `.bdd/config.toml`. It names the model of every agent: the `[models]` choice of the person, marked
   `(.bdd/config.toml)`, or else the model of the agent's file. Pass it on every Agent call; the call's `model` wins
-  over the agent file. If `bdd status` says a choice cannot be used, pass the model it names and tell the person
-  to run `bdd doctor`.
-- **The feature id first.** Start the task with the feature id and the phase (`FEAT-n test-design: ...`), and name
+  over the agent file. When it names `inherit` or `unknown`, leave `model` out of the call. If `bdd status` says a
+  choice cannot be used, pass the model it names and tell the person to run `bdd doctor`.
+- **The feature id first.** Start the task with the feature id exactly as `bdd status` prints it and the phase
+  (`FEAT-n test-design: ...`), and name
   no other feature that is in progress in it. When several features are in progress, the cost of the agent goes to
   the one its task names; a task that names none or two of them is recorded by hand.
 

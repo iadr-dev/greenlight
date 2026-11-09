@@ -87,19 +87,25 @@ def reply_tokens(line: str, main_thread: bool = False) -> tuple[str, int] | None
     return str(reply), sum(int(usage.get(key) or 0) for key in USAGE_KEYS)
 
 
+def count_replies(path: Path, counted: dict[str, int], main_thread: bool = False) -> bool:
+    """Add the replies of one transcript to ``counted`` (reply id -> tokens, a reply already there is not counted again),
+    reading it line by line: a session's transcript can be hundreds of megabytes. False when it cannot be read."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                found = reply_tokens(line, main_thread) if '"usage"' in line else None
+                if found:
+                    counted.setdefault(*found)
+    except OSError:
+        return False
+    return True
+
+
 def transcript_tokens(path: Path | None, main_thread: bool = False) -> int | None:
     """Input, output and cache-write tokens of every model reply in a transcript, each reply counted once; None if unreadable."""
-    if path is None:
-        return None
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
     counted: dict[str, int] = {}
-    for line in text.splitlines():
-        found = reply_tokens(line, main_thread)
-        if found:
-            counted.setdefault(*found)
+    if path is None or not count_replies(path, counted, main_thread):
+        return None
     return sum(counted.values())
 
 
@@ -153,18 +159,15 @@ def features_named(session_id: object, agent_id: object) -> set[str]:
     return set(FEATURE_ID.findall(task_text(find_subagent_transcript(session_id, agent_id))))
 
 
-def feature_phases(root: Path) -> dict[str, str]:
-    """Every feature of the project with its phase."""
+def feature_states(root: Path) -> list[dict]:
+    """The state of every feature of the project."""
     folder = store.features_dir(root)
-    found: dict[str, str] = {}
-    for feature_dir in sorted(p for p in folder.glob("FEAT-*") if p.is_dir()) if folder.is_dir() else []:
-        data = state.load(feature_dir)
-        found[data["feature"]] = data["phase"]
-    return found
+    return [state.load(d) for d in sorted(p for p in folder.glob("FEAT-*") if p.is_dir())] if folder.is_dir() else []
 
 
 def features_in_progress(root: Path) -> dict[str, str]:
-    return {feature: phase for feature, phase in feature_phases(root).items() if phase != "done"}
+    """Every feature that is not done, with its phase."""
+    return {data["feature"]: data["phase"] for data in feature_states(root) if data["phase"] != "done"}
 
 
 def owner_of(root: Path, session_id: object, agent_id: object) -> tuple[str, str] | tuple[None, None]:
@@ -243,10 +246,11 @@ def claim(entry: dict, feature_id: str, phase: str | None, known: set[str]) -> t
 def collect(root: Path, feature_id: str, phase: str | None = None) -> list[str]:
     """Record the cost of the agents that finished for this feature and are not recorded yet. Returns what was recorded, one line each."""
     feature_dir = store.find_feature_dir(root, feature_id)
-    done = set(state.load(feature_dir).get("cost_agents", []))
+    features = feature_states(root)
+    done = {str(a) for data in features for a in data.get("cost_agents", [])}   # an agent is recorded for one feature only
     lines: list[str] = []
     taken: dict[str, tuple[str, int, float]] = {}
-    known = set(feature_phases(root))
+    known = {data["feature"] for data in features}
     for entry in read_entries(root):
         agent_id = str(entry["agent_id"])
         if agent_id in done or agent_id in taken:
@@ -279,15 +283,32 @@ def collect(root: Path, feature_id: str, phase: str | None = None) -> list[str]:
     return lines
 
 
-def orchestrator_tokens(root: Path, data: dict) -> dict | None:
+def session_replies(session_id: str, cache: dict[str, dict[str, int] | None]) -> dict[str, int] | None:
+    """The main-thread replies of one session (reply id -> tokens), read once per command; None when not found."""
+    if session_id not in cache:
+        path, replies = find_session_transcript(session_id), {}
+        cache[session_id] = replies if path is not None and count_replies(path, replies, main_thread=True) else None
+    return cache[session_id]
+
+
+def orchestrator_tokens(root: Path, data: dict, entries: list[dict] | None = None,
+                        cache: dict[str, dict[str, int] | None] | None = None) -> dict | None:
     """Claude Code's own count of the main sessions that started this feature's recorded agents: how many sessions, how
-    many transcripts were found and their tokens. None when no recorded agent was noted by the hook."""
+    many transcripts were found and their tokens, a reply that two sessions share (a resumed one) counted once. None
+    when no recorded agent was noted by the hook. ``entries`` and ``cache`` let a command that shows several features
+    read the notes and each transcript once."""
     recorded = set(data.get("cost_agents", []))
-    sessions = sorted({e["session"] for e in read_entries(root) if str(e["agent_id"]) in recorded and plain(e.get("session"))})
+    notes = read_entries(root) if entries is None else entries
+    sessions = sorted({e["session"] for e in notes if str(e["agent_id"]) in recorded and plain(e.get("session"))})
     if not sessions:
         return None
-    counts = [c for c in (transcript_tokens(find_session_transcript(s), main_thread=True) for s in sessions) if c is not None]
-    return {"sessions": len(sessions), "found": len(counts), "tokens": sum(counts)}
+    cache = {} if cache is None else cache
+    found = [r for r in (session_replies(s, cache) for s in sessions) if r is not None]
+    counted: dict[str, int] = {}
+    for replies in found:
+        for reply, tokens in replies.items():
+            counted.setdefault(reply, tokens)
+    return {"sessions": len(sessions), "found": len(found), "tokens": sum(counted.values())}
 
 
 def describe_orchestrator(figure: dict | None) -> str:

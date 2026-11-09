@@ -224,6 +224,11 @@ class AttributionTest(AgentCostCase):
         self.assertIn("no phase known", agentcost.collect(self.root, "FEAT-008")[0])
         self.assertIn("discover: 10 tokens", agentcost.collect(self.root, "FEAT-008", "discover")[0])
 
+    def test_an_agent_without_an_owner_is_recorded_for_one_feature_only(self):
+        self.stop_as("bbb", "run the discover playbook")
+        self.assertIn("discover: 10 tokens", agentcost.collect(self.root, "FEAT-007", "discover")[0])
+        self.assertEqual(agentcost.collect(self.root, "FEAT-008", "discover"), [])
+
     def test_the_task_is_the_first_user_message_of_the_agent_transcript(self):
         self.assertEqual(agentcost.task_text(self.subagent_file), "Run the test-design playbook for FEAT-001")
         self.assertEqual(agentcost.task_text(None), "")
@@ -287,7 +292,7 @@ class AmendTest(AgentCostCase):
                          ({"tokens": 150000, "seconds": 12.0}, {"tokens": 30000, "seconds": 12.0}, "typed by hand"))
         self.assertIn("1 correction(s)", self.cli("status")[1])
         self.assertIn("1 correction(s)", self.cli("state", "show", "FEAT-007")[1])
-        self.assertIn("test-design corrected from 150,000 tokens, 12.0 s: typed by hand", self.cli("report", "FEAT-007")[1])
+        self.assertIn("test-design corrected from 150,000 tokens, 12.0 s: typed by hand (now 30,000 tokens, 12.0 s)", self.cli("report", "FEAT-007")[1])
 
     def test_a_second_correction_keeps_both(self):
         state.add_cost(self.feature_dir, "bind", 100, 10.0)

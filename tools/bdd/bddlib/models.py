@@ -7,7 +7,6 @@ choice outside ``ACCEPTED`` is reported by ``bdd doctor`` and the agent stays on
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +15,8 @@ from . import frontmatter, guard
 ACCEPTED = ("fable", "haiku", "opus", "sonnet")
 CONFIG_FILE = ".bdd/config.toml"
 AGENTS = tuple(guard.AGENT_WRITES)
+AGENTS_DIR = Path(__file__).resolve().parents[3] / "agents"      # the agent files shipped with this code
+UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -25,16 +26,17 @@ class Choice:
     chosen: bool          # named in [models], not the agent file's default
 
 
-def agents_dir() -> Path:
-    plugin = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    return (Path(plugin) if plugin else Path(__file__).resolve().parents[3]) / "agents"
+def default(agent: str) -> str:
+    """The ``model`` of the agent's file in this plugin; ``inherit`` without one, ``unknown`` when it cannot be read."""
+    try:
+        meta = frontmatter.parse((AGENTS_DIR / f"{agent}.md").read_text(encoding="utf-8"))[0]
+    except (OSError, frontmatter.FrontmatterError):
+        return UNKNOWN
+    return meta.get("model", "inherit")
 
 
 def defaults() -> dict[str, str]:
-    """The ``model`` of every agent file."""
-    folder = agents_dir()
-    return {agent: frontmatter.parse((folder / f"{agent}.md").read_text(encoding="utf-8"))[0].get("model", "inherit")
-            for agent in AGENTS}
+    return {agent: default(agent) for agent in AGENTS}
 
 
 def choices(configured: tuple[tuple[str, str], ...]) -> list[Choice]:

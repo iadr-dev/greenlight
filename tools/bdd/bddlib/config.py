@@ -359,9 +359,9 @@ def _models(data: dict, path: Path) -> tuple[tuple[str, str], ...]:
     """The ``[models]`` table as written. Which names are agents and models is checked by ``bdd doctor`` and shown by
     ``bdd status``, not here, so a misspelt model never stops the guard or a gate."""
     table = data.get("models", {})
-    if not isinstance(table, dict) or not all(isinstance(v, str) for v in table.values()):
-        raise ConfigError(f'{path}: [models] maps an agent to the name of a model, such as implementer = "opus"')
-    return tuple((str(agent), model.strip()) for agent, model in table.items())
+    if not isinstance(table, dict):
+        raise ConfigError(f'{path}: [models] is a table that maps an agent to the name of a model, such as implementer = "opus"')
+    return tuple((str(agent), model.strip() if isinstance(model, str) else str(model)) for agent, model in table.items())
 
 
 def _schema_version(data: dict, path: Path) -> int:
