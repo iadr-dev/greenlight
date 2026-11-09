@@ -54,8 +54,12 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | Symptom | Cause and fix |
 |---|---|
 | `bdd lint` L015 to L025 | Style warnings, not errors: see [the vocabulary](vocabulary.md#style-warnings). Fix the scenario, or list a code you disagree with under `[lint] ignore` in `.bdd/config.toml`. |
+| `bdd lint` L026 | Two exact record tables of one entity have different columns, so one of them can never pass. Use one column set (an empty cell for an absent value), `records include:` for a part, or a second entity. If the driver of that entity reads only the columns a table lists, list it under `[lint] projected_records` in `.bdd/config.toml`: see [record tables](vocabulary.md#record-tables). |
 | `bdd lint` L002 | The step is not in the [vocabulary](vocabulary.md); the message suggests the closest phrase. Add a project step only if the behaviour is real. |
 | `bdd design` D5, D6 | Diagrams must be plain text; list only interfaces that exist in `system.md`. |
+| `uses the boundary-value card for a date but records no leap day` (also text: empty value, maximum length; a paged list: page size 1) | The test-design gate and `bdd trace` (gap `T008`) found a rule with the `boundary-value` technique and no example of that edge. Add the example to the rule's section of `test-design.md`, or one line `- No leap day boundary: <why this rule has none>` (also `empty`, `maximum length`, `page size 1`). |
+| `is tagged @existing but failed in the red run` | `bdd classify` (and the bind gate) found a scenario tagged `@existing` that failed before implementation, so it does not work yet. Remove the tag. |
+| `reviews/T-n.m-code-reviewer.md is older than the code it covers` | A production file of the task changed after the reviewer finished (the message names up to three). Run the reviewer again on the task; the new report is sealed with the new files. |
 | `bdd trace` shows a gap | A rule without examples or an example without a test; the code names which. |
 
 If something looks wrong that this page does not cover, run `bdd status --json` and `bdd state show FEAT-n --json`

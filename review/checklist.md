@@ -22,7 +22,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 |---|---|---|---|
 | T1 | Every rule has at least one example, or an exclusion with a reason | yes | `bdd trace` gaps `T001`; read the exclusions |
 | T2 | The chosen techniques fit the `apply_when` of their cards, and the card ids are recorded | no | compare `test-design.md` with `bdd cards list` |
-| T3 | The Known pitfalls of every cited card are respected (for example both sides of every threshold) | yes | read each cited card's pitfalls against the examples |
+| T3 | The Known pitfalls of every cited card are respected (for example both sides of every threshold). **Checked by the CLI:** for a rule that uses `boundary-value`, the leap day of a date, the empty value and the maximum of a text, and page size 1 of a paged list are recorded as examples or as `No <edge> boundary: <reason>` (the test-design gate, `bdd trace` gap `T008`); confirm the gate passed and that each reason holds. The other pitfalls stay yours | yes | `bdd state show FEAT-n` (the test-design gate passed); read each reason line; read each cited card's other pitfalls against the examples |
 | T4 | Every rule with inputs has a negative example or a stated exclusion | yes | `negative-cases` card; read the examples |
 | T5 | No example has a vague expected result ("works correctly", "properly"); each one is observable and traceable to a rule | yes | read the Then steps |
 
@@ -30,7 +30,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 
 | ID | Check | Blocking | How |
 |---|---|---|---|
-| S1 | Lint is clean; no implementation detail in the features | yes | `bdd lint` |
+| S1 | Lint is clean; no implementation detail in the features. **Checked by the CLI:** the exact record tables of one entity in a feature use one column set (`L026`) | yes | `bdd lint` |
 | S2 | Every `then` step definition asserts | yes | `bdd scan` finding `S2`, then read the step |
 | S3 | Domain steps use the drivers of the core instructions they compose | no | read `.bdd/vocabulary.toml` and the step modules |
 | S4 | Drivers stub only the dependencies declared in `system.md` | yes | `bdd scan` finding `S4` |
@@ -48,7 +48,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | Q3 | When `[adapters.quality]` is configured, the recorded result is current and every check passed | yes when configured, otherwise not applicable | `bdd check FEAT-n --check` |
 | Q4 | The diff uses no deprecated or removed API: no deprecation warning is silenced or ignored, and the calls into libraries match their current documentation. A deprecation warning that a dependency or test tool the diff did not choose emits on its own (for example a test client warning about its own successor) is not a finding against the diff: list it as should-fix for the person, since upgrading a dependency is theirs to decide | yes, for what the diff introduces | the deprecation check where configured; otherwise read the diff against the current documentation (project docs, or a documentation tool such as context7), and against the writer's record (`bdd docs FEAT-n --list`): every task has one, its version is the one the project declares, and the calls match the source it names. The record is the writer's own account; the check is yours |
 | Q5 | Nothing was suppressed to pass a check: no blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `// nolint` or `@ts-ignore` added without a stated reason | yes | search the diff for suppression markers |
-| Q6 | Every review `bdd route FEAT-n` asks for is in `reviews/` with a verdict, and no must-fix item in the latest report of a reviewer is left unresolved in the code; a must-fix the orchestrator carried into the report after two rounds is listed there | yes | `bdd route FEAT-n`; read `reviews/*.md` and the diff |
+| Q6 | Every review `bdd route FEAT-n` asks for is in `reviews/` with a verdict, and no must-fix item in the latest report of a reviewer is left unresolved in the code; a must-fix the orchestrator carried into the report after two rounds is listed there. **Checked by the CLI:** where the hooks run, the implement gate refuses a review older than the production files of its task (by hash, `older than the code it covers`); confirm the gate passed and that no production file changed after it | yes | `bdd route FEAT-n`; `bdd state show FEAT-n` (the implement gate); read `reviews/*.md` and the diff |
 
 ## D - API contract and data
 
@@ -78,7 +78,7 @@ E3 UNVERIFIABLE - no UI scenarios in this feature
 | E1 | All scenarios of the feature are green, and the full suite is green | yes | `bdd classify FEAT-n --expect green`, then the project's full test command |
 | E2 | The shuffled and the isolated runs are green | yes | `bdd run FEAT-n --shuffle`, `--isolated`, then the plain run last |
 | E3 | No fixed waits; where time, concurrency, network or UI are involved, repeated runs on one commit agree | no | `bdd scan` finding `E3`; the `stability-rerun` card |
-| E4 | Scenarios tagged `@existing` really passed before implementation | yes | the red classification and the git history |
+| E4 | Scenarios tagged `@existing` really passed before implementation. **Checked by the CLI:** `bdd classify` makes the red invalid when an `@existing` scenario failed in it; confirm the red is valid | yes | `bdd classify FEAT-n --run red`; the git history |
 | E5 | Optional: the mutation check on the changed files, with survivors explained. When `[adapters.mutation]` is configured the recorded result must be current and at or above the threshold; without the table this item is not applicable | yes when configured, otherwise no | `bdd mutate FEAT-n --check`; the `mutation-check` card |
 | E6 | Optional: the stability check. When `[stability]` is configured the recorded result must be current, cover at least the configured number of runs and show no scenario that changed outcome; without the table this item is not applicable | no | `bdd stability FEAT-n --check` |
 

@@ -15,6 +15,7 @@ Why these: <the card's apply-when, matched to this rule>
 
 Excluded:
 - <case> because <reason>
+- No <leap day | empty | maximum length | page size 1> boundary: <why this rule has none> (only for a boundary-value rule)
 
 ## Coverage check
 
