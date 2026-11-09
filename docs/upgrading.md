@@ -12,6 +12,12 @@ Update greenlight from the `/plugin` menu (marketplace `greenlight`), or remove 
 Restart the Claude Code session afterwards so the hooks and skills are reloaded. `/greenlight:init` (or `bdd doctor`)
 re-checks the machine.
 
+An update is not an integrity violation. The integrity check records which folder and which version of the plugin it
+watches; at the first prompt after Claude Code runs a new version from its own plugin cache (with nothing open), it takes the new plugin's files as the baseline and `bdd doctor` says
+`integrity: plugin updated from 1.2.1 to 1.2.2; baseline refreshed`. A plugin file edited in place, its version
+included, is still reported. Violations an older greenlight opened for an update close by themselves at the first tool
+call after you move to this version.
+
 ## Your project's `.bdd/`
 
 `.bdd/` has a schema version (`version` in `.bdd/config.toml`; absent means 1).

@@ -6,6 +6,7 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- The person closes open integrity violations by typing one line, `/greenlight:approve integrity #3,#4 <reason>` (no ids when one is open), which the tool-call check, a refused prompt and `bdd status` now give with the files involved. The approval hook lists exactly which violations and file contents it covers and records it pending; it closes them once the transcript shows the person typed it, keeps who, when and why, and `bdd report` lists it. A file that changed after it was reported is not covered, and a prompt counts once. `bdd approve integrity` from a shell is refused, and a lock violation is still changed through `/greenlight:change`.
 - `[models]` in `.bdd/config.toml` names the model of an agent (`implementer = "opus"`). `bdd status` prints the model every agent runs on, marking a choice made in the config; without one it is the model of the agent's file. The orchestrator passes that model on every Agent call. `bdd doctor` reports a name that is not an agent or a model the Agent call accepts (`fable`, `haiku`, `opus`, `sonnet`), and such a choice is not used (D68).
 - `bdd cost FEAT-n --amend PHASE --tokens N --seconds S --reason "..."` corrects the recorded cost of a phase. The figures it replaces stay on record with the reason, `bdd report` and `bdd pr` list every correction, and `bdd status` and `bdd state show` count them (D68).
 - `bdd report`, `bdd pr` and `bdd status` show the orchestrator session's own tokens next to the agents' recorded cost, labelled as Claude Code's own count and never added to the record (D37, D68).
@@ -15,6 +16,9 @@ versions follow [SemVer](https://semver.org/).
 - The product-analyst, qa-designer and system-analyst agents have the Edit tool and change an existing file with it instead of writing the whole file again. The guard judges an edit exactly like a write, so each still writes only the files of its role (D68).
 - With several features in progress, `bdd cost FEAT-n --collect` records an agent for the feature in progress that its task names; before, such an agent was recorded for none and had to be placed by hand. The orchestrator starts every task with the feature id (D68).
 - The discover, test-design and implement playbooks no longer ask an agent to report its tokens and time, which it cannot measure.
+
+### Fixed
+- The integrity check no longer blocks ordinary changes (D63, FEAT-109). Plugin files are keyed by their path inside the plugin and its folder and version are recorded, so the first prompt after Claude Code installed a new version in its plugin cache (and its `installed_plugins.json` names exactly that copy) records one line (`bdd doctor`: `integrity: plugin updated from 1.2.1 to 1.2.2; baseline refreshed`) instead of a violation per file. Claude Code's `installed_plugins.json` and `known_marketplaces.json` are now watched; the plugin copy Codex runs is not. Unreadable integrity data, or a check that fails, is a violation instead of a silent pass.
 
 ## [1.2.1] - 2026-11-05
 
