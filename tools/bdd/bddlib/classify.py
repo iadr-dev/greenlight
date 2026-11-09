@@ -7,7 +7,8 @@ Each failing test case is classified from its failure text with the adapter's pa
     unknown         a failure no pattern recognises: it blocks, because guessing would let a broken test pass the gate
 
 Defect patterns are checked first. A *valid red* means every scenario of the feature ran and failed as
-``expected-fail``; a scenario that passed is only acceptable if it is tagged ``@existing``.
+``expected-fail``; a scenario that passed is only acceptable if it is tagged ``@existing``, and a scenario tagged
+``@existing`` must have passed.
 """
 from __future__ import annotations
 
@@ -114,6 +115,9 @@ def verdict_red(rows: list[dict]) -> dict:
         elif result == PASS and not row["existing"]:
             problems.append(f'"{name}" passed before implementation: it either already works (tag it @existing) '
                             "or it asserts nothing")
+        elif result == EXPECTED and row["existing"]:
+            problems.append(f'"{name}" is tagged @existing but failed in the red run: it does not work yet, so remove '
+                            "the tag" + (f" ({row['detail']})" if row["detail"] else ""))
         elif result in ("not-run", SKIPPED):
             problems.append(f'"{name}" did not run')
     return {"valid": not problems and bool(rows), "problems": problems or ([] if rows else ["the feature has no scenarios"])}
