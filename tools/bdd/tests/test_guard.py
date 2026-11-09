@@ -846,7 +846,8 @@ class PrecisionTest(GuardCase):
                              ("cd api/src && cat > ports/barrier.ts <<'EOF'\nimport './../../tests/drivers/barrier.ts';\nEOF", None),
                              ("python - <<'EOF'\np='ports/barrier.ts'\nopen(p,'w').write(\"export * from './ports/barrier.ts'\")\nEOF",
                               self.root / "api" / "src"),
-                             ("cp tests/drivers/barrier.ts /tmp/copy.ts", None), ("T=$(mktemp -d); cp -r tests $T/", None)]:
+                             ("cp tests/drivers/barrier.ts /tmp/copy.ts", None), ("T=$(mktemp -d); cp -r tests $T/", None),
+                             (f"cd {(self.root / 'api' / 'src' / 'ports').as_posix()} && cat > barrier.ts <<'EOF'\nx\nEOF", None)]:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command, cwd=cwd), command)
 
@@ -863,7 +864,12 @@ class PrecisionTest(GuardCase):
                         "X=rm; $X -f tests/drivers/barrier.ts", "$CMD tests/drivers/barrier.ts",
                         'X="rm -f tests/drivers/barrier.ts"; eval "$X"', "$(echo rm) tests/drivers/barrier.ts",
                         "cat > out.txt <<EOF\n$(rm tests/drivers/barrier.ts)\nEOF",
-                        "git apply <<'EOF'\n--- a/tests/drivers/barrier.ts\n+++ b/tests/drivers/barrier.ts\nEOF"]:
+                        "git apply <<'EOF'\n--- a/tests/drivers/barrier.ts\n+++ b/tests/drivers/barrier.ts\nEOF",
+                        "{rm,x} tests/drivers/barrier.ts", "/bin/r? tests/drivers/barrier.ts",
+                        "env -S 'rm tests/drivers/barrier.ts'", "flock /tmp/l -c 'rm tests/drivers/barrier.ts'",
+                        "$'rm' tests/drivers/barrier.ts", "r''m tests/drivers/barrier.ts", "sudo -u root rm tests/drivers/barrier.ts",
+                        "cd api/src/ports && cat > barrier.ts <<'EOF'\nx\nEOF",                # the shell may not be where the call says
+                        f"cd {(self.root / 'tests' / 'drivers').as_posix()} && cat > ./barrier.ts <<'EOF'\nx\nEOF"]:
             with self.subTest(command=command):
                 self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
 

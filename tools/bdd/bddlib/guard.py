@@ -707,12 +707,14 @@ def target_places(token: str, target: shellwrites.Target, bare: bool = False) ->
     be told: a pattern (a find name, a glob), a variable, a folder option, an unknown folder; a path in a script whose
     folder does not exist (it could be the end of a longer one); and, unless ``bare``, a name with no folder of its own
     (``name``, ``./name``, ``../name``), which could be anywhere: the shell may be in another folder than the call says,
-    and a script may join it to any. ``bare`` is for a check that only refuses more when it places more."""
+    and a script may join it to any; except after a `cd` to an absolute folder. ``bare`` is for a check that only refuses
+    more when it places more."""
     word = token.replace("\\", "/")
     if target.names_only or _GLOB.search(word) or "$" in word or not word.strip("/."):
         return None
     segments = [part for part in word.split("/")[:-1] if part not in ("", ".", "..")]
-    if not segments and not word.startswith("/") and not re.match(r"[A-Za-z]:/", word) and not (bare and not target.code):
+    placeable = not target.code and (bare or target.certain)       # a name after `cd /abs/path &&` lands there
+    if not segments and not word.startswith("/") and not re.match(r"[A-Za-z]:/", word) and not placeable:
         return None
     if word.startswith("~/"):
         word = Path.home().as_posix() + word[1:]

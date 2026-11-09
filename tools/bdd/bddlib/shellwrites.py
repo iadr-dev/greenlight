@@ -26,6 +26,7 @@ SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh
           "watch", "script"}
 INTERPRETERS = {"python", "python3", "py", "node", "nodejs", "bun", "deno", "perl", "ruby", "php", "awk", "gawk", "tsx"}
 MOVES = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
+RUNS = WRITE_VERBS | SHELLS | INTERPRETERS | {"git", "sed", "perl", "find", "xargs"}   # a quoted argument starting so is read
 FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 FOLDER_FLAGS = ("--directory", "--chdir", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir")
 # The flags with which `cp` writes only its destination (a folder target, a link or a hard link writes elsewhere too).
@@ -112,6 +113,7 @@ class Target:
     dirs: tuple[Path | None, ...]
     code: bool = False
     names_only: bool = False                               # its paths are names (a find pattern, a -C folder)
+    certain: bool = False                                  # every folder in ``dirs`` came from a `cd` to a known place
 
 
 @dataclass
@@ -449,6 +451,7 @@ class _Reader:
         self.found = Writes()
         self.scripts: dict[str, str] = {}                # the scripts the command writes, by file name
         self.moves_codex = False                         # it sets CODEX_HOME
+        self.exact: set[Path] = set()                    # folders a `cd` reached for sure (from an absolute path)
 
     def read(self, commands: list[Simple], depth: int) -> None:
         piped = chained = False
@@ -471,7 +474,8 @@ class _Reader:
             return
         if text.casefold() in HARMLESS_TARGETS or not text:
             return
-        self.found.targets.append(Target(text, raw, pattern, tuple(self.dirs), names_only=names_only))
+        certain = bool(self.dirs) and all(folder in self.exact for folder in self.dirs)
+        self.found.targets.append(Target(text, raw, pattern, tuple(self.dirs), names_only=names_only, certain=certain))
 
     def read_simple(self, simple: Simple, piped: bool, depth: int) -> None:
         if simple.expands:
@@ -511,6 +515,12 @@ class _Reader:
         except _Unknown:
             self.found.whole = True                                # `$CMD x`, `$(...) x`: the program is not known
             return
+        if not words[0].quoted and (re.search(r"[*?]|\[.+\]", program_text) or re.search(r"\{[^}]*,", program_text)):
+            self.found.whole = True                                # `/bin/r? x`, `{rm,x} y`: the shell picks the program
+            return
+        for word in words:
+            if word.quoted and program_name(word.text.split(None, 1)[0] if word.text.split() else "") in RUNS:
+                self.shell([word], [], False, depth)               # `env -S 'rm x'`, `flock l -c 'rm x'`: a command in quotes
         names_only = any(not w.quoted and (w.text == "-C" or w.text.startswith(FOLDER_FLAGS)) for w in words)
         names = [program_text and program_name(program_text)] + [("" if w.quoted else w.name()) for w in words[1:]]
         if "xargs" in names and any(n in WRITE_VERBS or n in SHELLS or n in INTERPRETERS for n in names[names.index("xargs"):]):
@@ -566,6 +576,7 @@ class _Reader:
             return
         operand = next((w for w in operands if not _flag(w) and w.text.casefold() != "/d"), None)
         if operand is None:
+            self.exact.add(Path.home())
             self.moved_to(Path.home())
             return
         try:
@@ -575,6 +586,8 @@ class _Reader:
             return
         self.found.context.append(text)
         moved = list(dict.fromkeys(_join(base, text) for base in self.dirs))
+        absolute = Path(windows_path(text)).is_absolute()
+        self.exact |= {_join(b, text) for b in self.dirs if _join(b, text) is not None and (absolute or b in self.exact)}
         self.union = [*self.union, *(d for d in moved if d not in self.union)]
         self.chain = moved
 
