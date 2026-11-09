@@ -16,7 +16,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import approvals, classify, enforcement, gates, lockfile, mutation, quality, runner, state, store, trace
+from . import agentcost, approvals, classify, enforcement, gates, lockfile, mutation, quality, runner, state, store, trace
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -252,7 +252,15 @@ def collect(root: Path, feature_dir: Path) -> dict:
         "changes": len(data.get("changes", [])),
         "audit": audit_of(feature_dir),
         "cost": {phase: {"tokens": c["tokens"], "seconds": round(c["seconds"], 1)} for phase, c in sorted(data["cost"].items())},
+        "cost_amendments": [{key: a[key] for key in ("phase", "was", "now", "reason", "at")} for a in data.get("cost_amendments", [])],
+        "orchestrator": agentcost.orchestrator_tokens(root, data),
     }
+
+
+def describe_amendment(amendment: dict) -> str:
+    was, now = amendment["was"], amendment["now"]
+    return (f"{amendment['phase']} corrected from {was['tokens']:,} tokens, {was['seconds']:.1f} s: {amendment['reason']} "
+            f"(now {now['tokens']:,} tokens, {now['seconds']:.1f} s)")
 
 
 # -- Markdown ---------------------------------------------------------------------------------
@@ -382,6 +390,8 @@ def render_tail(facts: dict) -> list[str]:
     if facts["cost"]:
         out += ["## Cost", "", "| Phase | Tokens | Seconds |", "|---|---|---|"]
         out += [f"| {phase} | {c['tokens']} | {c['seconds']:g} |" for phase, c in facts["cost"].items()] + [""]
+        out += [f"- {cell(describe_amendment(a))}" for a in facts["cost_amendments"]] + ([""] if facts["cost_amendments"] else [])
+        out += [agentcost.describe_orchestrator(facts["orchestrator"]) + ".", ""]
     return out
 
 

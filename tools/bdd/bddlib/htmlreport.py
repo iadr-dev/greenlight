@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import classify, pr, runner, state, store
+from . import agentcost, classify, pr, runner, state, store
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .guard import path_key
@@ -280,7 +280,11 @@ def cost_section(facts: dict) -> list[str]:
     if not facts["cost"]:
         return section("cost", "Cost", ['<p class="muted">No cost recorded.</p>'])
     rows = [[esc(phase), esc(c["tokens"]), esc(f"{c['seconds']:g}")] for phase, c in facts["cost"].items()]
-    return section("cost", "Cost", [table(["Phase", "Tokens", "Seconds"], rows)])
+    body = [table(["Phase", "Tokens", "Seconds"], rows)]
+    if facts["cost_amendments"]:
+        body += ["<h3>Corrections</h3>", bullets([esc(pr.describe_amendment(a)) for a in facts["cost_amendments"]])]
+    body.append(f'<p class="muted">{esc(agentcost.describe_orchestrator(facts["orchestrator"]))}.</p>')
+    return section("cost", "Cost", body)
 
 
 def render(facts: dict, results: dict[str, dict[str, str]]) -> str:

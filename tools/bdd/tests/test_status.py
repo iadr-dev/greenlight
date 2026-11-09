@@ -57,7 +57,10 @@ class TableTest(StatusCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / ".bdd").mkdir()
             code, out, _ = self.run_status(cwd=Path(tmp))
-        self.assertEqual((code, out.strip()), (0, "no features yet; start one with /greenlight:feature"))
+        lines = out.strip().splitlines()
+        self.assertEqual((code, lines[0]), (0, "no features yet; start one with /greenlight:feature"))
+        self.assertTrue(lines[1].startswith("models: product-analyst opus"), lines)
+        self.assertEqual(len(lines), 2)
 
     def test_open_integrity_violations_are_listed(self):
         plugin = self.root / "plugin"

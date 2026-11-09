@@ -6,6 +6,7 @@
     bdd assume FEAT-007 --text "..." --rationale "..." [--alt "..."]
     bdd cost FEAT-007 --phase bind --tokens 12000 --seconds 95
     bdd cost FEAT-007 --collect               the agents that finished, from the hook's notes and their transcripts
+    bdd cost FEAT-007 --amend bind --tokens 9000 --reason "..."   correct a phase; the old figures stay on record
     bdd mode FEAT-007 --switch autopilot --reason "you decide"
 """
 from __future__ import annotations
@@ -86,6 +87,11 @@ def describe_red(red: dict | None) -> str:
     return f"commit {red['commit'][:8]} ({state_text})"
 
 
+def corrections(data: dict) -> str:
+    count = len(data.get("cost_amendments", []))
+    return f" ({count} correction(s), see `bdd report`)" if count else ""
+
+
 def render(info: dict) -> str:
     gate_text = ", ".join(f"{n} {g['result']}" for n, g in info["gates"].items()) or "none yet"
     lock_text = ", ".join(f"{s}: {n} file(s)" for s, n in sorted(info["locks"].items())) or "none"
@@ -100,7 +106,7 @@ def render(info: dict) -> str:
              f"gates: {gate_text}", f"approvals: {describe_approvals(info['approvals'])}",
              f"assumptions: {len(info['assumptions'])}", f"locks: {lock_text}",
              f"red: {describe_red(info['red'])}", f"enforcement: {level}",
-             f"cost: {tokens:,} tokens, {seconds:.1f} s"]
+             f"cost: {tokens:,} tokens, {seconds:.1f} s" + corrections(info)]
     return "\n".join(lines)
 
 
@@ -184,14 +190,21 @@ def run_cost(argv: list[str]) -> int:
                                  "that finished cost (their time from the hook, their tokens from their own transcripts).")
     ap.add_argument("feature")
     ap.add_argument("--phase", choices=state.PHASES, help="the phase; with --collect, only for agents the hook could not place")
-    ap.add_argument("--tokens", type=int, default=0)
-    ap.add_argument("--seconds", type=float, default=0.0)
+    ap.add_argument("--tokens", type=int)
+    ap.add_argument("--seconds", type=float)
     ap.add_argument("--collect", action="store_true", help="record the agents that finished and are not recorded yet")
+    ap.add_argument("--amend", choices=state.PHASES, metavar="PHASE",
+                    help="correct the recorded cost of PHASE to --tokens and/or --seconds; the old figures stay on record")
+    ap.add_argument("--reason", default="", help="with --amend: why the recorded figure is wrong")
     args = ap.parse_args(argv)
-    if args.collect and (args.tokens or args.seconds):
+    if args.collect and (args.tokens is not None or args.seconds is not None):
         ap.error("--collect takes the figures from the agents' transcripts; do not give --tokens or --seconds")
-    if not args.collect and not args.phase:
-        ap.error("--phase is required unless --collect is given")
+    if args.amend and (args.collect or args.phase):
+        ap.error("--amend names the phase to correct; do not give --collect or --phase with it")
+    if args.reason and not args.amend:
+        ap.error("--reason belongs to --amend")
+    if not args.collect and not args.amend and not args.phase:
+        ap.error("--phase is required unless --collect or --amend is given")
 
     def collect_cost() -> int:
         lines = agentcost.collect(project_root(), args.feature, args.phase)
@@ -200,11 +213,21 @@ def run_cost(argv: list[str]) -> int:
 
     def add_cost() -> int:
         feature_dir = feature_dir_of(project_root(), args.feature)
-        entry = state.add_cost(feature_dir, args.phase, args.tokens, args.seconds)["cost"][args.phase]
+        entry = state.add_cost(feature_dir, args.phase, args.tokens or 0, args.seconds or 0.0)["cost"][args.phase]
         print(f"{args.feature} {args.phase}: {entry['tokens']:,} tokens, {entry['seconds']:.1f} s in {entry['runs']} run(s)")
         return 0
 
-    return guarded("cost", collect_cost if args.collect else add_cost)
+    def amend_cost() -> int:
+        feature_dir = feature_dir_of(project_root(), args.feature)
+        done = state.amend_cost(feature_dir, args.amend, args.tokens, args.seconds, args.reason)
+        print(f"{args.feature} {args.amend}: {figures(done['was'])} corrected to {figures(done['now'])}")
+        return 0
+
+    return guarded("cost", amend_cost if args.amend else collect_cost if args.collect else add_cost)
+
+
+def figures(cost: dict) -> str:
+    return f"{cost['tokens']:,} tokens, {cost['seconds']:.1f} s"
 
 
 def run_mode(argv: list[str]) -> int:

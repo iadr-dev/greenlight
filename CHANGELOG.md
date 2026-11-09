@@ -5,8 +5,16 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `[models]` in `.bdd/config.toml` names the model of an agent (`implementer = "opus"`). `bdd status` prints the model every agent runs on, marking a choice made in the config; without one it is the model of the agent's file. The orchestrator passes that model on every Agent call. `bdd doctor` reports a name that is not an agent or a model the Agent call accepts (`fable`, `haiku`, `opus`, `sonnet`), and such a choice is not used (D68).
+- `bdd cost FEAT-n --amend PHASE --tokens N --seconds S --reason "..."` corrects the recorded cost of a phase. The figures it replaces stay on record with the reason, `bdd report` and `bdd pr` list every correction, and `bdd status` and `bdd state show` count them (D68).
+- `bdd report`, `bdd pr` and `bdd status` show the orchestrator session's own tokens next to the agents' recorded cost, labelled as Claude Code's own count and never added to the record (D37, D68).
+
 ### Changed
 - Shared test plumbing is locked once for the project (D65, FEAT-111). `.bdd/plumbing.lock.json` holds the support files and the files the adapters ship; a feature's bind lock holds only its own step and driver files and the plumbing digest. Binding the next feature with a new driver no longer makes an earlier feature's lock incomplete. A plumbing change is its own change, `bdd unlock --plumbing` and `bdd lock --plumbing --reason`, after which every bound feature reruns its scenarios once and none is reopened; `bdd status` shows the plumbing lock and who still has to rerun. The guard refuses plumbing files as locked by the project. Old locks keep working; `bdd migrate` converts them (backup in `.bdd-backup-plumbing`).
+- The product-analyst, qa-designer and system-analyst agents have the Edit tool and change an existing file with it instead of writing the whole file again. The guard judges an edit exactly like a write, so each still writes only the files of its role (D68).
+- With several features in progress, `bdd cost FEAT-n --collect` records an agent for the feature in progress that its task names; before, such an agent was recorded for none and had to be placed by hand. The orchestrator starts every task with the feature id (D68).
+- The discover, test-design and implement playbooks no longer ask an agent to report its tokens and time, which it cannot measure.
 
 ## [1.2.1] - 2026-11-05
 

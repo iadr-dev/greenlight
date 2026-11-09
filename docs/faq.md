@@ -80,7 +80,13 @@ code. Afterwards a change to that area goes through `/greenlight:feature` with a
 **What does it cost?**
 A feature runs several agents; a small feature with Sonnet-class models is a modest number of turns, a large one is
 not. `bdd cost FEAT-n --collect` records what each phase used, from the plugin's hook and the agents' own transcripts, and the report shows it. The autonomy level and `--quick` control how much
-ceremony you pay for.
+ceremony you pay for. The report also shows Claude Code's own count of the orchestrator session next to the record,
+and a wrong figure is corrected with `bdd cost FEAT-n --amend PHASE --tokens N --reason "..."`, which keeps the old one.
+
+**Which model does each agent run on?**
+The one `bdd status` names on its `models:` line: the model of the agent's file, unless `[models]` in
+`.bdd/config.toml` names another (`implementer = "opus"`; `fable`, `haiku`, `opus` or `sonnet`). `bdd doctor` reports a
+name it cannot use.
 
 **How do I stop or undo a feature?**
 Nothing is applied outside your working tree: the feature is files under `.bdd/` plus tests and code in git. Use git to

@@ -25,8 +25,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    FEAT-n --text "..." --rationale "..." --alt "..."`.
 6. Under `autopilot`, do not ask: answer each blocking question with the most conservative reasonable
    choice and record it as an assumption with the alternatives rejected.
-7. Report the tokens and time you spent; the orchestrator records them with `bdd cost FEAT-n --phase discover
-   --tokens N --seconds S`.
+7. Do not report tokens or time: you cannot measure them. The orchestrator records them from the plugin's hook and
+   your own transcript (`bdd cost FEAT-n --collect`).
 
 ## Output files
 

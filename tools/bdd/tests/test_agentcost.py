@@ -170,6 +170,161 @@ class CollectTest(AgentCostCase):
         self.assertEqual(self.cli("cost", "FEAT-007", "--phase", "bind", "--tokens", "10", "--seconds", "2")[0], 0)
 
 
+class AttributionTest(AgentCostCase):
+    """With several features in progress, an agent belongs to the one in progress that its task names."""
+
+    def setUp(self):
+        super().setUp()
+        state.create(self.root, "FEAT-008", "Another", "standard")
+
+    def agent(self, agent_id: str, task: object) -> None:
+        folder = self.project_transcripts / SESSION / "subagents"
+        lines = [{"type": "user", "timestamp": "2026-11-08T10:00:00.000Z", "message": {"role": "user", "content": task}},
+                 {"type": "assistant", "timestamp": "2026-11-08T10:00:20.000Z",
+                  "message": {"id": f"msg_{agent_id}", "role": "assistant", "usage": {"input_tokens": 7, "output_tokens": 3}}}]
+        (folder / f"agent-{agent_id}.jsonl").write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+
+    def stop_as(self, agent_id: str, task: object, agent_type: str = "greenlight:product-analyst") -> dict:
+        self.agent(agent_id, task)
+        self.stop(agent_type=agent_type, agent_id=agent_id, duration_ms=None)
+        return next(n for n in agentcost.read_entries(self.root) if n["agent_id"] == agent_id)
+
+    def test_the_task_names_the_feature_and_the_note_takes_its_phase(self):
+        self.gate("discover")
+        note = self.stop_as("bbb", "FEAT-008 discover: run the discover playbook")
+        self.assertEqual((note["feature"], note["phase"]), ("FEAT-008", "discover"))
+        note = self.stop_as("ccc", [{"type": "text", "text": "FEAT-007 specify: write the rules"}])
+        self.assertEqual((note["feature"], note["phase"]), ("FEAT-007", "specify"))
+
+    def test_each_feature_collects_its_own_agents(self):
+        self.stop_as("bbb", "FEAT-008 discover: run the discover playbook")
+        self.stop_as("ccc", "FEAT-007 discover: run the discover playbook")
+        self.assertEqual(agentcost.collect(self.root, "FEAT-008"), ["bbb (greenlight:product-analyst) discover: 10 tokens, 20 s"])
+        self.assertEqual(agentcost.collect(self.root, "FEAT-007"), ["ccc (greenlight:product-analyst) discover: 10 tokens, 20 s"])
+        self.assertEqual(self.data()["cost_agents"], ["ccc"])
+
+    def test_a_task_that_names_two_features_in_progress_or_none_is_not_guessed(self):
+        for agent_id, task in (("bbb", "FEAT-007 and FEAT-008: compare them"), ("ccc", "run the discover playbook")):
+            with self.subTest(task=task):
+                self.assertIsNone(self.stop_as(agent_id, task)["feature"])
+
+    def test_a_feature_that_is_done_or_unknown_does_not_count_as_named(self):
+        self.assertIsNone(self.stop_as("bbb", "FEAT-001 discover: an id from another project")["feature"])
+        note = self.stop_as("ccc", "FEAT-008 discover, as FEAT-001 did")
+        self.assertEqual(note["feature"], "FEAT-008")
+
+    def test_an_agent_noted_without_an_owner_is_claimed_by_the_feature_its_task_names(self):
+        """Notes written before tasks were read (the Fieldly run) have no owner; the task still tells them apart."""
+        self.agent("bbb", "FEAT-008 discover: run the discover playbook")
+        path = agentcost.agents_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"agent_id": "bbb", "session": SESSION, "agent": "greenlight:product-analyst",
+                                    "feature": None, "phase": None, "duration_ms": 0}) + "\n", encoding="utf-8")
+        self.assertEqual(agentcost.collect(self.root, "FEAT-007", "discover"), [])
+        self.assertIn("no phase known", agentcost.collect(self.root, "FEAT-008")[0])
+        self.assertIn("discover: 10 tokens", agentcost.collect(self.root, "FEAT-008", "discover")[0])
+
+    def test_an_agent_without_an_owner_is_recorded_for_one_feature_only(self):
+        self.stop_as("bbb", "run the discover playbook")
+        self.assertIn("discover: 10 tokens", agentcost.collect(self.root, "FEAT-007", "discover")[0])
+        self.assertEqual(agentcost.collect(self.root, "FEAT-008", "discover"), [])
+
+    def test_the_task_is_the_first_user_message_of_the_agent_transcript(self):
+        self.assertEqual(agentcost.task_text(self.subagent_file), "Run the test-design playbook for FEAT-001")
+        self.assertEqual(agentcost.task_text(None), "")
+        self.assertEqual(agentcost.task_text(self.root / "nowhere.jsonl"), "")
+
+
+class OrchestratorTest(AgentCostCase):
+    """Claude Code's own count of the session that started the agents is shown, never recorded (D37)."""
+
+    def test_the_session_of_the_recorded_agents_is_counted_from_its_main_transcript(self):
+        self.stop()
+        agentcost.collect(self.root, "FEAT-007")
+        figure = agentcost.orchestrator_tokens(self.root, self.data())
+        self.assertEqual(figure, {"sessions": 1, "found": 1, "tokens": 5 + 300 + 9000 + 2 + 90 + 400})
+        self.assertEqual(self.data()["cost"]["discover"]["tokens"], 1282)            # the record holds the agents only
+        text = agentcost.describe_orchestrator(figure)
+        self.assertIn("Orchestrator session: 9,797 tokens, Claude Code's own count", text)
+        self.assertIn("not part of the recorded cost", text)
+
+    def test_a_subagent_reply_in_the_session_transcript_is_not_the_sessions_own(self):
+        session = self.project_transcripts / "session.jsonl"
+        sidechain = {"type": "assistant", "isSidechain": True,
+                     "message": {"id": "msg_side", "usage": {"input_tokens": 100000}}}
+        session.write_text(session.read_text(encoding="utf-8") + json.dumps(sidechain) + "\n", encoding="utf-8")
+        self.assertEqual(agentcost.transcript_tokens(session, main_thread=True), 9797)
+        self.assertEqual(agentcost.transcript_tokens(session), 109797)
+
+    def test_without_noted_agents_or_transcripts_the_figure_is_not_known(self):
+        self.assertIsNone(agentcost.orchestrator_tokens(self.root, self.data()))
+        self.assertIn("not known", agentcost.describe_orchestrator(None))
+        self.stop()
+        agentcost.collect(self.root, "FEAT-007")
+        (self.project_transcripts / "session.jsonl").unlink()
+        figure = agentcost.orchestrator_tokens(self.root, self.data())
+        self.assertEqual(figure, {"sessions": 1, "found": 0, "tokens": 0})
+        self.assertIn("could not be found", agentcost.describe_orchestrator(figure))
+
+    def test_status_and_the_report_show_it_next_to_the_record(self):
+        self.stop()
+        agentcost.collect(self.root, "FEAT-007")
+        status = self.cli("status")[1]
+        self.assertIn("cost: FEAT-007 1,282 tokens, 41.4 s recorded; orchestrator session 9,797 tokens, "
+                      "Claude Code's own count, not recorded", status)
+        page = self.cli("report", "FEAT-007")[1]
+        self.assertIn("Orchestrator session: 9,797 tokens", page)
+        self.assertIn("Orchestrator session: 9,797 tokens", self.cli("pr", "FEAT-007")[1])
+
+
+class AmendTest(AgentCostCase):
+    """A wrong figure is corrected with a reason; the figure it replaces stays on record."""
+
+    def test_a_correction_replaces_the_figure_and_keeps_the_original(self):
+        state.add_cost(self.feature_dir, "test-design", 150000, 12.0)
+        code, out, _ = self.cli("cost", "FEAT-007", "--amend", "test-design", "--tokens", "30000", "--reason", "typed by hand")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "FEAT-007 test-design: 150,000 tokens, 12.0 s corrected to 30,000 tokens, 12.0 s")
+        data = self.data()
+        self.assertEqual(data["cost"]["test-design"], {"tokens": 30000, "seconds": 12.0, "runs": 1})
+        (amendment,) = data["cost_amendments"]
+        self.assertEqual((amendment["was"], amendment["now"], amendment["reason"]),
+                         ({"tokens": 150000, "seconds": 12.0}, {"tokens": 30000, "seconds": 12.0}, "typed by hand"))
+        self.assertIn("1 correction(s)", self.cli("status")[1])
+        self.assertIn("1 correction(s)", self.cli("state", "show", "FEAT-007")[1])
+        self.assertIn("test-design corrected from 150,000 tokens, 12.0 s: typed by hand (now 30,000 tokens, 12.0 s)", self.cli("report", "FEAT-007")[1])
+
+    def test_a_second_correction_keeps_both(self):
+        state.add_cost(self.feature_dir, "bind", 100, 10.0)
+        state.amend_cost(self.feature_dir, "bind", None, 4.5, "the hook gave no time")
+        state.amend_cost(self.feature_dir, "bind", 90, None, "a reply was counted twice")
+        data = self.data()
+        self.assertEqual(data["cost"]["bind"]["tokens"], 90)
+        self.assertEqual(data["cost"]["bind"]["seconds"], 4.5)
+        self.assertEqual([a["was"] for a in data["cost_amendments"]], [{"tokens": 100, "seconds": 10.0}, {"tokens": 100, "seconds": 4.5}])
+
+    def test_a_correction_needs_a_reason_figures_and_a_recorded_phase(self):
+        state.add_cost(self.feature_dir, "bind", 100, 10.0)
+        cases = ((["--amend", "bind", "--tokens", "5"], "a correction needs --reason"),
+                 (["--amend", "bind", "--tokens", "5", "--reason", "   "], "a correction needs --reason"),
+                 (["--amend", "bind", "--reason", "why"], "needs --tokens, --seconds or both"),
+                 (["--amend", "bind", "--tokens", "-1", "--reason", "why"], "cannot be negative"),
+                 (["--amend", "verify", "--tokens", "5", "--reason", "why"], "no cost recorded for verify; phases with a cost: bind"))
+        for argv, message in cases:
+            with self.subTest(argv=argv):
+                code, _, err = self.cli("cost", "FEAT-007", *argv)
+                self.assertEqual(code, 2)
+                self.assertIn(message, err)
+        self.assertEqual(self.data()["cost"]["bind"]["tokens"], 100)
+        self.assertNotIn("cost_amendments", self.data())
+
+    def test_amend_does_not_mix_with_the_other_ways_of_recording(self):
+        for argv in (["--amend", "bind", "--collect", "--reason", "x"], ["--amend", "bind", "--phase", "bind", "--reason", "x"],
+                     ["--phase", "bind", "--tokens", "5", "--reason", "x"]):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.cli("cost", "FEAT-007", *argv)[0], 2)
+
+
 class MissingCostTest(AgentCostCase):
     def test_a_passed_phase_without_a_cost_record_is_named(self):
         self.gate("discover")
