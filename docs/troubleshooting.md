@@ -39,7 +39,9 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | Approval shows `pending` | Claude Code has not yet written your prompt to the transcript. It settles after the next turn; check with `bdd approve FEAT-n --verify`. |
 | Approval `invalid` or `unverifiable` | Type the command again yourself; it only counts when it comes from your keyboard. |
 | `... changed since it was locked` | A locked file differs from its lock. Restore it (for example `git checkout`), or if the change is intended, use `/greenlight:change`. |
-| `... is a step, driver or plumbing file that was never locked` | A file that matches the bound paths was created after the bind lock. Re-lock with `bdd lock FEAT-n --scope bind --bound` through the bind phase, or remove the file. |
+| `... neither a feature's bind lock nor the plumbing lock covers it` | A step or driver file was created after every feature was bound. The next feature's bind lock takes it (`bdd lock FEAT-n --scope bind --bound`); otherwise remove it. |
+| `... is shared test plumbing and changed since the project locked it` | A shared support or driver file changed. Restore it, or, if the change is intended, make it a plumbing change: `bdd lock --plumbing --reason "..."`, then rerun every bound feature once. |
+| `... its bind lock was written before the shared plumbing lock existed` | Run `bdd migrate`: it moves the shared files of the old locks into `.bdd/plumbing.lock.json` (backup in `.bdd-backup-plumbing`). |
 | `integrity violation #n is open` | The tripwire saw a protected file change (settings, hooks, plugin files, `.bdd/config.toml`, the test environment). It closes when the file is back as it was; your own edits between prompts are accepted at your next prompt. `bdd status` lists them. |
 | The guard blocks something you want | Locked and managed files are protected on purpose. Use `/greenlight:change`, or edit the file yourself outside the session. |
 | `this project is at schema N but this greenlight writes schema M` | See [upgrading](upgrading.md). |

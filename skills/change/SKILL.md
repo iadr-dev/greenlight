@@ -31,7 +31,8 @@ The person decides what changes. Never reopen the specification because an agent
    | what the feature is for, or a rule | `specify` (or `discover` if the problem itself changed) |
    | an example or a scenario's wording | `examples` |
    | the interfaces the steps use | `system-map` |
-   | a step, a driver or a seam of the adapter | `bind` |
+   | a step or a driver of this feature's own | `bind` |
+   | the shared test plumbing (runner settings, package manifests, a driver the adapter ships, `operations` or `system`) | no feature: a plumbing change, below |
    | the order or split of the work | `tasks` |
    | production code only | `implement` |
 
@@ -62,5 +63,19 @@ The person decides what changes. Never reopen the specification because an agent
    the first red was proven on, and the bind gate accepts that run. Never stash, revert or hide the code to get a red,
    and never tag a scenario `@existing` that the feature's code made pass.
 
-Never edit a locked file by any other route, never unlock with `bdd unlock` directly, and never remove an old
-approval or a gate result by hand: this command is the one sanctioned way.
+**A plumbing change** reopens no feature. The plumbing is locked once for the project (`.bdd/plumbing.lock.json`);
+every feature's tests run on it. Tell the person what changes and why, then:
+
+```sh
+"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" unlock --plumbing --reason "<the person's words>"
+# the step-engineer edits the plumbing file
+"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" lock --plumbing --reason "<the person's words>"
+```
+
+`bdd lock --plumbing` lists every bound feature: run each one's scenarios once (`bdd run FEAT-n`, and `bdd classify
+FEAT-n --expect green` for a finished feature). While the plumbing is unlocked, every feature's gates refuse.
+To share a file one feature locked (another feature needs to change it), name it:
+`bdd lock --plumbing --reason "..." <path>` moves it into the plumbing lock, if it is unchanged.
+
+Never edit a locked file by any other route, never unlock a feature with `bdd unlock` directly, and never remove an
+old approval or a gate result by hand: this command, and the plumbing change above, are the sanctioned ways.
