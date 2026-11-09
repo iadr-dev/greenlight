@@ -60,10 +60,20 @@ list it in the report; never mark it fine.
 ## 3. The loop
 
 Read where the feature stands (`bdd state show FEAT-n --json`: its `phase`) and run that phase. For each phase
-start the agent with the Agent tool, `subagent_type` `greenlight:<agent>`, and a task that contains: the feature id
+start the agent with the Agent tool, `subagent_type` `greenlight:<agent>`, `model` set to the model the `models:`
+line of `bdd status` names for that agent, and a task that contains: the feature id
 and directory, the path of the playbook (`${CLAUDE_PLUGIN_ROOT}/phases/<phase>.md`, resolved to a real path), the
 person's request and every answer given so far, the adapter in use, and anything the previous agent returned that
 this one needs. Tell it to read the playbook first.
+
+- **The model.** Read the `models:` line once when the feature starts, and again after the person changes
+  `.bdd/config.toml`. It names the model of every agent: the `[models]` choice of the person, marked
+  `(.bdd/config.toml)`, or else the model of the agent's file. Pass it on every Agent call; the call's `model` wins
+  over the agent file. If `bdd status` says a choice cannot be used, pass the model it names and tell the person
+  to run `bdd doctor`.
+- **The feature id first.** Start the task with the feature id and the phase (`FEAT-n test-design: ...`), and name
+  no other feature that is in progress in it. When several features are in progress, the cost of the agent goes to
+  the one its task names; a task that names none or two of them is recorded by hand.
 
 | Phase | Agent | After the agent returns, you check | Then you record |
 |---|---|---|---|
@@ -103,7 +113,10 @@ Rules for the loop:
   copied exactly (`subagent_tokens`, and `duration_ms` divided by 1000):
   `bdd cost FEAT-n --phase P --tokens N --seconds S`. A figure you did not read from one of these two places is a
   guess and does not belong in the record. `bdd status` names a passed phase that has no cost record; fix it before
-  you write the report.
+  you write the report. A recorded figure that is wrong is corrected, never offset with another entry:
+  `bdd cost FEAT-n --amend P --tokens N --seconds S --reason "what was wrong and where the right figure comes from"`;
+  the old figure stays on record and the report shows it. Your own session's tokens are not part of the record: the
+  report and `bdd status` show them next to it, as Claude Code's own count.
 - **Questions**: an agent returns blocking questions; you ask the person one at a time with the recommended
   answer, then run the agent again with the answers. Under `autopilot` you answer the most conservative way,
   record it as an assumption, and say so in the report.

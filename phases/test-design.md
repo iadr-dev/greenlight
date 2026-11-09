@@ -22,7 +22,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    example per decision-table row or an exclusion, one example per state transition.
 5. Every rule with inputs gets a negative example (card `negative-cases`) or an exclusion with a reason.
 6. List excluded cases with their reasons. Fill in the coverage check.
-7. Report the tokens and time you spent; the orchestrator records them with `bdd cost`.
+7. Do not report tokens or time: you cannot measure them. The orchestrator records them from the plugin's hook and
+   your own transcript (`bdd cost FEAT-n --collect`).
 
 ## Output files
 

@@ -36,8 +36,8 @@ Per task, in order:
    `database-migrations`, `database-performance`, `database-engines`. Load related records together instead of
    one query per record, bound every result, and write a migration that can be undone. Do not edit a migration that
    has been applied.
-5. Report the tokens and time you spent; the orchestrator records them with `bdd cost FEAT-n --phase implement
-   --tokens N --seconds S`.
+5. Do not report tokens or time: you cannot measure them. The orchestrator records them from the plugin's hook and
+   your own transcript (`bdd cost FEAT-n --collect`).
 
 When all tasks are done, run the whole feature once more with `bdd run FEAT-n`.
 
