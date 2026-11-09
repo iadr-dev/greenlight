@@ -9,7 +9,8 @@ Sources (each is optional, because a feature is traced while it is still being b
 * ``tasks.md``: a task starts at a line that begins with ``T-007.2``; the example ids mentioned up to
   the next task are the scenarios it owns.
 
-A gap is a link that is missing or points at something that does not exist. Only artifacts that exist
+A gap is a link that is missing or points at something that does not exist (``T008``, a boundary rule with an edge
+missing from ``test-design.md``, is reported until the test-design gate has passed). Only artifacts that exist
 are compared, so a feature that has no ``tasks.md`` yet is not reported as having unowned scenarios.
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import featurefiles, gherkin, tagcheck
+from .errors import StoreError
 
 _LEAD = r"^\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)?[*_`]*"
 _TAIL = r"[*_`]*[\s:.\-–—]*(.*)$"
@@ -26,6 +28,7 @@ RULE_LINE = re.compile(_LEAD + r"([RN]-\d+\.\d+)" + _TAIL)
 EXAMPLE_LINE = re.compile(_LEAD + r"(EX-\d+\.\d+\.\d+)" + _TAIL)
 TASK_LINE = re.compile(_LEAD + r"(T-\d+\.\d+)" + _TAIL)
 EXAMPLE_ID = re.compile(r"EX-\d+\.\d+\.\d+")
+AREAS_LINE = re.compile(r"^\s*(?:[-*]\s+)?\**Areas\**\s*:\**\s*(.*)$", re.IGNORECASE)
 
 
 @dataclass
@@ -47,7 +50,8 @@ def read_ids(path: Path, pattern: re.Pattern) -> dict[str, str] | None:
 
 
 def read_tasks(path: Path) -> dict[str, dict] | None:
-    """{task id: {"title", "examples": [ids]}}; a task owns the example ids written up to the next task."""
+    """{task id: {"title", "examples": [ids], "areas": text of its Areas line}}; a task owns the example ids written up
+    to the next task."""
     if not path.is_file():
         return None
     tasks: dict[str, dict] = {}
@@ -55,9 +59,12 @@ def read_tasks(path: Path) -> dict[str, dict] | None:
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         match = TASK_LINE.match(line)
         if match:
-            current = tasks.setdefault(match.group(1), {"title": match.group(2).strip(), "examples": []})
+            current = tasks.setdefault(match.group(1), {"title": match.group(2).strip(), "examples": [], "areas": ""})
         if current is not None:
             current["examples"] += [e for e in EXAMPLE_ID.findall(line) if e not in current["examples"]]
+            areas = AREAS_LINE.match(line)
+            if areas and not current["areas"]:
+                current["areas"] = areas.group(1).strip()
     return tasks
 
 
@@ -134,11 +141,23 @@ def build(root: Path, feature_dir: Path, feature_id: str, members: tuple = ()) -
         matrix.append({"id": rule_id, "text": (rules or {}).get(rule_id, ""), "examples": examples})
 
     gaps += find_gaps(rules, designed, tasks, scenarios, by_example, owners, matrix)
+    gaps += edge_gaps(feature_dir)
     return {"feature": feature_id, "rules": matrix, "gaps": [vars(g) for g in gaps],
             "sources": {"rules.md": rules is not None, "test-design.md": designed is not None,
                         "tasks.md": tasks is not None, "scenarios": len(scenarios)},
             "totals": {"rules": len(matrix), "examples": len(example_ids), "scenarios": len(scenarios),
                        "tasks": len(tasks or {})}}
+
+
+def edge_gaps(feature_dir: Path) -> list[Gap]:
+    """T008: a boundary rule that records no edge. Only until the test-design gate has passed: once the examples are
+    approved the edges are the auditor's to judge, and a feature approved before this check is not reopened by it."""
+    from . import edgecheck, store               # edgecheck reads this module's patterns
+    try:
+        passed = store.read_json(feature_dir / "state.json", "state").get("gates", {}).get("test-design", {}).get("result")
+    except (OSError, ValueError, StoreError):
+        passed = None
+    return [] if passed == "pass" else [Gap("T008", problem) for problem in edgecheck.problems(feature_dir)]
 
 
 def _sort_key(identifier: str) -> tuple:
