@@ -4,7 +4,8 @@ Text checks on a shell command (``guard``) can always be outrun by another spell
 file or shell tool call this looks at the result instead:
 
 * the files that make greenlight enforce anything (Claude Code settings, hooks and plugin records, the
-  plugin's own files, ``.bdd/config.toml``) against a baseline of their hashes;
+  plugin's own files, ``.bdd/config.toml``) against a baseline of their hashes; a settings file is hashed by the
+  parts of it that can switch greenlight off (``claudepaths.settings_view``), so Claude may change the rest;
 * the locked specs and bound steps against their locks;
 * the project's own test environment: the Python interpreter and test packages, and the entry points and manifests of
   the installed node test tooling.
@@ -153,10 +154,17 @@ def plugin_files(plugin_root: Path) -> list[Path]:
     return [p for p in candidates if p.is_file()]
 
 
+def digest(path: Path) -> str:
+    """A watched file's fingerprint: its bytes, except that a Claude Code settings file is fingerprinted by the parts
+    that can switch greenlight off (``claudepaths.settings_digest``), so adding an environment variable is no change."""
+    raw = lockfile.file_digest(path)
+    return claudepaths.settings_digest(path, raw) if claudepaths.is_settings_file(path) else raw
+
+
 def snapshot(root: Path, plugin_root: Path | None) -> dict[str, str]:
     """Digest of every watched file: the plugin's by ``plugin:<path in the plugin>``, which stays the same across
     versions, the others by their absolute path."""
-    found = {p.resolve().as_posix(): lockfile.file_digest(p) for p in watched_files(root, None)}
+    found = {p.resolve().as_posix(): digest(p) for p in watched_files(root, None)}
     if plugin_root is not None:
         found |= {PLUGIN_KEY + p.relative_to(plugin_root).as_posix(): lockfile.file_digest(p) for p in plugin_files(plugin_root)}
     return found
@@ -167,6 +175,18 @@ def _differences(current: dict[str, str], baseline: dict, plugin_root: Path | No
     recorded files are neither compared nor dropped."""
     files = baseline["files"] if plugin_root is not None else {k: v for k, v in baseline["files"].items() if not k.startswith(PLUGIN_KEY)}
     return compare(current, files)
+
+
+def _settings_by_view(files: dict[str, str]) -> dict[str, str]:
+    """A baseline written before settings files were fingerprinted by their view has their bytes' digest: one whose
+    file is still those bytes takes the view's digest; one whose file changed keeps it, so the change is reported."""
+    found = dict(files)
+    for key, value in files.items():
+        path = Path(key)
+        if not value.startswith(claudepaths.SETTINGS_DIGEST) and claudepaths.is_settings_file(path) and path.is_file():
+            if lockfile.file_digest(path) == value:
+                found[key] = digest(path)
+    return found
 
 
 # -- the plugin ------------------------------------------------------------------------------
@@ -225,7 +245,9 @@ def updated_text(entry: dict) -> str:
 def _normalized(data: dict) -> dict:
     """A baseline in the current form. One written before plugin files were keyed by their path in the plugin has them by
     absolute path, under the folder that holds the plugin's manifest; their keys are rewritten and that folder and its
-    version (if it is still there) are recorded. It has no ``taken_at`` until the next prompt writes one."""
+    version (if it is still there) are recorded. It has no ``taken_at`` until the next prompt writes one. Settings files
+    an older greenlight hashed by their bytes are converted by ``_settings_by_view``."""
+    data = {**data, "files": _settings_by_view(data["files"])}
     if "plugin" in data:
         return data
     suffix = "/" + PLUGIN_MANIFEST

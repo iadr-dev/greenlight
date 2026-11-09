@@ -24,7 +24,7 @@ class TripwireCase(ProjectCase):
         self.plugin = self.root / "plugin"
         self.write("plugin/hooks/hooks.json", '{"hooks": {}}\n')
         self.write("plugin/tools/bdd/bddlib/guard.py", "x = 1\n")
-        self.write(".claude/settings.json", '{"permissions": {}}\n')
+        self.write(".claude/settings.json", '{"permissions": {"defaultMode": "default"}}\n')
         tripwire.accept(self.root, self.plugin)                     # the baseline the person's first prompt takes
         self.baseline_file = self.root / ".bdd" / ".integrity" / "baseline.json"
         self.settings = self.root / ".claude" / "settings.json"
@@ -54,7 +54,7 @@ class EnforcementFilesTest(TripwireCase):
         self.assertEqual((new["kind"], new["tool"], new["open"]), ("changed", "Write", True))
         self.assertEqual(self.check(), [])                                  # not reported again
         self.assertEqual(len(tripwire.open_violations(self.root)), 1)
-        self.settings.write_text('{"permissions": {}}\n', encoding="utf-8", newline="\n")
+        self.settings.write_text('{"permissions": {"defaultMode": "default"}}\n', encoding="utf-8", newline="\n")
         self.assertEqual(self.check(), [])
         self.assertEqual(tripwire.open_violations(self.root), [])
         self.assertIn("closed_at", tripwire.violations(self.root)[0])
@@ -75,8 +75,52 @@ class EnforcementFilesTest(TripwireCase):
         self.assertEqual(paths, {"guard.py", "settings.json", "config.toml"})
 
     def test_line_endings_alone_are_not_a_change(self):
-        self.settings.write_bytes(b'{"permissions": {}}\r\n')
+        self.settings.write_bytes(b'{"permissions": {"defaultMode": "default"}}\r\n')
         self.assertEqual(self.check(), [])
+
+
+class SettingsViewTest(TripwireCase):
+    """A settings file is fingerprinted by the parts that can switch greenlight off, so Claude may change the rest."""
+
+    def edit(self, data: dict) -> list[dict]:
+        self.settings.write_text(json.dumps(data), encoding="utf-8", newline="\n")
+        return self.check("Edit")
+
+    def test_a_harmless_change_is_no_violation(self):
+        base = {"permissions": {"defaultMode": "default"}}
+        for data in ({**base, "env": {"TEST_DATABASE_URL": "x"}}, {**base, "model": "sonnet"},
+                     {"permissions": {"defaultMode": "default", "allow": ["Bash(ls)"]}}):
+            with self.subTest(data=data):
+                self.assertEqual(self.edit(data), [])
+        self.assertEqual(tripwire.open_violations(self.root), [])
+
+    def test_a_change_that_can_switch_greenlight_off_is_a_violation(self):
+        for data in ({"permissions": {"defaultMode": "bypassPermissions"}}, {"permissions": {"defaultMode": "default"}, "hooks": {}},
+                     {"permissions": {"defaultMode": "default"}, "env": {"PATH": "/x"}},
+                     {"permissions": {"defaultMode": "default"}, "enabledPlugins": {"greenlight@greenlight": False}}):
+            with self.subTest(data=data):
+                (found,) = self.edit(data)
+                self.assertEqual((found["kind"], found["what"]), ("changed", "enforcement file"))
+                self.edit({"permissions": {"defaultMode": "default"}})                  # undone
+                self.assertEqual(tripwire.open_violations(self.root), [])
+
+    def test_a_file_that_is_not_settings_json_is_fingerprinted_by_its_bytes(self):
+        self.settings.write_text("{not json", encoding="utf-8", newline="\n")
+        self.assertEqual(len(self.check()), 1)
+        self.assertEqual(tripwire.accept(self.root, self.plugin), None)            # open: the prompt takes nothing
+        self.settings.write_text("{not json at all", encoding="utf-8", newline="\n")
+        self.assertEqual([v["kind"] for v in self.check()], ["changed"])          # any change to the bytes is one
+
+    def test_a_baseline_from_an_older_greenlight_keeps_working(self):
+        """It recorded the settings file's bytes: an unchanged file is no violation, a changed one still is."""
+        data = json.loads(self.baseline_file.read_text(encoding="utf-8"))
+        key = self.settings.resolve().as_posix()
+        data["files"][key] = lockfile.file_digest(self.settings)
+        self.baseline_file.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.check(), [])
+        data["files"][key] = lockfile.file_digest(self.settings)
+        self.baseline_file.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(len(self.edit({"permissions": {"defaultMode": "default"}, "env": {"A": "1"}})), 1)
 
 
 class MissingBaselineTest(TripwireCase):
@@ -101,7 +145,7 @@ class MissingBaselineTest(TripwireCase):
         self.settings.write_text("{}\n", encoding="utf-8", newline="\n")
         self.check()
         self.assertIsNone(tripwire.accept(self.root, self.plugin))          # the change is an open violation
-        self.settings.write_text('{"permissions": {}}\n', encoding="utf-8", newline="\n")
+        self.settings.write_text('{"permissions": {"defaultMode": "default"}}\n', encoding="utf-8", newline="\n")
         self.check()
         self.assertEqual(tripwire.accept(self.root, self.plugin), [])
         self.baseline_file.unlink()
@@ -167,7 +211,7 @@ class GateTest(TripwireCase):
             with self.subTest(gate=name), self.assertRaises(UsageError) as cm:
                 self.gate(name)
             self.assertIn("integrity violation #1 is open", str(cm.exception))
-        self.settings.write_text('{"permissions": {}}\n', encoding="utf-8", newline="\n")
+        self.settings.write_text('{"permissions": {"defaultMode": "default"}}\n', encoding="utf-8", newline="\n")
         self.check()
         self.assertEqual(self.gate("implement")["phase"], "verify")
 
@@ -210,7 +254,7 @@ class HookEntryTest(TripwireCase):
         code, said = self.fire("--accept")
         self.assertEqual(code, 0)
         self.assertIn("accepted changes made since the last check", said)
-        self.settings.write_text("{}\n", encoding="utf-8", newline="\n")
+        self.settings.write_text('{"disableAllHooks": true}\n', encoding="utf-8", newline="\n")
         self.fire()
         code, said = self.fire("--accept")
         self.assertEqual(code, 0)
