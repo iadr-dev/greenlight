@@ -1,3 +1,3 @@
 """greenlight deterministic tooling (stdlib only, Python 3.11+)."""
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
