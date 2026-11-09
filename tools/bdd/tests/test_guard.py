@@ -697,6 +697,49 @@ class NestedSessionTest(GuardCase):
         self.assertIn("`claude plugin list`", reason)
 
 
+class PlumbingTest(unittest.TestCase):
+    """The shared test plumbing is locked by the project, against every agent, until it is released with a reason."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name).resolve()
+        (self.root / ".bdd").mkdir()
+        (self.root / ".bdd" / "config.toml").write_text(
+            '[[adapters]]\nname = "x"\nfeatures = "features"\nsteps = "steps"\nsupport = ["steps/conftest.py"]\n',
+            encoding="utf-8")
+        for rel in ("steps/conftest.py", "steps/s.py"):
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text("x = 1\n", encoding="utf-8")
+        feature_dir = state.create(self.root, "FEAT-001", "A", "standard")
+        lockfile.lock(self.root, feature_dir, "FEAT-001", "bind", [self.root / "steps/s.py"])
+
+    def write_as(self, agent: str | None, rel: str) -> str | None:
+        payload = {"tool_name": "Write", "tool_input": {"file_path": str(self.root / rel)}, "cwd": str(self.root)}
+        if agent:
+            payload["agent_type"] = f"greenlight:{agent}"
+        return guard.evaluate(payload)
+
+    def test_a_plumbing_file_is_refused_to_every_agent_as_locked_by_the_project(self):
+        for agent in (None, "implementer", "step-engineer"):
+            with self.subTest(agent=agent):
+                reason = self.write_as(agent, "steps/conftest.py")
+                self.assertIn("steps/conftest.py is shared test plumbing, locked by the project", reason)
+                self.assertIn("bdd unlock --plumbing", reason)
+
+    def test_the_plumbing_lock_itself_is_managed_by_the_command_line(self):
+        self.assertIn("managed by the bdd command line", self.write_as(None, ".bdd/plumbing.lock.json"))
+
+    def test_released_plumbing_is_open_to_the_step_engineer_only(self):
+        lockfile.unlock_plumbing(self.root, "a clock fixture")
+        self.assertIsNone(self.write_as("step-engineer", "steps/conftest.py"))
+        self.assertIsNotNone(self.write_as("implementer", "steps/conftest.py"))
+
+    def test_an_unreadable_plumbing_lock_fails_closed(self):
+        lockfile.plumbing_path(self.root).write_text("{not json", encoding="utf-8")
+        self.assertIsNotNone(self.write_as("implementer", "src/app.py"))
+
+
 class PerformanceTest(unittest.TestCase):
     def test_fifty_locked_features_are_evaluated_quickly(self):
         with tempfile.TemporaryDirectory() as d:
