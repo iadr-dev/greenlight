@@ -16,9 +16,7 @@ Do not change anything on the machine without asking first.
 
    For every `WARN` or `FAIL` line, repeat its `fix:` text and offer to help. If the command cannot run (exit
    code 127) the machine has no Python 3.11 or newer: relay the message the wrapper printed and stop.
-   The `deny rules` line (once the project exists) has a JSON snippet that only the person can add to
-   `.claude/settings.json`; show it, explain that Claude Code applies deny rules before any hook so they hold
-   even when a shell command is spelled in a way the guard cannot read, and do not try to write the file.
+   Leave a `deny rules` line for step 4, which offers it.
 
 2. **Find the adapter.**
 
@@ -43,11 +41,24 @@ Do not change anything on the machine without asking first.
    It creates `.bdd/` (configuration, glossary, an ignore file for machine-local data) and copies the adapter's
    files into the project without overwriting anything. List what it created.
 
-4. **Install the adapter's requirements** if its guide says so (for `python-pytest-bdd`: `pytest` and
+4. **Offer the deny rules, once.**
+
+   ```sh
+   "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" doctor --json
+   ```
+
+   Skip this step when the `deny rules` check is `ok`. Otherwise explain in two sentences that Claude Code applies
+   deny rules before any hook, so they hold even when a shell command is spelled in a way the guard cannot read, and
+   that only the person can add them. Give the person the last line of its `fix`, exactly as it is (it starts with
+   `! sh` and ends with `doctor --add-deny-rules`), and tell them to type it themselves: it adds the missing rules to
+   `.claude/settings.json` and keeps everything else in the file. Ask once and go on; do not run the line yourself
+   (the guard refuses it from a tool call) and do not edit the settings file for it.
+
+5. **Install the adapter's requirements** if its guide says so (for `python-pytest-bdd`: `pytest` and
    `pytest-bdd`). Show the command and ask before running it; prefer the project's own tool (`uv`, `pip`,
    `poetry`).
 
-5. **Offer the helper plugins, once.** greenlight works without them; they make its roles better (design guidance,
+6. **Offer the helper plugins, once.** greenlight works without them; they make its roles better (design guidance,
    current library documentation, browser checks, review tools).
 
    ```sh
@@ -68,7 +79,7 @@ Do not change anything on the machine without asking first.
 
    Never describe a missing helper as required. A project without any of them is fine.
 
-6. **Prove it works.**
+7. **Prove it works.**
 
    ```sh
    "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" init --smoke
@@ -77,6 +88,6 @@ Do not change anything on the machine without asking first.
    It runs the sample feature and cleans up after itself. If it fails, show the output and the likely cause
    (missing requirements, wrong interpreter); do not go on until it is green.
 
-7. **Say what comes next**: start a feature with `/greenlight:feature "<what you want>"`, see where things stand
+8. **Say what comes next**: start a feature with `/greenlight:feature "<what you want>"`, see where things stand
    with `/greenlight:status`. Mention that approvals of rules and examples are typed by the person as
    `/greenlight:approve FEAT-n rules` and `/greenlight:approve FEAT-n examples`, and that the AI cannot give them.

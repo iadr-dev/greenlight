@@ -29,14 +29,8 @@ HELPERS = "helpers"
 PLUGIN_HOOKS = "plugin hooks"
 MODELS = "models"
 INTEGRITY = "integrity"
-# Claude Code refuses a call matching one of these before any hook runs and no hook can override it
-# (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
-RECOMMENDED_DENY = (
-    "Write(**/.bdd/**/state.json)", "Edit(**/.bdd/**/state.json)",
-    "Write(**/.bdd/**/lock.json)", "Edit(**/.bdd/**/lock.json)",
-    "Write(**/.claude/settings*.json)", "Edit(**/.claude/settings*.json)",
-    "Bash(claude plugin disable:*)", "Bash(claude plugin uninstall:*)", "Bash(claude mcp add:*)",
-)
+RECOMMENDED_DENY = claudepaths.RECOMMENDED_DENY
+ADD_DENY_RULES = "--add-deny-rules"
 
 
 @dataclass
@@ -124,15 +118,41 @@ def read_denied(paths: list[Path]) -> set[str]:
     return denied
 
 
+def add_deny_line() -> str:
+    wrapper = Path(__file__).resolve().parents[1] / "bdd"
+    return f'! sh "{wrapper.as_posix()}" doctor {ADD_DENY_RULES}'
+
+
 def check_deny_rules(denied: set[str]) -> Check:
     missing = [rule for rule in RECOMMENDED_DENY if rule not in denied]
     if not missing:
         return Check(DENY_RULES, "ok", f"all {len(RECOMMENDED_DENY)} recommended rules are set")
-    snippet = json.dumps({"permissions": {"deny": missing}}, indent=2)
     return Check(DENY_RULES, "warn", f"{len(missing)} of {len(RECOMMENDED_DENY)} recommended deny rules are not set",
                  "Claude Code applies deny rules before any hook, so they hold even if a shell command is spelled in a way "
-                 "the guard cannot read. Add them to .claude/settings.json (or managed settings for a team); "
-                 "the agent is not allowed to edit that file, so this has to be you:\n" + snippet)
+                 "the guard cannot read. Only you can add them: type this line in Claude Code (the leading ! runs it in "
+                 "your own shell). It adds the missing ones to .claude/settings.json and keeps everything else:\n"
+                 + add_deny_line())
+
+
+def add_deny_rules(root: Path) -> tuple[int, str]:
+    """Merge the missing recommended deny rules into the project's ``.claude/settings.json``, keeping every other key
+    and rule as it is. Idempotent. A file that is not valid settings JSON is left alone."""
+    path = root / ".claude" / "settings.json"
+    try:
+        data = claudepaths.parse_settings(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        return 2, f"bdd doctor: {path.as_posix()} cannot be read as settings ({exc}); fix it first, nothing was changed"
+    permissions = data.setdefault("permissions", {})
+    deny = permissions.setdefault("deny", []) if isinstance(permissions, dict) else None
+    if not isinstance(deny, list):
+        return 2, "bdd doctor: permissions.deny in .claude/settings.json is not a list; fix it first, nothing was changed"
+    missing = [rule for rule in RECOMMENDED_DENY if rule not in deny]
+    if not missing:
+        return 0, "every recommended deny rule is already in .claude/settings.json"
+    deny += missing
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    return 0, f"added {len(missing)} deny rule(s) to .claude/settings.json: " + ", ".join(missing)
 
 
 def check_enforcement(mode: str, hooks_seen: bool) -> Check:
@@ -293,6 +313,14 @@ def render(checks: list[Check]) -> str:
 
 
 def main(argv: list[str]) -> int:
+    if ADD_DENY_RULES in argv:
+        root = cfg.find_root()
+        if root is None:
+            print("bdd doctor: not inside a greenlight project (no .bdd directory found)", file=sys.stderr)
+            return 2
+        code, said = add_deny_rules(root)
+        print(said, file=sys.stderr if code else sys.stdout)
+        return code
     checks = run_checks()
     if "--json" in argv:
         print(json.dumps([asdict(c) for c in checks], indent=2))
