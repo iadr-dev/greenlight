@@ -222,6 +222,86 @@ class OutlineTest(LintBase):
         self.assertEqual((issue.code, issue.severity), ("L009", "error"))
 
 
+def verify(columns: str, rows: str = "| Anju |", entity: str = "company", how: str = "are", tag: str = "") -> str:
+    """One scenario that compares an entity's records with a table."""
+    return (f"{tag}Scenario: {entity} {columns}\n  Given the moon is full\n  Then the {entity} records {how}:\n"
+            f"    {columns}\n" + (f"    {rows}\n" if rows else ""))
+
+
+class ColumnSetsTest(LintBase):
+    def l026(self, *scenarios: str, header: str = "Feature: F") -> list[str]:
+        text = feature("\n".join(scenarios), header)
+        return [i.message for i in self.issues(text) if i.code == "L026" and i.severity == "error"]
+
+    def test_two_exact_tables_of_one_entity_with_different_columns_are_refused_naming_both(self):
+        (message,) = self.l026(verify("| name |", tag="@EX-1.1.1\n"), verify("| name | phone |", "| Anju | 02 |", tag="@EX-1.2.1\n"))
+        self.assertTrue(message.startswith("EX-1.2.1: company table has columns name, phone; EX-1.1.1 has name; "
+                                           "check one column set per entity"), message)
+
+    def test_the_most_used_set_is_the_one_the_others_are_measured_against(self):
+        messages = self.l026(verify("| name | owner |", "| a | b |"), verify("| name | owner |", "| a | b |"),
+                             verify("| name | phone |", "| a | b |"), verify("| name |", "| a |"))
+        self.assertEqual(len(messages), 2)
+        self.assertTrue(all("has name, owner" in m for m in messages), messages)
+
+    def test_the_same_columns_in_another_order_or_case_are_one_set(self):
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), verify("| Phone | NAME |", "| b | a |")), [])
+
+    def test_a_table_without_rows_passes_with_any_shape(self):
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), verify("| name |", "")), [])
+
+    def test_a_partial_check_of_the_same_entity_is_not_an_exact_table(self):
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), verify("| phone |", "| b |", how="include")), [])
+
+    def test_seeding_with_other_columns_is_not_an_exact_comparison(self):
+        seed = "Scenario: seeded\n  Given the following company exist:\n    | name |\n    | Anju |\n"
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), seed), [])
+
+    def test_different_entities_have_their_own_column_sets(self):
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), verify("| name |", entity="customer")), [])
+
+    def test_a_table_of_an_outline_with_a_parameter_in_its_header_is_left_alone(self):
+        outline = ("Scenario Outline: o\n  Given the moon is full\n  Then the company records are:\n    | <column> |\n    | x |\n"
+                   "  Examples:\n    | column |\n    | name |\n")
+        self.assertEqual(self.l026(verify("| name | phone |", "| a | b |"), outline), [])
+
+    def test_the_background_counts_as_a_place_a_table_is(self):
+        background = "Background:\n  Given the moon is full\n  Then the company records are:\n    | name |\n    | Anju |\n"
+        messages = self.l026(background, verify("| name | phone |", "| a | b |"))
+        self.assertEqual(len(messages), 1)
+        self.assertIn("the Background has name", messages[0])
+
+    def test_the_chinese_wording_of_the_exact_comparison_is_judged_too(self):
+        chinese = ("場景: 一\n  假設 月亮是圓的\n  那麼 公司紀錄為:\n    | 名稱 |\n    | 安居 |\n\n"
+                   "場景: 二\n  假設 月亮是圓的\n  那麼 公司紀錄為:\n    | 名稱 | 電話 |\n    | 安居 | 02 |\n\n"
+                   "場景: 三\n  假設 月亮是圓的\n  那麼 公司紀錄包含:\n    | 電話 |\n    | 02 |\n")
+        (message,) = self.l026(chinese, header="# language: zh-TW\n功能: F")
+        self.assertTrue(message.startswith('"二": 公司 table has columns 名稱, 電話; "一" has 名稱; '), message)
+
+    def test_an_entity_whose_driver_reads_only_the_listed_columns_is_left_alone(self):
+        mixed = [verify("| name |"), verify("| name | phone |", "| a | b |")]
+        text = feature("\n".join(mixed))
+        for projected, expected in ((("company",), 0), ((" Company ",), 0), (("*",), 0), (("customer",), 1), ((), 1)):
+            with self.subTest(projected=projected):
+                linter = lint.Linter(self.vocab, config.ALL_PROFILES, trace_tags=False, ignore=config.LINT_STYLE_CODES,
+                                     projected_records=tuple(" ".join(p.casefold().split()) for p in projected))
+                self.assertEqual(len([i for i in linter.lint_text(text, "f.feature") if i.code == "L026"]), expected)
+
+    def test_the_message_says_how_to_declare_a_projecting_driver(self):
+        (message,) = self.l026(verify("| name |"), verify("| name | phone |", "| a | b |"))
+        self.assertTrue(message.endswith('say so: [lint] projected_records = ["company"] in .bdd/config.toml'), message)
+
+    def test_the_cli_exits_one_and_prints_the_code(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "f.feature"
+            path.write_text(feature(verify("| name |") + "\n" + verify("| name | phone |", "| a | b |")), encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = lint.run([str(path), "--no-trace-tags"])
+        self.assertEqual(code, 1)
+        self.assertIn("L026", out.getvalue())
+
+
 class CliTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()

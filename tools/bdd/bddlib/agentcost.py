@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import claudepaths, state, store
+from . import claudepaths, reviewlog, roles, state, store
 from . import config as cfg
 from .errors import StoreError, UsageError
 
@@ -197,6 +197,8 @@ def note_agent(payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    if str(payload.get("agent_type")).removeprefix(PLUGIN_AGENT_PREFIX) in roles.REVIEWERS:
+        reviewlog.seal(root, payload.get("agent_id"))
 
 
 def subagent_stop(_argv: list[str]) -> int:

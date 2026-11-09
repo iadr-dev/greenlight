@@ -272,6 +272,24 @@ class ClassifyTest(RunCase):
         self.assertIn("passed before implementation", problems[0])
         self.assertIn("@existing", problems[0])
 
+    def test_a_scenario_tagged_existing_that_failed_in_the_red_run_blocks_the_red(self):
+        cases = ALL_RED[:2] + [case("test_order_of_zero", "failed", "AssertionError: 404 != 200")]
+        self.run_feature(cases=cases)
+        self.assertEqual(self.classify("--expect", "red")[0], 1)
+        self.assertEqual(self.report()["red"]["problems"],
+                         ['"Order of zero" is tagged @existing but failed in the red run: it does not work yet, so remove '
+                          "the tag (AssertionError: 404 != 200)"])
+
+    def test_an_existing_scenario_that_failed_for_another_reason_is_not_reported_twice(self):
+        cases = ALL_RED[:2] + [case("test_order_of_zero", "error", "ImportError: no module")]
+        self.run_feature(cases=cases)
+        (problem,) = self.report()["red"]["problems"]
+        self.assertIn("is a test defect", problem)
+
+    def test_a_scenario_not_tagged_existing_that_failed_is_still_the_normal_red(self):
+        self.run_feature()
+        self.assertEqual(self.report()["red"]["problems"], [])
+
     def test_defect_patterns_win_over_expected_ones(self):
         cases = [case("test_order_of_exactly_1000", "failed", "ImportError while checking AssertionError")]
         self.run_feature(cases=cases)

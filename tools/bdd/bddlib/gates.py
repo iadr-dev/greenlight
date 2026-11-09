@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import adopt, againstred, approvals, classify, design, docsrecord, enforcement, featurefiles, lockfile, mutation, quality, route, runner, stability, state, store, tripwire, workspace
+from . import adopt, againstred, approvals, classify, design, docsrecord, edgecheck, enforcement, featurefiles, lockfile, mutation, quality, route, runner, stability, state, store, tripwire, workspace
 from . import config as cfg
 from .errors import StoreError, UsageError
 
@@ -152,6 +152,8 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     problems += run_problems(root, data["feature"], gate, raw, data)
     kept = None if data.get("kind") == "adopt" else data.get("members_red", {})
     problems += workspace_problems(root, data["feature"], gate, member_raws, kept)
+    if gate == "test-design":
+        problems += edgecheck.problems(feature_dir)
     if gate == "system-map" and (feature_dir / design.DESIGN_FILE).is_file():
         problems += [str(issue) for issue in design.lint(feature_dir)]
     if gate in ("implement", "verify"):
@@ -164,7 +166,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
             problems += run_problems(root, data["feature"], "verify", raw)
     if gate in ("implement", "verify") and data.get("kind") != "adopt":      # the code of an adoption already exists: not judged
         problems += quality.problems(root, data["feature"])
-        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")))
+        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")), gate=gate)
         if gate == "implement":
             problems += docsrecord.problems(root, feature_dir, data["feature"])
     if gate == "verify":

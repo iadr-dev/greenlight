@@ -36,6 +36,27 @@ warning it disagrees with, never an error, in `.bdd/config.toml`:
 ignore = ["L022", "L025"]
 ```
 
+## Record tables
+
+`the {entity} records are:` compares the whole set of records, and a driver reads an entity as one record shape. When two
+such tables of one entity in a feature have different columns, `bdd lint` reports `L026`, an error, naming both examples:
+
+```text
+EX-1.2.1: company table has columns name, phone; EX-1.1.1 has name; check one column set per entity
+```
+
+Use one column set in every table of the entity and leave a cell empty for a value that is absent, check a part of a
+record with `the {entity} records include:`, or give the extra columns an entity of their own. A table with no rows,
+`records include:` and the seeding table (`the following {entity} exist:`) are not compared.
+
+A project whose driver reads only the columns a table lists (it narrows the stored record to them before comparing) has
+no such limit. It says so in `.bdd/config.toml`, for the entities named or for all of them:
+
+```toml
+[lint]
+projected_records = ["work order"]      # or ["*"]
+```
+
 The `gherkin-style` card covers what the lint cannot judge: one behaviour per scenario, independent concerns kept apart,
 state over navigation, a minimal `Given`, and `Scenario Outline` only for one behaviour with different inputs.
 

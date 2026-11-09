@@ -4,18 +4,24 @@ The guard adds a line when it lets a reviewer write its own report (``.bdd/.runs
 write). Where the hooks run, the implement gate accepts a report only when its content now hashes to the *latest* line
 recorded for that file and that reviewer, written while the feature was in the implement phase by an agent that Claude
 Code then reported as finished, so a report written or changed any other way (another agent, the orchestrator, a shell
-command, a later edit), or an old report put back, does not count, whatever command made the change. Kept light: the
-guard imports it on every call.
+command, a later edit), or an old report put back, does not count, whatever command made the change. When the reviewer
+finishes, the SubagentStop hook adds a seal line with the hashes of the production files of its task (``seal``), so a
+report older than the code it covers is found too. Kept light: the guard imports it on every call.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
+from . import store
+from .errors import StoreError
+
 LOG = Path(".bdd") / ".runs" / "reviews.jsonl"
 CASE_INSENSITIVE_FS = sys.platform in ("win32", "darwin")
+REPORT_FIELDS = {"path", "reviewer", "sha256"}
 
 
 def digest(text: str) -> str:
@@ -29,29 +35,110 @@ def key(root: Path, path: Path) -> str:
     return rel.casefold() if CASE_INSENSITIVE_FS else rel
 
 
-def record(root: Path, path: Path, reviewer: str, content: str, agent_id: object = None, phase: str | None = None) -> None:
+def _append(root: Path, line: dict) -> None:
+    """Add a line under the log's lock, so two writers at once (the guard for one reviewer, the hook for another) never
+    cut each other's line in two: appending is not atomic on Windows. A lock that cannot be had in two seconds is not
+    waited for; a torn line is skipped by the reader and the report it belonged to is asked for again."""
     log = root / LOG
     log.parent.mkdir(parents=True, exist_ok=True)
-    line = {"path": key(root, path), "reviewer": reviewer, "sha256": digest(content), "agent_id": agent_id, "phase": phase}
-    with log.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(line) + "\n")
+    try:
+        with store.file_lock(log, timeout=2.0):
+            _write(log, line)
+    except StoreError:
+        _write(log, line)
 
 
-def recorded(root: Path) -> dict[tuple[str, str], dict]:
-    """{(report path, reviewer): the latest line that reviewer recorded for it}. An earlier line is replaced, so a report
-    put back to what it once was does not match."""
+def _write(log: Path, line: dict) -> None:
+    descriptor = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
+    try:
+        os.write(descriptor, (json.dumps(line) + "\n").encode("utf-8"))
+    finally:
+        os.close(descriptor)
+
+
+def record(root: Path, path: Path, reviewer: str, content: str, agent_id: object = None, phase: str | None = None) -> None:
+    """The report's ``file`` is its path as it is spelled on disk: ``path`` is folded on a case-insensitive file system, and
+    a folded path cannot be opened on a case-sensitive volume."""
+    _append(root, {"path": key(root, path), "file": Path(path).resolve().relative_to(root.resolve()).as_posix(),
+                   "reviewer": reviewer, "sha256": digest(content), "agent_id": agent_id, "phase": phase})
+
+
+def _read(root: Path) -> list[dict]:
     log = root / LOG
-    found: dict[tuple[str, str], dict] = {}
     if not log.is_file():
-        return found
+        return []
+    found = []
     for raw in log.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             line = json.loads(raw)
         except ValueError:
             continue
-        if isinstance(line, dict) and {"path", "reviewer", "sha256"} <= set(line):
-            found[(str(line["path"]), str(line["reviewer"]))] = line
+        if isinstance(line, dict):
+            found.append(line)
     return found
+
+
+def _held(root: Path) -> dict[tuple[str, str], list[dict | None]]:
+    """{(report path, reviewer): [the latest line recorded for it, the seal of exactly that line or None]}, read in the
+    order of the log. A seal counts only when it comes after the line it names, for the same hash and the same agent; a
+    newer line for the report takes its place and has no seal until its own is made."""
+    held: dict[tuple[str, str], list[dict | None]] = {}
+    for line in _read(root):
+        where = (str(line.get("path")), str(line.get("reviewer")))
+        if REPORT_FIELDS <= set(line):
+            held[where] = [line, None]
+        elif "seal" in line and "code" in line and where in held:
+            report = held[where][0]
+            if line["seal"] == report["sha256"] and line.get("agent_id") == report.get("agent_id"):
+                held[where][1] = line
+    return held
+
+
+def recorded(root: Path) -> dict[tuple[str, str], dict]:
+    """{(report path, reviewer): the latest line that reviewer recorded for it}. An earlier line is replaced, so a report
+    put back to what it once was does not match."""
+    return {where: pair[0] for where, pair in _held(root).items()}
+
+
+def seals(root: Path) -> dict[tuple[str, str], dict]:
+    """{(report path, reviewer): the seal of its latest line}; a report whose latest line has none is missing."""
+    return {where: pair[1] for where, pair in _held(root).items() if pair[1] is not None}
+
+
+def seal(root: Path, agent_id: object) -> bool:
+    """When a reviewer finishes, record next to each report it wrote which production files its task covered and their
+    hashes (``reviewfresh``), so the gate finds a report older than the code it covers. The SubagentStop hook does it, not
+    the guard when the report is written, because reading the code takes git calls the guard has no time for.
+
+    A seal is its own line, naming the hash of the report line it seals and the agent that wrote it. It is made only for
+    the latest line of a report and only for a named agent, so an agent that finishes late cannot seal a newer report.
+    When the code cannot be read the seal carries the ``error`` and the gate asks for the review again. One report that
+    cannot be sealed does not stop the others. Never raises."""
+    if agent_id is None or str(agent_id) == "":
+        return False
+    try:
+        from . import reviewfresh
+        done = False
+        for line, existing in _held(root).values():
+            if str(line.get("agent_id")) != str(agent_id) or existing is not None:
+                continue
+            sealed = {"seal": line["sha256"], "path": line["path"], "reviewer": line["reviewer"],
+                      "agent_id": line["agent_id"], "code": None, "why": None}
+            try:
+                report = root / str(line.get("file") or line["path"])
+                task = reviewfresh.task_of(report)
+                if task is None:
+                    continue
+                sealed["code"] = reviewfresh.judge(root, report.parent.parent, task.upper())
+            except reviewfresh.Unjudged as exc:
+                sealed["why"] = str(exc)
+            except Exception as exc:
+                sealed["error"] = f"{type(exc).__name__}: {exc}"
+            _append(root, sealed)
+            done = True
+        return done
+    except Exception:
+        return False
 
 
 def written_by(root: Path, path: Path, reviewer: str, log: dict[tuple[str, str], dict] | None = None,

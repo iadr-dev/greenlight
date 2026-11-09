@@ -320,6 +320,32 @@ class ConfigTest(ProjectCase):
                 with self.assertRaises(config.ConfigError):
                     config.load(self.root)
 
+    def test_the_projected_records_list_is_read_and_checked(self):
+        self.set_lint('\n[lint]\nprojected_records = ["Work  Order", "work order", "company"]\n')
+        self.assertEqual(config.load(self.root).lint_projected_records, ("work order", "company"))
+        self.set_lint("")
+        self.assertEqual(config.load(self.root).lint_projected_records, ())
+        for written, expected in (('"Company"', ("company",)), ('["company", 1, ""]', ("company",)), ("1", ()), ("[1]", ()),
+                                  ('{ a = 1 }', ())):
+            with self.subTest(written=written):
+                self.set_lint(f"\n[lint]\nprojected_records = {written}\n")
+                self.assertEqual(config.load(self.root).lint_projected_records, expected)
+
+    def test_a_declared_projection_lets_the_cli_pass_mixed_record_tables(self):
+        text = ("@FEAT-007\nFeature: F\n  @R-007.1\n  Rule: R\n    @EX-007.1.1\n    Scenario: One\n      Given the moon is full\n"
+                "      Then the company records are:\n        | name |\n        | Anju |\n"
+                "    @EX-007.1.2\n    Scenario: Two\n      Given the moon is full\n      Then the company records are:\n"
+                "        | name | phone |\n        | Anju | 02 |\n")
+        self.write("features/two.feature", text)
+        self.write(".bdd/vocabulary.toml", '[[steps]]\nid = "D.MOON"\nkind = "given"\npattern = "the moon is full"\n'
+                   'composes = ["C.ENTITY.SEED"]\n')
+        self.set_lint("")
+        code, out = self.run_lint("features/two.feature")
+        self.assertEqual((code, "L026" in out), (1, True))
+        self.set_lint('\n[lint]\nprojected_records = ["company"]\n')
+        code, out = self.run_lint("features/two.feature")
+        self.assertEqual((code, "L026" in out), (0, False))
+
     def test_errors_cannot_be_silenced_and_the_exit_code_ignores_warnings(self):
         self.write("features/ugly.feature", PREFIX + "    Scenario: Deep\n        Then the request succeeds\n")
         self.set_lint("")

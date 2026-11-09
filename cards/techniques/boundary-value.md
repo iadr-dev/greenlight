@@ -43,3 +43,7 @@ Rule R-007.1: orders of 1000 or more get 10% off.
 - Text: an empty value, whitespace only, one character, the maximum, one over, and non-ASCII characters
   (bytes, code points and visible characters differ).
 - Several boundaries in one example hide which one failed. Vary one at a time.
+- Forgetting an edge the test-design gate checks: the leap day for a date, the empty value and the maximum length for
+  text or digits, page size 1 for a paged list. Write an example for each, or one line under the rule,
+  `No leap day boundary: <why this rule has none>` (also `empty`, `maximum length`, `page size 1`), when the rule
+  really has no such edge.

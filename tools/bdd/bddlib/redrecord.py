@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import lockfile, store
@@ -34,15 +35,15 @@ def is_commit(value: object) -> bool:
     return isinstance(value, str) and _COMMIT.fullmatch(value) is not None
 
 
-def git(root: Path, *args: str, env: dict[str, str] | None = None, stdin: str | None = None) -> str:
+def git(root: Path, *args: str, env: dict[str, str] | None = None, stdin: str | None = None, timeout: int = 120) -> str:
     try:
-        done = subprocess.run(["git", "-C", str(root), "-c", "core.quotepath=off", *args], input=stdin,
-                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+        done = subprocess.run(["git", "--no-optional-locks", "-C", str(root), "-c", "core.quotepath=off", *args], input=stdin,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
                               env=env)
     except FileNotFoundError:
         raise UsageError("git is not installed or not on PATH") from None
     except subprocess.TimeoutExpired:
-        raise UsageError(f"git {args[0]} took longer than 120 s") from None
+        raise UsageError(f"git {args[0]} took longer than {timeout} s") from None
     if done.returncode != 0:
         raise UsageError(f"git {args[0]} failed: {(done.stderr or done.stdout).strip() or 'no output'}")
     return done.stdout
@@ -95,13 +96,15 @@ def uncommitted_production_changes(root: Path, test_dirs: tuple[Path, ...]) -> l
     return [p for p in paths if is_production(p, excluded)]
 
 
-def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: str) -> list[str]:
+def changed_production_files(root: Path, test_dirs: tuple[Path, ...], commit: str, timeout: int = 120) -> list[str]:
     """Production files added or modified since ``commit``, committed or not, that still exist."""
     if not _COMMIT.fullmatch(commit):
         raise UsageError("the recorded red commit is not a commit id")
-    tracked = git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--").split("\0")
-    untracked = [n for n in git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
-                 if not is_generated_bytecode(n)]
+    with ThreadPoolExecutor(max_workers=2) as pool:             # side by side: a hook has no time for two git processes in turn
+        diff = pool.submit(git, root, "diff", "--name-only", "-z", "--diff-filter=ACMR", commit, "--", timeout=timeout)
+        others = pool.submit(git, root, "ls-files", "-z", "--others", "--exclude-standard", timeout=timeout)
+        tracked = diff.result().split("\0")
+        untracked = [n for n in others.result().split("\0") if not is_generated_bytecode(n)]
     excluded = excluded_prefixes(root, test_dirs)
     return sorted(n for n in {*tracked, *untracked} if n and is_production(n, excluded) and (root / n).is_file())
 
