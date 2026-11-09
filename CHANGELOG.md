@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The mutation-wrapper job keeps Python 3.14 (`pins: hold`): its hashed, wheels-only install of mutmut needs `pyyaml==6.0.3`, which has no wheel for Python 3.15, so the first automatic bump to 3.15 failed that job and no other (D62).
+
 ### Added
 - The person closes open integrity violations by typing one line, `/greenlight:approve integrity #3,#4 <reason>` (no ids when one is open), which the tool-call check, a refused prompt and `bdd status` now give with the files involved. The approval hook lists exactly which violations and file contents it covers and records it pending; it closes them once the transcript shows the person typed it, keeps who, when and why, and `bdd report` lists it. A file that changed after it was reported is not covered, and a prompt counts once. `bdd approve integrity` from a shell is refused, and a lock violation is still changed through `/greenlight:change`.
 - `[models]` in `.bdd/config.toml` names the model of an agent (`implementer = "opus"`). `bdd status` prints the model every agent runs on, marking a choice made in the config; without one it is the model of the agent's file. The orchestrator passes that model on every Agent call. `bdd doctor` reports a name that is not an agent or a model the Agent call accepts (`fable`, `haiku`, `opus`, `sonnet`), and such a choice is not used (D68).
