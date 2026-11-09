@@ -106,15 +106,16 @@ def _last(data: dict, gate: str, decision: str | None = None) -> dict | None:
     return last if last and (decision is None or last["decision"] == decision) else None
 
 
-def items_of(root: Path, feature_dir: Path, feature_id: str, gate: str, artifacts: dict[str, str]) -> tuple[dict, str] | tuple[None, None]:
-    """The record of the items an approval covers and the hash of the text outside them, kept with it for the summary of the
-    next one. An approval is never refused for want of it: files the summary cannot read, or that changed while they were
-    read, leave it out."""
+def items_of(root: Path, feature_dir: Path, feature_id: str, gate: str, artifacts: dict[str, str]) -> tuple[dict, list] | tuple[None, None]:
+    """The record of the items an approval covers and a hash per line of the text outside them, read from the files whose
+    hashes are ``artifacts`` and kept with the approval for the summary of the next one. An approval is never refused for want
+    of it: files the summary cannot read, or that changed while they were read, leave it out."""
     from . import approvalsummary
 
+    files = [root / rel for rel in artifacts]
     try:
-        kept = approvalsummary.snapshot(approvalsummary.read(root, feature_dir, feature_id, gate))
-        return kept if artifact_hashes(root, feature_dir, feature_id, gate) == artifacts else (None, None)
+        kept = approvalsummary.snapshot(approvalsummary.read(root, feature_dir, feature_id, gate, files))
+        return kept if {lockfile.relative(root, f): lockfile.file_digest(f) for f in files} == artifacts else (None, None)
     except (UsageError, OSError, ValueError):
         return None, None
 
@@ -181,15 +182,22 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
 def summary_baseline(root: Path, data: dict, gate: str) -> dict | None:
     """The approval the summary of ``gate`` compares with: the newest one that counts under the project's rules and was not
     recorded automatically (under auto and autopilot nobody read it, so the person is shown what changed since they did)."""
-    records = [a for a in data["approvals"] if a["gate"] == gate]
-    return next((a for a in reversed(records) if a["decision"] == "approve" and a["grade"] != "auto"
-                 and not grade_problems(root, data, gate, a)), None)
+    for record in reversed([a for a in data["approvals"] if a["gate"] == gate]):
+        if record["decision"] != "approve" or record["grade"] == "auto":
+            continue
+        if record["grade"] == "hook" and record["origin"] in UNVERIFIED:
+            continue
+        if not grade_problems(root, data, gate, record):
+            return record
+    return None
 
 
 def prune_items(root: Path, data: dict, gate: str) -> None:
     """Keep the list of items on the newest approvals of ``gate`` and on the one the summary compares with; older approvals
     keep none, so state.json does not grow with every approval."""
     with_items = [a for a in data["approvals"] if a["gate"] == gate and a.get("items")]
+    if len(with_items) <= ITEMS_KEPT:
+        return
     settled = summary_baseline(root, data, gate)
     keep = {a["id"] for a in with_items[-ITEMS_KEPT:]} | ({settled["id"]} if settled else set())
     for old in with_items:

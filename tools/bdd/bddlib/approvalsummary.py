@@ -195,15 +195,16 @@ def scenario_items(files: list[Path]) -> tuple[dict[str, dict], dict]:
     return found, outside_of(outside)
 
 
-def read(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict:
-    """The items of what ``gate`` approves and the text outside them, read from the files as they are now."""
+def read(root: Path, feature_dir: Path, feature_id: str, gate: str, files: list[Path] | None = None) -> dict:
+    """The items of what ``gate`` approves and the text outside them, read from the files as they are now (from ``files``
+    when the caller already found them)."""
     if gate == "rules":
         path = feature_dir / "rules.md"
         if not path.is_file():
             raise UsageError(f"there is nothing to summarise: {path.relative_to(root).as_posix()} does not exist yet")
         reader, source = rule_items, path
     else:
-        source = featurefiles.spec_files(root, feature_id)
+        source = files if files is not None else featurefiles.spec_files(root, feature_id)
         if not source:
             raise UsageError(f"there is nothing to summarise: no .feature file is tagged @{feature_id}")
         reader = scenario_items
