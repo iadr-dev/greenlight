@@ -5,6 +5,7 @@
     bdd approve FEAT-007 rules --self-reported --reject --reason "..."
     bdd approve FEAT-007 --verify                   check pending approvals against the transcript
     bdd approve FEAT-007 --check                    CI: judge the committed record alone (no session needed)
+    bdd approve FEAT-007 rules --summary            the rules in plain words, after a change only what changed (read-only)
 
 Approvals typed by the person in a session with hooks are recorded by the UserPromptSubmit hook
 (``bdd approve --from-hook``, input on stdin), not by the other forms; ``--self-reported`` is
@@ -15,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import approvals, enforcement, state, store
+from . import approvals, approvalsummary, enforcement, state, store
 from .errors import StoreError, UsageError
 from .statecmd import project_root
 
@@ -31,6 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     how.add_argument("--verify", action="store_true", help="verify pending approvals against the session transcript")
     how.add_argument("--check", action="store_true",
                      help="CI check from the committed record alone: exit 1 unless every required approval is valid")
+    how.add_argument("--summary", action="store_true",
+                     help="read-only: the rules or the examples in plain words, and after a change only what changed since "
+                          "the last approval")
     ap.add_argument("--reject", action="store_true", help="record a rejection instead of an approval")
     ap.add_argument("--reason", default="", help="why (kept with the record)")
     return ap
@@ -52,14 +56,27 @@ def do_check(root, feature_dir) -> int:
     found = approvals.recorded_problems(root, data)
     for gate, problems in found.items():
         last = approvals._last(data, gate)
-        how = f"{last['grade']}, origin {last['origin']}" if last else "no record"
+        standing = approvals.counted(root, data, gate)
+        how = f"{standing['grade']}, origin {standing['origin']}" if standing else "no record"
         print(f"{data['feature']}: {gate}: {'NOT valid' if problems else 'valid'} ({how})")
         for problem in problems:
             print(f"  - {problem}")
+        if standing is not last and not problems:
+            print(f"  - note: the latest approval (#{last['id']}) could not be verified; the verified approval #{standing['id']} "
+                  "of the same file stands")
         if last and last["grade"] == "codex":
             print("  - note: typed in Codex, where nothing proves who typed it; a reviewer has to confirm this approval "
                   "(review the committed record and protect the branch)" + (f"\n    {last['evidence']}" if last.get("evidence") else ""))
     return 1 if any(found.values()) else 0
+
+
+def do_summary(root, feature_dir, args: argparse.Namespace) -> int:
+    if not args.gate:
+        raise UsageError("name the gate: rules or examples")
+    if args.reject or args.reason:
+        raise UsageError("--summary only reads; it takes no --reject or --reason")
+    print(approvalsummary.render(approvals.summary_for(root, feature_dir, args.gate), state.load(feature_dir)["feature"]))
+    return 0
 
 
 def do_record(root, feature_dir, args: argparse.Namespace) -> int:
@@ -93,6 +110,8 @@ def run(argv: list[str]) -> int:
         feature_dir = store.find_feature_dir(root, args.feature)
         if args.check:
             return do_check(root, feature_dir)
+        if args.summary:
+            return do_summary(root, feature_dir, args)
         return do_verify(feature_dir) if args.verify else do_record(root, feature_dir, args)
     except (UsageError, StoreError) as exc:
         print(f"bdd approve: {exc}", file=sys.stderr)

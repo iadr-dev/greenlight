@@ -5,7 +5,7 @@
 
 For the people who do not read a terminal: a product owner, a reviewer, an auditor. One self-contained page (no script, no
 network, no external file) with the rules and their examples, what every scenario did in the red run and in the latest run,
-the traceability gaps, the gates, approvals and locks, the quality, mutation and stability checks, the assumptions, the
+the traceability gaps, what the person is asked to approve and what changed since they last approved, the gates, approvals and locks, the quality, mutation and stability checks, the assumptions, the
 auditor's verdict and the cost. It uses the same facts as ``bdd pr`` and says nothing more than they do: counts, short
 digests and project-relative names; no command lines, environment values, session or transcript identifiers.
 
@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import agentcost, classify, integrityack, pr, runner, state, store, tripwire
+from . import agentcost, approvals, approvalsummary, classify, integrityack, pr, runner, state, store, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .guard import path_key
@@ -47,6 +47,7 @@ p,li{max-width:80ch}.muted{color:var(--muted)}.cards{display:flex;flex-wrap:wrap
 table{border-collapse:collapse;width:100%;margin:8px 0}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:6px 10px}th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .badge{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:0 9px;font-size:12px;white-space:nowrap}
 .good{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}.info{color:var(--info)}code{font:13px ui-monospace,Consolas,monospace}
+pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 14px;white-space:pre-wrap;font:14px/1.5 ui-monospace,Consolas,monospace}
 nav a{margin-right:14px}footer{margin-top:40px;color:var(--muted);font-size:13px}
 @media print{body{background:#fff;color:#000}nav{display:none}.card,.banner{break-inside:avoid}}
 """
@@ -152,7 +153,7 @@ def header(facts: dict) -> list[str]:
     cards = [card("Enforcement", badge(level, GOOD if level == "hard" else WARN)), card("Autonomy", esc(facts["autonomy"]["level"])),
              audit_card(facts["audit"]), run_card("Red run", runs["red"]), run_card("Latest run", runs["latest"]),
              trace_card(facts["trace"]["gaps"])]
-    nav = ("Summary", "Rules and examples", "Evidence", "Checks", "Audit", "Cost")
+    nav = ("Summary", "Approval summary", "Rules and examples", "Evidence", "Checks", "Audit", "Cost")
     links = "".join(f'<a href="#{name.split()[0].lower()}">{name}</a>' for name in nav)
     return [f"<h1>{esc(facts['feature'])}: {esc(facts['title'])}</h1>", f'<p class="muted">Phase <b>{esc(facts["phase"])}</b>{esc(kind)}</p>',
             *banners(facts), '<div class="cards">' + "".join(cards) + "</div>", f"<nav>{links}</nav>"]
@@ -166,6 +167,31 @@ def summary(facts: dict) -> list[str]:
         rows = [[esc(a["id"]), esc(a["text"]), esc(a["rationale"])] for a in facts["assumptions"]]
         body += ["<h3>Assumptions</h3>", table(["Id", "Assumption", "Because"], rows)]
     return section("summary", "Summary", body)
+
+
+def approval_summaries(root: Path, feature_dir: Path) -> list[dict]:
+    """What each human gate asks of the person, as ``bdd approve FEAT-n GATE --summary`` prints it. A gate whose files do
+    not exist yet has none."""
+    found = []
+    for gate in approvals.GATES:
+        try:
+            summary = approvals.summary_for(root, feature_dir, gate)
+        except (UsageError, StoreError, OSError):
+            continue
+        found.append(approvalsummary.facts(summary, state.load(feature_dir)["feature"]))
+    return found
+
+
+def approval_section(facts: dict) -> list[str]:
+    summaries = facts.get("approval_summaries") or []
+    if not summaries:
+        return section("approval", "Approval summary", ['<p class="muted">Nothing to approve yet: no rules or examples are written.</p>'])
+    body = []
+    for item in summaries:
+        body.append(f"<h3>{esc(item['headline'])}</h3>")
+        if item["lines"]:
+            body.append(f"<pre>{esc(chr(10).join(item['lines']))}</pre>")
+    return section("approval", "Approval summary", body)
 
 
 def example_row(example: dict, seen: dict[str, str]) -> list[str]:
@@ -293,7 +319,7 @@ def cost_section(facts: dict) -> list[str]:
 
 
 def render(facts: dict, results: dict[str, dict[str, str]]) -> str:
-    body = [*header(facts), *summary(facts), *rules_section(facts, results), *evidence(facts), *checks_section(facts), *audit_section(facts),
+    body = [*header(facts), *summary(facts), *approval_section(facts), *rules_section(facts, results), *evidence(facts), *checks_section(facts), *audit_section(facts),
             *cost_section(facts), f"<footer>Built by <code>bdd report</code> from the records of {esc(facts['feature'])} at {esc(store.utc_now())}. "
             "It states what the records state, nothing more.</footer>"]
     return (f'<!DOCTYPE html>\n{MARKER}\n<html lang="en"><head><meta charset="utf-8">'
@@ -349,6 +375,7 @@ def run(argv: list[str]) -> int:
         feature_dir = store.find_feature_dir(root, args.feature)
         facts = pr.collect(root, feature_dir)
         facts["integrity"] = integrityack.acknowledged(root)
+        facts["approval_summaries"] = approval_summaries(root, feature_dir)
         page = render(facts, scenario_results(root, facts["feature"], state.load(feature_dir)))
         if args.out is None:
             sys.stdout.write(page)

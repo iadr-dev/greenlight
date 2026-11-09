@@ -213,7 +213,7 @@ def checks_of(root: Path, feature_id: str) -> dict:
 def approvals_of(root: Path, data: dict) -> list[dict]:
     rows = []
     for gate in approvals.GATES:
-        last = approvals._last(data, gate)
+        last = approvals.counted(root, data, gate)
         if last is None:
             continue
         problems = approvals.effective_problems(root, data, gate) if last["decision"] == "approve" else []

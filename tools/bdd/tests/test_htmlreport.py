@@ -89,6 +89,30 @@ class PageTest(ReportHelpers, ProjectCase):
         self.assertIn("1200", page)
         self.assertNotIn("UNREVIEWED", page)
 
+    def test_the_page_shows_what_the_person_is_asked_to_approve_and_what_changed(self):
+        self.prepare()
+        _, page, _ = self.cli()
+        self.assertIn('<h2 id="approval">Approval summary</h2>', page)
+        self.assertIn('<a href="#approval">Approval summary</a>', page)
+        self.assertRegex(page, r"FEAT-007 rules: no change since the approval of \d{4}-\d\d-\d\d \(1 rule\)\.")
+        self.rules.write_text("# Rules\n\nR-007.1 Orders of 500 or more get 10% off.\nR-007.2 A code gives 5 off.\n", encoding="utf-8", newline="\n")
+        _, page, _ = self.cli()
+        self.assertIn("1 rule changed, 1 added.", page)
+        self.assertIn("R-007.2  A code gives 5 off.", page)
+        self.assertIn("was: Orders of 1000 or more get 10% off.", page)
+
+    def test_text_of_the_summary_cannot_become_markup(self):
+        self.prepare()
+        self.rules.write_text("# Rules\n\nR-007.1 <script>alert(1)</script>\n", encoding="utf-8", newline="\n")
+        _, page, _ = self.cli()
+        self.assertNotIn("<script>", page)
+        self.assertIn("&lt;script&gt;", page)
+
+    def test_a_feature_with_nothing_to_approve_yet_says_so(self):
+        (self.root / "features" / "discounts.feature").unlink()
+        _, page, _ = self.cli()
+        self.assertIn("Nothing to approve yet", page)
+
     def test_the_page_is_well_formed_and_marked_as_generated(self):
         self.prepare()
         _, page, _ = self.cli()

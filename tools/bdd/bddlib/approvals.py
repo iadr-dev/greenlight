@@ -32,6 +32,7 @@ GRADES = ("hook", "self-reported", "auto", "codex")
 PREREQUISITE_GATES = {"rules": ("discover",), "examples": ("test-design",)}
 PHASE_OF = {"rules": "specify", "examples": "examples"}
 PENDING_TIMEOUT = timedelta(minutes=10)
+ITEMS_KEPT = 3                       # approvals of one gate that keep their list of items; older ones keep none, so state.json stays small
 TRANSCRIPT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
 
 
@@ -104,6 +105,17 @@ def _last(data: dict, gate: str, decision: str | None = None) -> dict | None:
     return last if last and (decision is None or last["decision"] == decision) else None
 
 
+def items_of(root: Path, feature_dir: Path, feature_id: str, gate: str) -> dict | None:
+    """The record of the items an approval covers, kept with it for the summary of the next one. An approval is never
+    refused for want of it: files the summary cannot read leave it out."""
+    from . import approvalsummary
+
+    try:
+        return approvalsummary.snapshot(approvalsummary.items(root, feature_dir, feature_id, gate))
+    except (UsageError, OSError, ValueError):
+        return None
+
+
 # -- recording -----------------------------------------------------------------------------
 def ensure_spec_locked(root: Path, feature_dir: Path, feature_id: str, files: dict[str, str]) -> None:
     """Lock the approved feature files (or confirm an existing lock still matches them)."""
@@ -142,9 +154,10 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
             ensure_spec_locked(root, feature_dir, feature_id, artifacts)
     elif gate == "examples" and "spec" in lockfile.read_lock(feature_dir, feature_id)["scopes"]:
         lockfile.unlock(feature_dir, feature_id, "spec", f"examples rejected: {reason or 'no reason given'}")
+    items = items_of(root, feature_dir, feature_id, gate) if decision == "approve" else None
     entry = {"gate": gate, "decision": decision, "grade": grade, "at": store.utc_now(), "reason": reason,
              "origin": {"hook": "pending", "codex": "codex-unverified"}.get(grade, grade), "artifacts": artifacts, "members": members,
-             "session": session,
+             "items": items, "session": session,
              "prompt_id": prompt_id, "transcript_path": transcript_path, "source": source,
              "mode": cfg.load(root).enforcement, "hooks_seen": bool(data.get("hooks_seen"))}
 
@@ -152,6 +165,8 @@ def record(root: Path, feature_dir: Path, gate: str, decision: str, grade: str, 
         entry["autonomy"] = current["autonomy"]["level"]
         entry["id"] = len(current["approvals"]) + 1
         current["approvals"].append(entry)
+        for old in [a for a in current["approvals"] if a["gate"] == gate and a.get("items")][:-ITEMS_KEPT]:
+            old["items"] = None
         if decision == "approve":
             state.advance_phase(current, gate)
         else:
@@ -368,9 +383,40 @@ def codex_notes(data: dict, feature_dir: Path) -> dict[int, str]:
 
 
 # -- are the human gates satisfied? -------------------------------------------------------
+UNVERIFIED = ("pending", "unverifiable", "invalid")
+
+
+def earlier_verified(root: Path, data: dict, gate: str, last: dict) -> dict | None:
+    """The newest verified approval of ``gate`` before ``last`` that covers exactly the files ``last`` covers.
+
+    It stands in for a ``last`` whose origin is not verified (still pending, unverifiable, not typed by a person), so a
+    stray or unconfirmed approval of the same files cannot hide the person's own. It never reaches back across a
+    rejection or a revoked approval, and never to an approval of other file contents: a changed artifact has to be
+    approved again."""
+    if last["grade"] != "hook" or last["origin"] not in UNVERIFIED:
+        return None
+    records = [a for a in data["approvals"] if a["gate"] == gate]
+    for earlier in reversed(records[:records.index(last)]):
+        if earlier["decision"] != "approve" or earlier.get("revoked"):
+            return None
+        if (earlier["grade"] == "hook" and not grade_problems(root, data, gate, earlier)
+                and earlier["artifacts"] == last["artifacts"] and earlier.get("members", {}) == last.get("members", {})):
+            return earlier
+    return None
+
+
+def counted(root: Path, data: dict, gate: str) -> dict | None:
+    """The approval record that stands for ``gate`` now: the latest one, or the earlier verified approval of the same files
+    when the latest cannot be verified."""
+    last = _last(data, gate)
+    if last is None or last["decision"] != "approve" or last.get("revoked") or not grade_problems(root, data, gate, last):
+        return last
+    return earlier_verified(root, data, gate, last) or last
+
+
 def effective_problems(root: Path, data: dict, gate: str) -> list[str]:
     """Why ``gate`` is not validly approved right now (empty list = it is)."""
-    last = _last(data, gate)
+    last = counted(root, data, gate)
     if last is None:
         return [f"{gate} has not been approved"]
     if last["decision"] != "approve":
@@ -408,6 +454,23 @@ def grade_problems(root: Path, data: dict, gate: str, last: dict) -> list[str]:
         "unverifiable": "could not be verified (" + str(last.get("evidence", "no evidence")) + "); approve it again",
     }
     return [f"the {gate} approval " + explanations.get(origin, f"has origin {origin}")]
+
+
+# -- what the person is asked to approve ------------------------------------------------------
+def summary_for(root: Path, feature_dir: Path, gate: str) -> dict:
+    """What ``gate`` asks the person to approve: all of it the first time, and after that only what changed since the last
+    approval that was typed by a person (or recorded under the project's own rules). Reads only; records nothing."""
+    from . import approvalsummary
+
+    if gate not in GATES:
+        raise UsageError(f"only the human gates have a summary: {', '.join(GATES)}")
+    data = state.load(feature_dir)
+    current = approvalsummary.items(root, feature_dir, data["feature"], gate)
+    records = [a for a in data["approvals"] if a["gate"] == gate]
+    accepted = next((a for a in reversed(records) if a["decision"] == "approve" and not grade_problems(root, data, gate, a)), None)
+    rejected = records[-1] if records and records[-1]["decision"] == "reject" else None
+    same = accepted is None or accepted["artifacts"] == artifact_hashes(root, feature_dir, data["feature"], gate)
+    return approvalsummary.summarise(gate, current, accepted, rejected, same)
 
 
 # -- the check that needs no session ---------------------------------------------------------
