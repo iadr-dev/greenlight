@@ -6,7 +6,7 @@ Feature: Checks a rule can make are made before the auditor
   that the case does not apply, so no one is stopped by a gate they cannot pass.
 
   @R-112.1
-  Rule: The exact record tables of one entity use one column set in a feature
+  Rule: The exact record tables of one entity use one column set, unless the driver reads the listed ones
 
     @EX-112.1.1
     Scenario: Two exact tables of one entity with different columns are refused
@@ -91,6 +91,45 @@ Feature: Checks a rule can make are made before the auditor
               Then the company records include:
                 | phone     |
                 | 02-2365-8 |
+        """
+      When alice runs lint with:
+        | key | value    |
+        | arg | features |
+      Then the command succeeds
+
+    @EX-112.1.3
+    Scenario: A project whose driver reads only the listed columns says so and passes
+      Given the input file project config contains:
+        """
+        [[adapters]]
+        name = "x"
+        features = "features"
+        steps = "steps"
+
+        [lint]
+        projected_records = ["company"]
+        """
+      And the input file feature file contains:
+        """
+        @FEAT-007
+        Feature: Companies
+
+          @R-007.1
+          Rule: A company keeps its name and phone
+
+            @EX-007.1.1
+            Scenario: A new company
+              Given alice is signed in as owner
+              Then the company records are:
+                | name |
+                | Anju |
+
+            @EX-007.1.2
+            Scenario: A company with a phone
+              Given alice is signed in as owner
+              Then the company records are:
+                | name | phone     |
+                | Anju | 02-2365-8 |
         """
       When alice runs lint with:
         | key | value    |
@@ -241,7 +280,7 @@ Feature: Checks a rule can make are made before the auditor
       Then the command fails with refused
       And the stderr output contains:
         """
-        R-007.1 uses the boundary card for a date but records no leap day
+        R-007.1 uses the boundary-value card for a date but records no leap day
         """
 
     @EX-112.3.2
