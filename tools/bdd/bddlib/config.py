@@ -167,6 +167,7 @@ class Config:
     stability_runs: int = 0                  # [stability] runs: how often the verify gate wants the feature rerun (0: not asked)
     workspace: tuple[Member, ...] = ()       # the other repositories of a feature that spans several
     lint_ignore: tuple[str, ...] = ()        # [lint] ignore: style warnings (never errors) the project silences
+    models: tuple[tuple[str, str], ...] = ()  # [models]: (agent, model) the person chose; checked by `bdd doctor`
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -354,6 +355,15 @@ def _lint_ignore(data: dict, path: Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(codes))
 
 
+def _models(data: dict, path: Path) -> tuple[tuple[str, str], ...]:
+    """The ``[models]`` table as written. Which names are agents and models is checked by ``bdd doctor`` and shown by
+    ``bdd status``, not here, so a misspelt model never stops the guard or a gate."""
+    table = data.get("models", {})
+    if not isinstance(table, dict) or not all(isinstance(v, str) for v in table.values()):
+        raise ConfigError(f'{path}: [models] maps an agent to the name of a model, such as implementer = "opus"')
+    return tuple((str(agent), model.strip()) for agent, model in table.items())
+
+
 def _schema_version(data: dict, path: Path) -> int:
     version = data.get("version", 1)
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -449,4 +459,5 @@ def load(root: Path | str | None) -> Config:
         stability_runs=_stability_runs(data, path),
         workspace=_workspace(root, data, path),
         lint_ignore=_lint_ignore(data, path),
+        models=_models(data, path),
     )

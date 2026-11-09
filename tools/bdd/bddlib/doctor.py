@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from . import claudepaths, config as cfg, enforcement, helpers
+from . import claudepaths, config as cfg, enforcement, helpers, models
 
 MIN_PYTHON = (3, 11)
 BUDGET_MS_POSIX = 200
@@ -27,6 +27,7 @@ CODEX_HOOKS = "codex hooks"
 STANDARDS = "standards"
 HELPERS = "helpers"
 PLUGIN_HOOKS = "plugin hooks"
+MODELS = "models"
 # Claude Code refuses a call matching one of these before any hook runs and no hook can override it
 # (syntax tried live: Write/Edit path globs and Bash prefixes). The person adds them; greenlight cannot.
 RECOMMENDED_DENY = (
@@ -213,6 +214,21 @@ def check_helpers(plugins: dict[str, str] | None, declined: bool) -> list[Check]
     return out
 
 
+def check_models(root: Path) -> Check:
+    """Can every choice in [models] be passed on an Agent call? The Agent tool takes an alias only."""
+    try:
+        chosen = cfg.load(root).models
+    except cfg.ConfigError as exc:
+        return Check(MODELS, "fail", f"the [models] table cannot be read: {exc}", "Fix .bdd/config.toml.")
+    found = models.problems(chosen)
+    if found:
+        return Check(MODELS, "fail", "; ".join(found),
+                     f"Name one of {', '.join(models.ACCEPTED)} for an agent in [models] of .bdd/config.toml, "
+                     "or remove the line to use the model of its agent file.")
+    return Check(MODELS, "ok", f"{len(chosen)} chosen in .bdd/config.toml" if chosen
+                 else "every agent runs on the model of its agent file (no [models] in .bdd/config.toml)")
+
+
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _FENCE = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
 _PLACEHOLDER = re.compile(r"<[A-Za-z][^<>\n]*\s[^<>\n]*>")     # `<tool and threshold>`; not `List<T>` or `<br>`
@@ -229,7 +245,7 @@ def run_checks() -> list[Check]:
     project = cfg.find_root()
     deny = [check_deny_rules(read_denied(settings_files(project)))] if project else []
     mode = [project_enforcement(project)] if project else []
-    standards = [check_standards(project)] if project else []
+    standards = [check_standards(project), check_models(project)] if project else []
     codex = [c for c in [project_codex_hooks(project)] if c] if project else []
     plugin_checks = check_helpers(helpers.installed(), helpers.declined(project))
     return [

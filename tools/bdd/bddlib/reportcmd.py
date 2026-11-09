@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import agentcost, approvals, enforcement, lockfile, runner, scan, state, store, trace, tripwire
+from . import agentcost, approvals, enforcement, lockfile, models, runner, scan, state, store, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -153,16 +153,42 @@ def run_brief() -> int:
     return 0
 
 
+def cost_figures(root: Path, feature_dir: Path) -> dict:
+    data = state.load(feature_dir)
+    return {"feature": data["feature"], "tokens": sum(c["tokens"] for c in data["cost"].values()),
+            "seconds": round(sum(c["seconds"] for c in data["cost"].values()), 1),
+            "corrections": len(data.get("cost_amendments", [])), "orchestrator": agentcost.orchestrator_tokens(root, data)}
+
+
+def cost_line(cost: dict) -> str:
+    corrected = f" ({cost['corrections']} correction(s))" if cost["corrections"] else ""
+    figure = cost["orchestrator"]
+    session = (f"; orchestrator session {figure['tokens']:,} tokens, Claude Code's own count, not recorded"
+               if figure and figure["found"] else "")
+    return f"cost: {cost['feature']} {cost['tokens']:,} tokens, {cost['seconds']:.1f} s recorded{corrected}{session}"
+
+
 def do_status(root: Path, as_json: bool) -> int:
     rows = [feature_row(root, d) for d in feature_dirs(root)]
+    costs = [cost_figures(root, d) for d in feature_dirs(root)]
+    try:
+        chosen = cfg.load(root).models
+    except cfg.ConfigError as exc:
+        raise UsageError(str(exc)) from exc
     violations = open_violation_count(root)
     plumbing = plumbing_status(root)
     if as_json:
-        print(json.dumps({"features": rows, "open_violations": violations, "plumbing": plumbing}, indent=2, ensure_ascii=False))
+        picked = [vars(c) for c in models.choices(chosen)]
+        print(json.dumps({"features": rows, "costs": costs, "models": picked, "model_problems": models.problems(chosen),
+                          "open_violations": violations, "plumbing": plumbing}, indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
     if plumbing is not None:
         print(plumbing_line(plumbing))
+    print(models.render(chosen))
+    for cost in costs:
+        if cost["tokens"] or cost["corrections"]:
+            print(cost_line(cost))
     for row in rows:
         if row["missing_cost"]:
             print(f"cost: {row['feature']} passed {', '.join(row['missing_cost'])} with no cost recorded; "

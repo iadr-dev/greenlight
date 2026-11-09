@@ -138,6 +138,33 @@ def add_cost(feature_dir: Path, phase: str, tokens: int, seconds: float) -> dict
     return update(feature_dir, mutate)
 
 
+def amend_cost(feature_dir: Path, phase: str, tokens: int | None, seconds: float | None, reason: str) -> dict:
+    """Correct the recorded cost of a phase. The figures it replaces stay in ``cost_amendments`` with the reason, so a
+    correction is never silent. Returns that amendment."""
+    if not reason.strip():
+        raise UsageError("a correction needs --reason: say why the recorded figure is wrong and where the right one comes from")
+    if tokens is None and seconds is None:
+        raise UsageError("a correction needs --tokens, --seconds or both: the figures the phase should have")
+    if (tokens or 0) < 0 or (seconds or 0) < 0:
+        raise UsageError("tokens and seconds cannot be negative")
+    amendment: dict = {}
+
+    def mutate(state: dict) -> None:
+        entry = state["cost"].get(phase)
+        if entry is None:
+            recorded = ", ".join(state["cost"]) or "none"
+            raise UsageError(f"{state['feature']} has no cost recorded for {phase}; phases with a cost: {recorded}")
+        was = {"tokens": entry["tokens"], "seconds": entry["seconds"]}
+        entry["tokens"] = entry["tokens"] if tokens is None else tokens
+        entry["seconds"] = entry["seconds"] if seconds is None else round(seconds, 3)
+        amendment.update(phase=phase, was=was, now={"tokens": entry["tokens"], "seconds": entry["seconds"]},
+                         reason=reason.strip(), at=store.utc_now())
+        state.setdefault("cost_amendments", []).append(dict(amendment))
+
+    update(feature_dir, mutate)
+    return amendment
+
+
 def switch_autonomy(feature_dir: Path, level: str, reason: str) -> dict:
     if level not in AUTONOMY:
         raise UsageError(f"autonomy must be one of {', '.join(AUTONOMY)}")
