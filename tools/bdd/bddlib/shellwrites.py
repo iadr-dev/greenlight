@@ -25,7 +25,8 @@ WRITE_VERBS = {"tee", "cp", "mv", "rm", "truncate", "dd", "install", "ln", "chmo
 COPY_VERBS = {"cp", "mv", "ln", "install", "copy", "copy-item", "move", "move-item"}   # they write into a folder too
 GIT_WRITES = {"checkout", "restore", "reset", "stash", "apply", "rm", "mv", "clean"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "source", ".", "su", "ssh",
-          "watch", "script"}
+          "watch", "script", "make", "gmake", "just"}
+RECIPES = {"make": ("makefile", "gnumakefile"), "gmake": ("makefile", "gnumakefile"), "just": ("justfile",)}
 INTERPRETERS = {"python", "pythonw", "py", "node", "nodejs", "bun", "deno", "perl", "ruby", "php", "awk", "gawk", "tsx",
                 "lua", "luajit", "rscript", "julia", "tclsh", "groovy", "jshell"}
 RUNNERS = {"xargs", "parallel"}                         # they run a program on the names they read
@@ -610,7 +611,7 @@ class _Reader:
         interpreted = False
         for at, name in enumerate(names):
             if name in SHELLS and (at == 0 or name not in (".", "source", "eval")):
-                self.shell(words[at + 1:], simple.bodies, piped and at == 0, depth)
+                self.shell(words[at + 1:], simple.bodies, piped and at == 0, depth, name)
             if name in INTERPRETERS and not interpreted:
                 interpreted = True
                 writing = AWK_WRITES if name in ("awk", "gawk") else CODE_WRITES
@@ -697,7 +698,7 @@ class _Reader:
                     self.found.made.add(place)
                     place = place.parent
 
-    def shell(self, args: list[Word], bodies: list[str], piped: bool, depth: int) -> None:
+    def shell(self, args: list[Word], bodies: list[str], piped: bool, depth: int, runner: str = "") -> None:
         try:
             texts = [_expand(w, self.assigned, strict=True)[0] for w in args]
         except _Unknown:
@@ -705,6 +706,8 @@ class _Reader:
             return
         script = next((self.scripts[_basename(t)] for t in texts if not t.startswith("-") and _basename(t) in self.scripts),
                       None)                                         # `sh fix.sh`, `. fix.sh` written just before
+        for name in RECIPES.get(runner, ()):
+            script = script or self.scripts.get(name)               # `cat > Makefile <<EOF ...; make`
         inner = " ".join(texts) + "".join("\n" + b for b in [*bodies, *([script] if script else [])])
         if not inner.strip():
             if piped:
@@ -847,22 +850,20 @@ def runs_code(command: str) -> bool:
         commands = lex(command)
     except Unreadable:
         return True
-    stable, known = _stable(commands), {}
+    known = _known_values(commands)
     for simple in _all_simple(commands):
         words = simple.words
         if words and words[0].name() == "for" and not words[0].quoted:
             continue                                           # its word list is data
         if words and all(_assignment(w) for w in words):
-            for word in words:
-                name, value = _assignment(word)
-                known[name] = value.text if name in stable and not value.substitutions and "$" not in value.text else None
             continue
         words = words[_program_at(words):]
         if simple.expands or any(w.substitutions for w in words[:1]):
             return True
+        if words and not words[0].quoted and (re.search(r"[*?]|\[.+\]", words[0].text) or re.search(r"\{[^}]*,", words[0].text)):
+            return True                                        # the shell picks the program
         if words and "$" in words[0].text:
-            match = re.fullmatch(r"\$\{?(\w+)\}?", words[0].text)
-            value = known.get(match.group(1)) if match else None
+            value = _program_value(words[0], known)
             if value is None or len(value.split()) != 1 or program_name(value) in SHELLS | INTERPRETERS | RUNNERS:
                 return True                                    # `$B route` with B the bdd command line is fine
         if any(w.name() in SHELLS | INTERPRETERS | RUNNERS and (at == 0 or w.name() not in (".", "source", "eval"))
@@ -874,19 +875,66 @@ def runs_code(command: str) -> bool:
     return False
 
 
+PACKAGE_WORDS = {"install", "i", "add", "ci", "sync", "update", "up", "upgrade", "remove", "rm", "uninstall", "un", "exec",
+                 "dlx", "x", "link", "global", "get"}
+
+
+@dataclass(frozen=True)
+class Programs:
+    view: str                      # the command with its data taken out, or the command itself (see ``programs``)
+    unknown: bool                  # a program word that cannot be known is given a package-tool subcommand
+
+
+def programs(command: str) -> Programs:
+    """The programs a command runs, for the install checks. The view is the command with what is data to it taken out:
+    quoted arguments (but not a quoted program), here-documents, the values of assignments and the word list of a ``for``
+    loop, with a program word held in a variable replaced by the value the command gave it (``P=pnpm; $P add x`` runs
+    ``pnpm add x``). For a command that ``runs_code``, and one that cannot be read, the view is the command as it is.
+    ``unknown``: a program word that holds a variable or a substitution with no known value (``$PM install``) is given a
+    package-tool subcommand."""
+    try:
+        commands = lex(command)
+    except Unreadable:
+        return Programs(command, False)
+    known = _known_values(commands)
+    unknown = False
+    for simple in _all_simple(commands):
+        words = simple.words[_program_at(simple.words):]
+        if words and (words[0].substitutions or "$" in words[0].text) and _program_value(words[0], known) is None:
+            unknown = unknown or any(w.text.casefold() in PACKAGE_WORDS for w in words[1:] if not _flag(w))
+    view = command if runs_code(command) else "\n".join(_view(commands, known))
+    return Programs(view, unknown)
+
+
 def program_view(command: str) -> str:
-    """The command with what is data to it taken out: quoted arguments (but not a quoted program), here-documents, the
-    values of assignments and the word list of a ``for`` loop. For a command that ``runs_code``, and one that cannot be
-    read, the command as it is."""
-    if runs_code(command):
-        return command
-    return "\n".join(_view(lex(command)))
+    return programs(command).view
 
 
-def _view(commands: list[Simple]) -> list[str]:
+def _known_values(commands: list[Simple]) -> dict[str, str | None]:
+    """The values plain assignments give stable variables, in order (None: not a single known word)."""
+    stable, known = _stable(commands), {}
+    for simple in _all_simple(commands):
+        words = simple.words
+        if words and all(_assignment(w) for w in words):
+            for word in words:
+                name, value = _assignment(word)
+                text = value.text
+                known[name] = text if name in stable and not value.substitutions and "$" not in text else None
+    return known
+
+
+def _program_value(word: Word, known: dict[str, str | None]) -> str | None:
+    """The value of a program word that is one variable (``$P``, ``"${P}"``), if the command gave it one."""
+    if word.substitutions:
+        return None
+    match = re.fullmatch(r"\$\{?(\w+)\}?", word.text)
+    return known.get(match.group(1)) if match else None
+
+
+def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
     lines: list[str] = []
     for simple in commands:
-        lines += _view(simple.nested)
+        lines += _view(simple.nested, known)
         words = simple.words
         if words and words[0].name() == "for":
             continue
@@ -898,6 +946,8 @@ def _view(commands: list[Simple]) -> list[str]:
                 shown.append(assignment[0] + '=""')
             elif word.quoted and at > program:
                 shown.append('""')
+            elif at == program and _program_value(word, known):
+                shown.append(_program_value(word, known))
             else:
                 shown.append(word.windows)
         shown += [f"> {word.windows}" for word in simple.redirects]

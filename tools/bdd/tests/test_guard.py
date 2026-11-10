@@ -933,6 +933,30 @@ class PrecisionTest(GuardCase):
             with self.subTest(command=command):
                 self.assertIn("may not install packages", self.bash(command) or "", command)
 
+    def test_an_install_in_any_spelling_is_refused(self):
+        for command in ["P=pnpm; $P add left-pad", '"$PM" install', 'eval "pnpm add x"', "npx pnpm add x",
+                        "X=$(echo pnpm); $X add y", 'pn""pm add x', 'pi""p install x', "p{i,}p install x", "npm audit -c fix"]:
+            with self.subTest(command=command):
+                self.assertIn("install", self.bash(command) or "", command)
+        for command in ['grep -iE "supabase|pnpm|latest" brief.md', "git mv src/a.py src/b.py; grep -v node_modules x",
+                        "npx --no-install tsc --noEmit", 'B="/p/tools/bdd/bdd"; "$B" route FEAT-001']:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_the_second_review_found_these_and_they_are_refused(self):
+        self.assertIn("is locked by FEAT-001", self.bash("make -f /dev/stdin <<'EOF'\nall:\n\trm features/a.feature\nEOF") or "")
+        self.assertIn("is locked by FEAT-001", self.bash("cat > Makefile <<'EOF'\nall:\n\trm features/a.feature\nEOF\nmake") or "")
+        settings = str(self.root / ".claude" / "settings.json")
+        self.assertIn("only the orchestrator and the person", self.call(
+            "Write", agent="greenlight:implementer", file_path=settings, content='{"env": {"A": "1"}}') or "")
+        for name in ("PYTEST_ADDOPTS", "JAVA_TOOL_OPTIONS", "npm_config_script_shell", "GOFLAGS"):
+            with self.subTest(name=name):
+                self.assertIn(f"env.{name}", self.call("Write", file_path=settings, content=json.dumps({"env": {name: "x"}})) or "")
+        self.assertIsNone(self.call("Write", file_path=settings, content=json.dumps({"env": {"GOOGLE_CLIENT_ID": "x"}})))
+        with tempfile.TemporaryDirectory() as scratch:
+            self.assertIn("may not write", self.call("Write", agent="greenlight:spec-auditor",
+                                                     file_path=str(Path(scratch) / "x.py")) or "")
+
     def test_the_bdd_command_line_by_a_variable_is_still_the_bdd_command_line(self):
         self.assertIn("cost corrections", self.bash('B="/p/tools/bdd/bdd"; "$B" cost FEAT-001 --amend implement --tokens 1 '
                                                     '--seconds 1 --reason x') or "")

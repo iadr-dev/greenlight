@@ -281,8 +281,9 @@ def check_enforcement_files(path: Path, change: dict | None = None) -> str | Non
     if any(key.startswith(path_key(root) + "/") and not is_memory(key, path_key(root)) for root in claudepaths.transcript_roots()):
         return enforcement_message(path, "is a Claude Code session transcript, which approvals are verified against")
     if claudepaths.is_settings_file(path):
-        if change is None:
-            return enforcement_message(path, "is a Claude Code settings file")
+        if change is None or change.get("agent_type"):
+            return enforcement_message(path, "is a Claude Code settings file" + (", which only the orchestrator and the "
+                                       "person change" if change else ""))
         return settings_refusal(path, change)
     return None
 
@@ -368,8 +369,8 @@ SCRIPT_SUFFIXES = {"cmd", "exe", "ps1", "js", "cjs", "mjs"}
 SAFE_SUBCOMMANDS = {"run", "run-script", "test", "t", "ls", "list", "why", "view", "info", "outdated"}
 VERSION_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
 QUIET_FLAGS = {"--silent", "-s", "--no-color", "--no-progress"}
-AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=", "--dir=", "--prefix=")   # all `audit` may be given
-AUDIT_FOLDER_FLAGS = {"--dir", "--prefix", "-c"}                          # and these, each with the folder after it
+AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=", "--dir=", "--prefix=")   # all `audit` may take
+AUDIT_FOLDER_FLAGS = {"--dir", "--prefix"}                                # and these, each with the folder after it
 NO_INSTALL_FLAGS = {"--no-install", "--no"}
 CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
                   "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
@@ -402,6 +403,9 @@ _DENY_RULES = re.compile(r"\bdoctor\b[^;&|\n]*--add-deny-rules\b", re.IGNORECASE
 DENY_RULES_MESSAGE = ("greenlight: adding the deny rules changes the person's Claude Code settings, so it is the person's act "
                       "and no tool call may do it. Show them `bdd doctor`, which prints the line to type: in Claude Code "
                       "they type `! ` followed by the command.")
+UNKNOWN_PROGRAM_MESSAGE = ("greenlight: this command runs a program named by a variable or a substitution that it does "
+                           "not set, with a package-tool subcommand, so whether it installs something cannot be checked. "
+                           "Name the program; installing is the person's decision.")
 _COST_AMEND = re.compile(r"\bcost\b[^;&|\n]*--amend\b", re.IGNORECASE)
 COST_AMEND_MESSAGE = ("greenlight: cost corrections are made by the person or the orchestrator, from what Claude Code "
                       "counted, not by the agent whose cost it is. Say what is wrong in your report instead.")
@@ -587,7 +591,7 @@ def check_file_write(project: Project, path: Path, agent: str | None, change: di
         return protected
     allowed = (FOREIGN_WRITES if agent == FOREIGN_AGENT else AGENT_WRITES.get(agent)) if agent else None
     category = project.category(path)
-    if allowed is not None and category not in allowed and category != SCRATCH:
+    if allowed is not None and category not in allowed and not (category == SCRATCH and allowed):
         what = ", ".join(sorted(allowed)) or "nothing (it is read-only)"
         who = ("an agent that is not one of greenlight's" if agent == FOREIGN_AGENT else f"the {agent} agent")
         return (f"greenlight: {who} may not write {category} files ({project.relative(path)}); "
@@ -981,9 +985,10 @@ NESTED_SESSION_MESSAGE = (
 
 def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
     """What only an agent is refused: writing the pull-request description outside its write matrix, correcting a cost,
-    releasing the shared test plumbing, installing packages. An install the whole command shows is refused unless the
-    command without its data shows none (``shellwrites.program_view``): a package tool named in a quoted pattern or a
-    here-document runs nothing. A command that runs a shell, an interpreter or a runner keeps all of it."""
+    releasing the shared test plumbing, installing packages. Installs are looked for in every reading of the programs the
+    command runs (``shellwrites.programs``): a package tool named in a quoted pattern or a here-document runs nothing, a
+    program word held in a variable is the value the command gave it, and a command that runs a shell, an interpreter or
+    a runner is read whole. A program word nobody can know, given a package-tool subcommand, is refused."""
     if _PR_WRITE.search(scrubbed):                                 # `bdd pr --write` writes a file in the project root
         written = check_file_write(project, project.root / PR_FILE, agent)
         if written:
@@ -992,10 +997,13 @@ def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | No
         return COST_AMEND_MESSAGE
     if _PLUMBING.search(scrubbed):
         return PLUMBING_MESSAGE
-    programs = shellwrites.program_view(scrubbed)
-    if _INSTALL.search(scrubbed) and _INSTALL.search(programs):
+    found = shellwrites.programs(scrubbed)
+    readings = [found.view.replace('"', "").replace("'", ""), *shell_readings(shellwrites.without_data(found.view))]
+    if any(_INSTALL.search(reading) for reading in readings):
         return INSTALL_MESSAGE
-    return NODE_MESSAGE if refuses_node_packages(scrubbed) and refuses_node_packages(programs) else None
+    if found.unknown:
+        return UNKNOWN_PROGRAM_MESSAGE
+    return NODE_MESSAGE if refuses_node_packages(found.view) else None
 
 
 def check_bash(project: Project, command: str, agent: str | None = None, cwd: Path | None = None) -> str | None:
