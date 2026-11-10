@@ -41,10 +41,10 @@ class Helper:
 # Only plugins of Anthropic's own directories: installing one never adds a marketplace. They are used in report mode only.
 CATALOG = (
     Helper("frontend-design@claude-plugins-official", "frontend-design", "a design plan for a new screen", "ui-engineer"),
-    Helper("context7@claude-plugins-official", "context7", "the current documentation of a library", "writers and reviewers",
+    Helper("context7@claude-plugins-official", "context7", "the current documentation of a library", "implementer, ui-engineer",
            "network"),
     Helper("microsoft-docs@claude-plugins-official", "microsoft-docs", "the current Microsoft and Azure documentation",
-           "writers and reviewers", "network"),
+           "implementer, ui-engineer", "network"),
     Helper("chrome-devtools-mcp@claude-plugins-official", "chrome-devtools-mcp", "accessibility and visual checks in a browser",
            "ui-reviewer", "Chrome, and the app running"),
     Helper("code-metrics-complexity-and-duplication-report@anthropic-plugin-directory", "code-metrics",

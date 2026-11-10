@@ -1,6 +1,7 @@
 # Troubleshooting
 
-Start with `bdd doctor` (the plugin's wrapper is `${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd`; `/greenlight:init` runs it).
+Start with `bdd doctor` (`/greenlight:init` runs it). `bdd` is not on your `PATH`, so from a terminal run
+`sh "<plugin folder>/tools/bdd/bdd" doctor`, with the plugin folder from the [README](../README.md#running-bdd-yourself).
 Every `WARN` or `FAIL` line comes with a `fix:`.
 
 ## The machine
@@ -10,7 +11,10 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | `bdd` exits with code 127 or says Python is missing | Install Python 3.11 or newer. On Windows, `python.exe` is often the Microsoft Store stub: turn off its alias in Settings > Apps > App execution aliases. |
 | Hooks do nothing on Windows | Hooks need Git for Windows (Git Bash). Install it; until then greenlight is in soft mode. |
 | `hook latency` warns | The budget is 300 ms on Windows, 200 ms elsewhere. Antivirus scanning of the Python install or a slow disk is the usual cause; exclude the plugin folder and Python. |
-| `deny rules` warns | Only you can add the shown JSON snippet to `.claude/settings.json`; it makes the protection hold even for shell spellings the guard cannot read. |
+| `enforcement: no hook has run in this project yet`, `integrity: no baseline yet` | Normal before the first session, and shown only once `.bdd/` exists (doctor run before `bdd init` checks only the machine). The first edit or shell command of a Claude Code session with the plugin makes the first go away, and the next prompt takes the baseline that makes the second go away. If the first stays after a session, the plugin's hooks are not running (see the Windows row above). |
+| `deny rules` warns | Only you can add the shown JSON snippet to `.claude/settings.json`; it makes the protection hold even for shell spellings the guard cannot read. The project's file, committed, is the best place, because the team shares it. |
+| `codex hooks` warns | It appears only where the `codex` program is installed. Run `bdd install-hooks codex` to see the entries and `--apply` to write them, or ignore it if you do not use Codex in this project. Work done in Codex is soft either way. `bdd install-hooks codex --uninstall` removes them. |
+| `models` fails | A name in `[models]` of `.bdd/config.toml` is not an agent, or its model is not one the Agent call accepts (`fable`, `haiku`, `opus`, `sonnet`). Fix the line or delete it; an agent without a line runs on the model of its agent file, and `bdd status` shows what each runs on. |
 
 ## Running tests
 
@@ -45,6 +49,7 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | `... is shared test plumbing and changed since the project locked it` | A shared support or driver file changed. Restore it, or, if the change is intended, make it a plumbing change: `bdd lock --plumbing --reason "..."`, then rerun every bound feature once. |
 | `... its bind lock was written before the shared plumbing lock existed` | Run `bdd migrate`: it moves the shared files of the old locks into `.bdd/plumbing.lock.json` (backup in `.bdd-backup-plumbing`). |
 | `integrity violation #n is open` | The tripwire saw a protected file change during a tool call (settings, hooks, Claude Code's plugin records, plugin files, `.bdd/config.toml`, the test environment) and the implement and verify gates refuse. The message and `bdd status` list what changed. If you did not make the change, undo it (for example with `git checkout`) and the violation closes. If you made it or want it, type the one line the message gives, for example `/greenlight:approve integrity #3,#4 I reinstalled the test tools` (with one violation open the ids may be left out); it closes exactly those violations, if their files are still as listed, once Claude Code's transcript shows you typed it, at the next tool call or `bdd status`, and the reason is kept and shown in `bdd report`. A file that changed again after it was listed is listed anew. A locked spec or step is not acknowledged this way: use `/greenlight:change`. Never edit the files under `.bdd/.integrity` by hand. |
+| The recorded tokens or time of a phase are wrong (for example an agent's cost was recorded twice) | `bdd cost FEAT-n --amend PHASE --tokens N --seconds S --reason "..."` replaces the figure. The old one stays on record with the reason, `bdd report` and `bdd pr` list every correction, and `bdd status` counts them. |
 | `plugin updated from X to Y; baseline refreshed` | Information only. greenlight was updated, and its own files were taken as the new baseline instead of being reported one by one. |
 | The guard blocks something you want | Locked and managed files are protected on purpose. Use `/greenlight:change`, or edit the file yourself outside the session. |
 | `this project is at schema N but this greenlight writes schema M` | See [upgrading](upgrading.md). |

@@ -7,7 +7,8 @@ installed).
 
 ## Ready-made workflows
 
-Each adapter ships a complete GitHub Actions workflow. Copy it to `.github/workflows/greenlight.yml`:
+Each of the nine adapters ships a complete GitHub Actions workflow at `adapters/<name>/ci/github-actions.yml`. Nothing
+runs until you copy it to `.github/workflows/greenlight.yml` in your repository. A few examples:
 
 | Adapter | Workflow |
 |---|---|
