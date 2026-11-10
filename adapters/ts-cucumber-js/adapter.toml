@@ -17,7 +17,7 @@ drivers = "tests/drivers"
 support = ["tests/cucumber.mjs", "tests/package.json", "tests/pnpm-lock.yaml", "tests/tsconfig.json"]
 
 [run]
-# cucumber-js runs from the test tooling in tests/node_modules (installed with `pnpm install --frozen-lockfile --dir tests`), loads the TypeScript
+# cucumber-js runs from the test tooling in tests/node_modules (installed with `pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --dir tests`), loads the TypeScript
 # steps through tsx, reads its settings only from tests/cucumber.mjs (--config) and writes the JUnit report itself. No shell is
 # involved. Variables that change what node loads or how it runs (NODE_*) and the tsx and cucumber settings (TSX_*, CUCUMBER_*)
 # are not passed on.

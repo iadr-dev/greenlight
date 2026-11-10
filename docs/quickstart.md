@@ -21,23 +21,25 @@ Open Claude Code in your project and run:
 ```
 
 It runs `bdd doctor` and shows every warning with its fix, recommends a test adapter for what it finds (for example
-`python-pytest-bdd` for a Python project that uses pytest, FastAPI, Flask or Django; [adapters](adapters.md) describes
-all nine adapters), and asks you to confirm the adapter and a starting autonomy level. It then creates `.bdd/` and the adapter's
+`python-pytest-bdd` for a Python project whose dependency files name pytest, FastAPI, Flask, Django or Starlette;
+[adapters](adapters.md) describes all nine adapters), and asks you to confirm the adapter and a starting autonomy level. It then creates `.bdd/` and the adapter's
 `tests/` skeleton without overwriting anything, offers the optional helper plugins once, and proves the sample feature
 runs green. It never installs packages without asking; for `python-pytest-bdd` you need `pytest` and `pytest-bdd` in the
 project's environment (a `.venv` in the project is found automatically; otherwise `bdd init --python PATH` records the
 interpreter).
 
-Some warnings on the first run are normal: `enforcement: no hook has run in this project yet` goes away at the first
-tool call of a session with the plugin, `integrity: no baseline yet` at the next prompt, and `codex hooks` appears only
-where Codex is installed. `deny rules` stays until you add the shown JSON to `.claude/settings.json`; only you can
-(the agent may not edit that file), and the project's file, committed, is the best place because the team shares it.
+Doctor runs before `.bdd/` exists, so it shows only the machine checks. Run `bdd doctor` again after init to get the
+project checks. Some of those warnings are normal on the first run. `enforcement: no hook has run in this project yet`
+goes away at the first edit or shell command of a session with the plugin, `integrity: no baseline yet` at the next
+prompt, and `codex hooks` appears only where Codex is installed. `deny rules` stays until you add the shown JSON to
+`.claude/settings.json`, merged into any `permissions.deny` list already there. Only you can add it, because the agent
+may not edit that file, and the project's file, committed, is the best place because the team shares it.
 
 Commit `.bdd/` (the machine-local `.enforcement/`, `.integrity/` and `.runs/` folders are ignored for you).
 
 ### Running `bdd` yourself
 
-The skills and hooks run `bdd`; you rarely need to. `bdd` is not on your `PATH`: from a terminal, call
+The skills and hooks run `bdd`; you rarely need to. `bdd` is not on your `PATH`, so from a terminal call
 `sh "<plugin folder>/tools/bdd/bdd" <command>`, where the plugin folder is the `installPath` of `greenlight@greenlight` in
 `claude plugin list --json`. Every `bdd ...` line below means that. To check the adapter choice by hand:
 
@@ -65,7 +67,7 @@ zero-padded, so the first feature is `FEAT-001`.
    names, for each task, who writes it and who reviews it.
 8. **verify**: an independent auditor checks the evidence and returns a report, which is saved as `report.md`.
 
-For a change of one rule, add `--quick` to take the short path (`phases/quick.md`): the approvals and the red gate stay.
+For a change of one rule, add `--quick` to take the short path (`phases/quick.md`). The approvals and the red gate stay.
 
 ## 4. Approve the contract (you, by typing)
 
@@ -100,9 +102,9 @@ If you change your mind mid-run, say "you decide" and the level moves to `autopi
 
 ### When the tripwire stops the work
 
-After every tool call a tripwire compares protected files (settings, hooks, the plugin's own files, `.bdd/config.toml`,
-the test environment) with what it recorded. A change you did not make is undone with `git checkout`. A change you made
-on purpose is accepted with one line you type, which the message gives you:
+After the tool calls that can change files, a tripwire compares protected files (settings, hooks, the plugin's own files,
+`.bdd/config.toml`, the test environment) with what it recorded. Undo a change you did not make, for example with
+`git checkout`. Accept a change you made on purpose with one line you type, which the message gives you:
 
 ```text
 /greenlight:approve integrity #3 I reinstalled the test tools
@@ -117,7 +119,7 @@ It closes exactly the violations listed, and the reason is kept in the report. S
 /greenlight:status FEAT-001 # one feature, with its traceability matrix
 ```
 
-When the report says `Verdict: PASS`, no blocking item of the auditor's checklist failed: every rule has examples, every
+When the report says `Verdict: PASS`, no blocking item of the auditor's checklist failed. Every rule has examples, every
 example has a passing test, the approvals and the red run were as required, the reviews are done and current, the
 standards are met and nothing approved or bound changed afterwards. The evidence is in
 `.bdd/features/FEAT-001-*/report.md`.

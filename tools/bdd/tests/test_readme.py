@@ -1,9 +1,9 @@
 """The README and the docs a newcomer follows name only commands, flags, files, links and counts that exist.
 
-Commands: every `bdd COMMAND ...` in a code span or a fenced block of README.md, docs/quickstart.md and
-docs/troubleshooting.md must be a command of the CLI, and every `--flag` on it must be in that command's `--help`. A
-fenced block whose opening line has the word `not-bdd` after the language (```text not-bdd) is skipped: use it for a
-`bdd` that is not this program. A `bdd` code span that runs over two lines is not read, so keep each on one line.
+Commands: every `bdd COMMAND ...` in a code span or a fenced block of README.md and docs/*.md must be a command of the
+CLI, and every `--flag` on it must be in that command's `--help`. A fenced block whose opening line has the word
+`not-bdd` after the language (```text not-bdd) is skipped. Use it for a `bdd` that is not this program. A `bdd` code
+span that runs over two lines is not read, so keep each on one line.
 """
 import contextlib
 import functools
@@ -17,20 +17,20 @@ from bddlib import cli, helpers, state
 
 REPO = Path(__file__).resolve().parents[3]
 BDDLIB = REPO / "tools" / "bdd" / "bddlib"
-COMMAND_DOCS = [REPO / "README.md", REPO / "docs" / "quickstart.md", REPO / "docs" / "troubleshooting.md"]
-LINKED_DOCS = [REPO / "README.md", *sorted((REPO / "docs").glob("*.md"))]
+DOCS = [REPO / "README.md", *sorted((REPO / "docs").glob("*.md"))]
 SKIP_MARKER = "not-bdd"
 # These commands read hook input from stdin or run their checks when started, so `--help` is not asked of them: a flag
-# is looked up in the source of the module that implements the command.
+# must stand as a quoted string in the source of the module that implements the command.
 NO_HELP = frozenset({"doctor", "guard", "tripwire", "codex-hook", "subagent-stop"})
 REPO_FOLDERS = ("adapters", "agents", "cards", "docs", "evals", "hooks", "phases", "review", "skills", "specs", "templates",
                 "tools", "vocabulary")
 
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 SPAN = re.compile(r"`([^`\n]+)`")
-COMMAND = re.compile(r"(?:(?<![\w/.\-<])bdd|tools/bdd/bdd\"?)\s+(?P<command>[a-z][a-z-]*)(?P<rest>[^`\n]*)")
-FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*")
-LINK = re.compile(r"\]\((?P<target>[^)\s]+)\)|(?:href|src)=\"(?P<attr>[^\"]+)\"")
+COMMAND = re.compile(r"(?:(?<![\w/.\-<])bdd(?:\s+--in\s+\S+)?|tools/bdd/bdd\"?)\s+(?P<command>[a-z][a-z-]*)(?P<rest>[^`\n]*)")
+FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*(?![\w-])")
+LINK = re.compile(r"\]\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)|(?:href|src)=\"(?P<attr>[^\"]+)\""
+                  r"|^\s*\[[^\]]+\]:\s+(?P<reference>\S+)", re.MULTILINE)
 HEADING = re.compile(r"^#{1,6}\s+(?P<text>.+?)\s*#*\s*$")
 WORDS = r"zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+"
 # "two adapters" can mean the two a project uses, so adapters are counted only as "the nine adapters" or "all nine adapters".
@@ -48,25 +48,31 @@ class Shown(NamedTuple):
     rest: str
 
 
+def sorted_lines(text: str):
+    """(line number, line, kind, skipped) for each line, where kind is prose, code (inside a fence) or fence (the lines
+    that open and close it), and skipped is true for a fenced block opened with the `not-bdd` marker."""
+    fence, skipped = None, False
+    for number, line in enumerate(text.splitlines(), 1):
+        edge = FENCE.match(line)
+        if fence is None:
+            if edge:
+                fence, skipped = edge.group(1), SKIP_MARKER in edge.group(2).split()
+            yield number, line, "fence" if edge else "prose", skipped
+        elif edge and edge.group(1)[0] == fence[0] and len(edge.group(1)) >= len(fence) and not edge.group(2).strip():
+            fence = None
+            yield number, line, "fence", False
+        else:
+            yield number, line, "code", skipped
+
+
 def code_snippets(text: str):
     """(line number, code) for every fenced line that is not marked `not-bdd` and every inline code span."""
-    skipping = False
-    fence = None
-    for number, line in enumerate(text.splitlines(), 1):
-        opening = FENCE.match(line)
-        if fence is None and opening:
-            fence = opening.group(1)[0]
-            skipping = SKIP_MARKER in opening.group(2).split()
-            continue
-        if fence is not None:
-            if opening and opening.group(1)[0] == fence and not opening.group(2).strip():
-                fence = None
-                skipping = False
-            elif not skipping:
-                yield number, re.split(r"\s#\s", line)[0]
-            continue
-        for span in SPAN.finditer(line):
-            yield number, span.group(1)
+    for number, line, kind, skipped in sorted_lines(text):
+        if kind == "code" and not skipped:
+            yield number, re.split(r"\s#\s", line)[0]
+        elif kind == "prose":
+            for span in SPAN.finditer(line):
+                yield number, span.group(1)
 
 
 def shown_commands(text: str, path: str = "") -> list[Shown]:
@@ -75,16 +81,7 @@ def shown_commands(text: str, path: str = "") -> list[Shown]:
 
 
 def prose_outside_fences(text: str) -> str:
-    kept, fence = [], None
-    for line in text.splitlines():
-        opening = FENCE.match(line)
-        if fence is None and opening:
-            fence = opening.group(1)[0]
-        elif fence is not None and opening and opening.group(1)[0] == fence and not opening.group(2).strip():
-            fence = None
-        elif fence is None:
-            kept.append(line)
-    return "\n".join(kept)
+    return "\n".join(line for _, line, kind, _ in sorted_lines(text) if kind == "prose")
 
 
 @functools.lru_cache(maxsize=None)
@@ -124,9 +121,15 @@ def problems_of(shown: Shown) -> list[str]:
             known += help_text(shown.command, first)
     across = cli.ACROSS_WORKSPACE if shown.command in cli.ACROSS_WORKSPACE else ()
     for flag in FLAG.findall(shown.rest):
-        if flag not in known and not (flag == "--workspace" and across):
+        if not has_flag(known, flag, quoted=shown.command in NO_HELP) and not (flag == "--workspace" and across):
             found.append(f"{where}: `{flag}` is not an option of `bdd {shown.command}`")
     return found
+
+
+def has_flag(text: str, flag: str, quoted: bool) -> bool:
+    """Whether `flag` stands whole in `text`: not as the start of a longer flag, and, in source, as a quoted string."""
+    pattern = rf"[\"']{re.escape(flag)}[\"']" if quoted else rf"(?<![\w-]){re.escape(flag)}(?![\w-])"
+    return re.search(pattern, text) is not None
 
 
 def slug(heading: str) -> str:
@@ -151,7 +154,7 @@ def anchors(path: Path) -> frozenset[str]:
 def link_problems(path: Path, text: str) -> list[str]:
     found = []
     for match in LINK.finditer(prose_outside_fences(text)):
-        target = match.group("target") or match.group("attr")
+        target = match.group("target") or match.group("attr") or match.group("reference")
         if re.match(r"[a-z][a-z0-9+.-]*:", target, re.IGNORECASE):
             continue
         name, _, fragment = target.partition("#")
@@ -204,7 +207,7 @@ def path_problems(path: Path, text: str) -> list[str]:
 
 class ReadmeMatchesCodeTest(unittest.TestCase):
     def shown(self) -> list[Shown]:
-        return [item for path in COMMAND_DOCS
+        return [item for path in DOCS
                 for item in shown_commands(path.read_text(encoding="utf-8"), path.relative_to(REPO).as_posix())]
 
     def test_the_docs_show_commands(self):
@@ -215,20 +218,20 @@ class ReadmeMatchesCodeTest(unittest.TestCase):
         self.assertEqual([], found)
 
     def test_every_relative_link_and_anchor_has_a_target(self):
-        found = [problem for path in LINKED_DOCS for problem in link_problems(path, path.read_text(encoding="utf-8"))]
+        found = [problem for path in DOCS for problem in link_problems(path, path.read_text(encoding="utf-8"))]
         self.assertEqual([], found)
 
     def test_every_stated_count_matches_the_files(self):
-        found = [problem for path in LINKED_DOCS for problem in count_problems(path, path.read_text(encoding="utf-8"))]
+        found = [problem for path in DOCS for problem in count_problems(path, path.read_text(encoding="utf-8"))]
         self.assertEqual([], found)
 
     def test_counts_are_stated_somewhere(self):
-        text = "\n".join(p.read_text(encoding="utf-8") for p in LINKED_DOCS)
+        text = "\n".join(p.read_text(encoding="utf-8") for p in DOCS)
         nouns = {stated(m)[1] for m in COUNT.finditer(text)}
         self.assertTrue({"adapters", "agents", "test stacks", "slash commands"} <= nouns, nouns)
 
     def test_every_repository_path_named_in_code_exists(self):
-        found = [problem for path in COMMAND_DOCS for problem in path_problems(path, path.read_text(encoding="utf-8"))]
+        found = [problem for path in DOCS for problem in path_problems(path, path.read_text(encoding="utf-8"))]
         self.assertEqual([], found)
 
 
@@ -277,6 +280,27 @@ class CheckersTest(unittest.TestCase):
         readme = REPO / "README.md"
         found = link_problems(readme, "[a](docs/nothing.md) [b](docs/concepts.md#no-such-heading) [c](docs/concepts.md#locks)")
         self.assertEqual(2, len(found), found)
+
+    def test_a_link_with_a_title_or_by_reference_is_read(self):
+        readme = REPO / "README.md"
+        self.assertEqual(1, len(link_problems(readme, '[a](docs/nothing.md "title")')))
+        self.assertEqual(1, len(link_problems(readme, "[a][r]\n\n[r]: docs/nothing.md\n")))
+
+    def test_a_truncated_flag_is_reported(self):
+        for shown in ("`bdd approve FEAT-001 rules --sum`", "`bdd migrate --dry`", "`bdd tripwire --acc`"):
+            with self.subTest(shown=shown):
+                self.assertEqual(1, len([p for s in shown_commands(shown) for p in problems_of(s)]))
+
+    def test_a_flag_that_only_appears_in_prose_of_the_source_is_reported(self):
+        self.assertEqual(1, len([p for s in shown_commands("`bdd doctor --apply`") for p in problems_of(s)]))
+        self.assertEqual([], [p for s in shown_commands("`bdd doctor --json`") for p in problems_of(s)])
+
+    def test_a_command_after_the_workspace_member_flag_is_read(self):
+        self.assertEqual(["run"], [s.command for s in shown_commands("`bdd --in web run FEAT-007`")])
+
+    def test_a_longer_fence_is_not_closed_by_a_shorter_one(self):
+        text = "````text\n```\nbdd frobnicate\n```\n````\n"
+        self.assertEqual(["frobnicate"], [s.command for s in shown_commands(text)])
 
     def test_a_link_inside_a_code_block_is_not_read(self):
         self.assertEqual([], link_problems(REPO / "README.md", "```md\n[a](docs/nothing.md)\n```\n"))

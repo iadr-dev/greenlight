@@ -45,9 +45,9 @@ request ─▶ rules ─▶ test design ─▶ examples ─▶ system map + desi
   `[adapters.quality.NAME]` tables in `.bdd/config.toml` (`bdd init` writes none), `bdd check` runs them and the gates
   require a passing result. Optional mutation and stability checks (`bdd mutate`, `bdd stability`) test the tests.
 - **Mistakes are caught early, not by the auditor at the end.** `bdd lint` refuses two record tables of one entity with
-  different columns, `bdd classify` refuses a red in which a scenario tagged `@existing` fails, the test-design gate asks
-  for the edge examples a `boundary-value` rule needs, and, where the hooks run, the implement gate refuses a review
-  older than the code it read.
+  different columns. `bdd classify` refuses a red in which a scenario tagged `@existing` fails. The test-design gate asks
+  for the edge examples a `boundary-value` rule needs. Where the hooks run, the implement gate refuses a review older
+  than the code it read.
 - **Nine test stacks.** Python (pytest-bdd), TypeScript web UIs (Playwright), Node and TypeScript services
   (cucumber-js), Go (godog), .NET (Reqnroll), Spring Boot, Kotlin/Android (Cucumber-JVM, also on a device or emulator),
   Flutter and Dart (widget tests), and any runner that writes a JUnit report.
@@ -116,10 +116,10 @@ independent audit, so the report shows what was recorded up to the green run.
 4. **Red, then green.** The steps and drivers are written and run; every new scenario must fail for the intended
    reason before any code is written. Then each task goes to the writer `bdd route` picks for it, which writes the code
    until its scenarios pass, and to its reviewers (code, UI, security), whose must-fix findings go back to the writer.
-5. **Verify.** The `spec-auditor` agent is read-only: it checks the evidence against `review/checklist.md` and returns
+5. **Verify.** The `spec-auditor` agent is read-only. It checks the evidence against `review/checklist.md` and returns
    a report, which the orchestrator saves as `report.md`. `Verdict: PASS` means no blocking checklist item failed. That
-   covers more than the rules and the tests: approvals given the way the mode requires, a red proven before any code,
-   every review done and current, the engineering standards met, and shuffled and isolated runs green.
+   covers more than the rules and the tests. It includes approvals given the way the mode requires, a red proven before
+   any code, every review done and current, the engineering standards met, and shuffled and isolated runs green.
 6. **Hand over.** `bdd check FEAT-n` runs your formatter, linter and type checker, once you have named them;
    `bdd pr FEAT-n --write` writes `PULL_REQUEST.md` from the recorded facts. CI re-checks locks, approvals and
    traceability when you copy the adapter's `ci/github-actions.yml` to `.github/workflows/` (see [CI](docs/ci.md)).
@@ -133,6 +133,7 @@ independent audit, so the report shows what was recorded up to the green run.
 | test design, examples | `qa-designer` |
 | system map | `system-analyst` |
 | refine, bind | `step-engineer` |
+| tasks | the orchestrator |
 | implement | `implementer`, or `ui-engineer` for screens; reviewed by `code-reviewer`, `ui-reviewer`, `security-reviewer` |
 | verify | `spec-auditor` |
 
@@ -148,9 +149,9 @@ not chat history, and each writes only the files of its role.
 | `auto` | the two approvals are recorded automatically; blocking questions still come to you |
 | `autopilot` | nothing; assumptions are recorded and the report is marked UNREVIEWED |
 
-Machine gates are never skipped at any level. Start with `guided`. To change the level while a feature runs, say so in
-the conversation ("you decide"). The orchestrator records the switch with your words, using
-`bdd mode FEAT-n --switch autopilot --reason "..."`, and approvals already given stay yours.
+Machine gates are never skipped at any level. Start with `guided`. To hand the rest of a feature to the AI while it
+runs, say "you decide" in the conversation. The orchestrator switches to `autopilot` and records your words, using
+`bdd mode FEAT-n --switch autopilot --reason "..."`. Approvals already given stay yours.
 
 ## Install
 
@@ -162,8 +163,9 @@ the conversation ("you decide"). The orchestrator records the switch with your w
 Requires Python 3.11+ (standard library only) and a POSIX `sh`: native on Linux and macOS, Git for Windows on Windows.
 With Git for Windows installed, hooks run in Git Bash whether you start `claude` from PowerShell or from Git Bash (both
 were tested; a `cmd.exe` launch was not). The plugin's hooks and its skills call the `sh` wrapper
-`tools/bdd/bdd`, so install Git for Windows. For a check by hand on a machine without `sh`, the CLI also runs as
-`python -I <plugin folder>/tools/bdd/main.py <command>`.
+`tools/bdd/bdd`. Without Git for Windows the hooks cannot run, so nothing is prevented (soft at most), and whether the
+skills' `bdd` calls work without `sh` was not tested: install Git for Windows. For a check by hand on a machine without
+`sh`, the CLI also runs as `python -I <plugin folder>/tools/bdd/main.py <command>`.
 
 Each adapter also needs its own stack on the machine, which greenlight never installs for you: `pytest` 8+ and
 `pytest-bdd` 8+ for Python; Node.js and pnpm for the TypeScript adapters (web UI and Node services; CI uses Node 26);
@@ -178,14 +180,16 @@ added to Codex.
 
 ### First run
 
-Run `/greenlight:init`; it runs `bdd doctor` first. Some warnings are normal before the first session:
+`/greenlight:init` runs `bdd doctor` first. Before `.bdd/` exists, doctor checks only the machine (Python, `sh`, git,
+hook speed, helper plugins). The project checks below appear once init has created `.bdd/`, so run `bdd doctor` again
+afterwards, or `/greenlight:init` again. Some of these warnings are normal before the first session:
 
 - `enforcement: no hook has run in this project yet, so nothing is prevented (soft)` goes away after the plugin's guard
-  hook has run once here, which it does at the first tool call of a Claude Code session in the project.
+  hook has run once here, which it does at the first edit or shell command of a Claude Code session in the project.
 - `integrity: no baseline yet` goes away at the next prompt, which takes the baseline.
-- `deny rules: ... recommended deny rules are not set` stays until you add them. Only you can: the agent may not edit
-  `.claude/settings.json`. Copy the JSON that doctor prints into `.claude/settings.json` of the project (committed, so
-  the team shares it) or into your user settings.
+- `deny rules: ... recommended deny rules are not set` stays until you add them. Only you can, because the agent may not
+  edit `.claude/settings.json`. Copy the JSON that doctor prints into `.claude/settings.json` of the project (committed,
+  so the team shares it) or into your user settings, merging it into any `permissions.deny` list already there.
 - `codex hooks` appears only where the `codex` program is installed. See [concepts](docs/concepts.md#enforcement-in-codex).
 
 Anything else is explained in [troubleshooting](docs/troubleshooting.md).
@@ -222,7 +226,7 @@ Offered by `bdd helpers` (the id is what `claude plugin list` shows):
 | `code-metrics-complexity-and-duplication-report@anthropic-plugin-directory` (`bdd helpers` calls it `code-metrics`) | code-reviewer | complexity and duplication of the changed files |
 | `api-drift-detector-typescript-contract-checker@anthropic-plugin-directory` | code-reviewer | drift between API types, schemas and the database |
 | `feature-dev@claude-plugins-official` | code-reviewer | a read-only review checklist |
-| `figma@claude-plugins-official` (optional, not offered) | ui-engineer | building from a Figma design, when the task names one (needs your Figma login) |
+| `figma@claude-plugins-official` (listed as optional, left out of the install line) | ui-engineer | building from a Figma design, when the task names one (needs your Figma login) |
 
 Used when you have installed them yourself, which greenlight never offers: `impeccable@impeccable` (ui-reviewer: its
 `audit` and its finish reviewer's criteria, not the modes that edit code or ask you), `pstack@pstack-claude` (code-reviewer:

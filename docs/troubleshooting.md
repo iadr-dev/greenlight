@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `bdd doctor` (`/greenlight:init` runs it). `bdd` is not on your `PATH`: from a terminal, run
+Start with `bdd doctor` (`/greenlight:init` runs it). `bdd` is not on your `PATH`, so from a terminal run
 `sh "<plugin folder>/tools/bdd/bdd" doctor`, with the plugin folder from the [README](../README.md#running-bdd-yourself).
 Every `WARN` or `FAIL` line comes with a `fix:`.
 
@@ -11,9 +11,9 @@ Every `WARN` or `FAIL` line comes with a `fix:`.
 | `bdd` exits with code 127 or says Python is missing | Install Python 3.11 or newer. On Windows, `python.exe` is often the Microsoft Store stub: turn off its alias in Settings > Apps > App execution aliases. |
 | Hooks do nothing on Windows | Hooks need Git for Windows (Git Bash). Install it; until then greenlight is in soft mode. |
 | `hook latency` warns | The budget is 300 ms on Windows, 200 ms elsewhere. Antivirus scanning of the Python install or a slow disk is the usual cause; exclude the plugin folder and Python. |
-| `enforcement: no hook has run in this project yet`, `integrity: no baseline yet` | Normal before the first session. The first tool call of a Claude Code session with the plugin makes the first go away, and the next prompt takes the baseline that makes the second go away. If the first stays after a session, the plugin's hooks are not running (see the Windows row above). |
+| `enforcement: no hook has run in this project yet`, `integrity: no baseline yet` | Normal before the first session, and shown only once `.bdd/` exists (doctor run before `bdd init` checks only the machine). The first edit or shell command of a Claude Code session with the plugin makes the first go away, and the next prompt takes the baseline that makes the second go away. If the first stays after a session, the plugin's hooks are not running (see the Windows row above). |
 | `deny rules` warns | Only you can add the shown JSON snippet to `.claude/settings.json`; it makes the protection hold even for shell spellings the guard cannot read. The project's file, committed, is the best place, because the team shares it. |
-| `codex hooks` warns | It appears only where the `codex` program is installed. Run `bdd install-hooks codex` to see the entries and `--apply` to write them, or ignore it if you do not use Codex in this project: work done in Codex is soft either way. `bdd install-hooks codex --uninstall` removes them. |
+| `codex hooks` warns | It appears only where the `codex` program is installed. Run `bdd install-hooks codex` to see the entries and `--apply` to write them, or ignore it if you do not use Codex in this project. Work done in Codex is soft either way. `bdd install-hooks codex --uninstall` removes them. |
 | `models` fails | A name in `[models]` of `.bdd/config.toml` is not an agent, or its model is not one the Agent call accepts (`fable`, `haiku`, `opus`, `sonnet`). Fix the line or delete it; an agent without a line runs on the model of its agent file, and `bdd status` shows what each runs on. |
 
 ## Running tests
