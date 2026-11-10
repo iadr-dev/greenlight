@@ -187,13 +187,13 @@ afterwards, or `/greenlight:init` again. Some of these warnings are normal befor
 - `enforcement: no hook has run in this project yet, so nothing is prevented (soft)` goes away after the plugin's guard
   hook has run once here, which it does at the first edit or shell command of a Claude Code session in the project.
 - `integrity: no baseline yet` goes away at the next prompt, which takes the baseline.
-- `deny rules: ... recommended deny rules are not set` stays until you add them. Only you can, because the agent may not
-  edit `.claude/settings.json`. Copy the JSON that doctor prints into `.claude/settings.json` of the project (committed,
-  so the team shares it) or into your user settings, merging it into any `permissions.deny` list already there.
+- `deny rules: ... recommended deny rules are not set` stays until you add them. Only you can: type the line doctor prints
+  in Claude Code, `! sh "<plugin folder>/tools/bdd/bdd" doctor --add-deny-rules`. It adds the missing rules to the
+  project's `.claude/settings.json` (commit it, so the team shares it) and keeps everything else in the file. The guard
+  refuses the same line from a tool call.
 - `codex hooks` appears only where the `codex` program is installed. See [concepts](docs/concepts.md#enforcement-in-codex).
 
 Anything else is explained in [troubleshooting](docs/troubleshooting.md).
-<!-- P2 FILLS THIS: the typed line that adds the deny rules (bdd doctor --add-deny-rules) goes after the deny rules item above. -->
 
 ### Running `bdd` yourself
 
