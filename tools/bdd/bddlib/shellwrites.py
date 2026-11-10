@@ -1,16 +1,17 @@
-"""Where a shell command writes, read off the command the way a shell reads it.
+"""Where a shell command writes, for the commands whose writes can be read off their words.
 
 The guard used to count a command as a write when a write word appeared anywhere in it (``Move`` in a quoted argument, a
 ``>`` inside a regular expression), and as a write to a protected file when that file's name appeared anywhere in it.
-This reads the command into words, quotes, here-documents, separators, redirections and changes of folder, and returns
-what it writes to: the targets of its output redirections, the arguments of the commands that change files, and the
-code of an interpreter whose code writes, with the folders a relative path in each may land in. The guard checks its
-protections against those alone.
+For a command built only from plain constructs and known programs (``plain``), this reads it into words, quotes,
+here-documents, separators, redirections and changes of folder, and returns what it writes to: the targets of its
+output redirections, the arguments of the commands that change files, and the code of an interpreter whose code writes,
+with the folders a relative path in each may land in. The guard then checks its protections against those alone.
 
-It reads, it does not run. Whatever it cannot read off the command makes the whole command the target, which is what
-the guard did before: an unbalanced quote or an unterminated here-document, a variable it cannot pin to one value in a
-word that is written or in the program word, a program the shell picks by a glob, a program whose files come from its
-input (``xargs rm``, ``... | sh``), a here-document that runs a command substitution.
+Everything else is judged by the old rule: a shell or a runner of other programs (``sh``, ``eval``, ``make``,
+``xargs``, ``sudo``), a program the reader does not know, a command or process substitution, an alias or a function, a
+program word that is not a known value, a moved home or ``CDPATH``, ``pushd`` and ``popd``, links, input fed to an
+interpreter, and anything that does not read cleanly. Reading those exactly would mean modelling a shell, and every
+model missed something; the list of what is read is short so that it can be checked.
 """
 from __future__ import annotations
 
@@ -20,20 +21,21 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-WRITE_VERBS = {"tee", "cp", "mv", "rm", "truncate", "dd", "install", "ln", "chmod", "touch", "set-content", "add-content",
-               "out-file", "remove-item", "move-item", "copy-item", "new-item", "del", "erase", "move", "copy"}
-COPY_VERBS = {"cp", "mv", "ln", "install", "copy", "copy-item", "move", "move-item"}   # they write into a folder too
+WRITE_VERBS = {"tee", "cp", "mv", "rm", "truncate", "dd", "install", "chmod", "touch"}
+COPY_VERBS = {"cp", "mv", "install"}                    # they write into a folder too
 GIT_WRITES = {"checkout", "restore", "reset", "stash", "apply", "rm", "mv", "clean"}
-SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "source", ".", "su", "ssh",
-          "watch", "script", "make", "gmake", "just"}
-RECIPES = {"make": ("makefile", "gnumakefile"), "gmake": ("makefile", "gnumakefile"), "just": ("justfile",)}
-INTERPRETERS = {"python", "pythonw", "py", "node", "nodejs", "bun", "deno", "perl", "ruby", "php", "awk", "gawk", "tsx",
-                "lua", "luajit", "rscript", "julia", "tclsh", "groovy", "jshell"}
-RUNNERS = {"xargs", "parallel"}                         # they run a program on the names they read
-VERSION_ONLY = {"--version", "-v", "-V", "--help", "-h"}  # `node --version` runs no code
-MOVES = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
-RUNS = WRITE_VERBS | SHELLS | INTERPRETERS | RUNNERS | {"git", "sed", "perl", "find"}   # a quoted argument starting so is read
-READS_INTO = {"read", "mapfile", "readarray", "getopts"}  # they assign variables the guard cannot know
+INTERPRETERS = {"python", "py", "node", "tsx", "awk", "gawk"}
+PACKAGE_TOOLS = {"npm", "pnpm", "yarn", "npx", "bun", "pip", "uv", "poetry", "pipx", "pipenv", "conda"}
+READERS = {"cat", "grep", "egrep", "fgrep", "rg", "ls", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "cmp",
+           "jq", "echo", "printf", "file", "stat", "du", "df", "tree", "which", "where", "realpath", "readlink", "basename",
+           "dirname", "date", "pwd", "true", "false", "test", "[", "[[", "]", "]]", "sleep", "nl", "column", "comm", "paste",
+           "fold", "md5sum", "sha1sum", "sha256sum", "xxd", "od", "seq", "sed", "find", "gh", "git", "mkdir", "bdd"}
+KEYWORDS = {"for", "do", "done", "if", "then", "else", "elif", "fi", "while", "until", "{", "}", "!", "time"}
+PREFIXES = {"env", "time", "nice", "timeout", "do", "then", "else", "elif", "if", "while", "until", "{", "}", "!"}
+PROGRAMS = READERS | WRITE_VERBS | INTERPRETERS | PACKAGE_TOOLS | KEYWORDS | {"cd", "export"}
+RUN_BY_TOOLS = INTERPRETERS | WRITE_VERBS | {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "eval", "make"}
+MOVES = {"cd"}
+STEERS_FOLDERS = {"HOME", "CDPATH", "PWD", "OLDPWD", "USERPROFILE", "CODEX_HOME", "IFS"}   # a command may not set these
 FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 FOLDER_FLAGS = ("--directory", "--chdir", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir")
 # The flags with which `cp` writes only its destination (a folder target, a link or a hard link writes elsewhere too).
@@ -42,8 +44,8 @@ CP_SAFE_LONG = ("--recursive", "--force", "--preserve", "--no-preserve", "--verb
                 "--update", "--archive", "--dereference", "--no-dereference", "--parents")
 HARMLESS_TARGETS = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty", "nul", "con"}
 GROUPING = {"{", "}", "!", "(", ")"}
-# What makes interpreter code a write: Python, Node, Perl, Ruby, PHP, Lua spellings, code that runs a shell, and code that
-# calls by a computed name (then any name in it counts).
+# What makes interpreter code a write: Python and Node spellings, code that runs a shell, and code that calls by a
+# computed name.
 CODE_WRITES = re.compile(
     r"write_text|write_bytes|(?<!stdout)(?<!stderr)(?<!buffer)\.write\(|\.writelines\(|:write\("
     r"|open\((?:[^()]|\([^()]*\))*?[\"'][rwabxt+]*[wax+][rwabxt+]*[\"']"
@@ -52,17 +54,15 @@ CODE_WRITES = re.compile(
     r"|\bfs(?:\.promises|p)?\.(?!(?:read|exists|stat|lstat|access|realpath|opendir|watch|constants)\w*)\w+"
     r"|\b(?:writeFile|appendFile|createWriteStream|copyFile|renameSync|unlinkSync|rmSync|rmdirSync|truncateSync|"
     r"symlinkSync|chmodSync|mkdirSync)\w*\s*\("
-    r"|\bunlink\b|\bFile\.(?:write|open|delete|rename|unlink|binwrite)|\bfile_put_contents\b|\bfopen\s*\("
-    r"|\bopen\s*\(?\s*(?:my\s+)?\$?\w+\s*,\s*[\"']?\s*[>+]"
-    r"|subprocess|\bos\.(?:system|popen|exec\w*|spawn\w*)|\bPopen\b|child_process|\bexec\w*\b|\bspawn\w*\b|\bsystem\b"
-    r"|\bqx\b|%x|\bio\.popen\b|\bgetattr\b|__import__|\bimportlib\b|\beval\b|\bcompile\s*\(")
-SHELL_QUOTES = re.compile(r"`")                         # Perl, Ruby and PHP run a backtick string as a command
+    r"|\bunlink\b|subprocess|\bos\.(?:system|popen|exec\w*|spawn\w*)|\bPopen\b|child_process|\bexec\w*\b|\bspawn\w*\b"
+    r"|\bsystem\b|\bgetattr\b|__import__|\bimportlib\b|\beval\b|\bcompile\s*\(")
 AWK_WRITES = re.compile(r"\bprintf?\b[^;}\n]*>|\bsystem\s*\(|\|\s*\"")       # awk: `print > "file"`, `system(...)`, a pipe
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+)|(\{[^}]*\}|[@*#?$!\-]))")
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(\+?)=")
 _SUFFIX = re.compile(r"\.(?:exe|cmd|bat|ps1)$")
 _VERSION = re.compile(r"(?<=[a-z])[\d.]+$")
 MAX_DEPTH = 4
+MAX_LENGTH = 400_000                                    # longer than this is not read: the old rule applies
 
 
 class Unreadable(Exception):
@@ -74,14 +74,18 @@ class Word:
     """A shell word: its parts with how each was quoted (``plain``, ``double``, ``single`` or ``ansi``)."""
     parts: list[tuple[str, str]] = field(default_factory=list)
     substitutions: list[str] = field(default_factory=list)    # the commands of its command substitutions
-    windows: str = ""                          # the word read with each backslash as a folder separator
+    pieces: list[str] = field(default_factory=list)           # the word read with each backslash as a folder separator
 
     def add(self, text: str, how: str, windows: str | None = None) -> None:
         if self.parts and self.parts[-1][1] == how:
             self.parts[-1] = (self.parts[-1][0] + text, how)
         else:
             self.parts.append((text, how))
-        self.windows += text if windows is None else windows
+        self.pieces.append(text if windows is None else windows)
+
+    @property
+    def windows(self) -> str:
+        return "".join(self.pieces)
 
     @property
     def text(self) -> str:
@@ -104,7 +108,7 @@ class Word:
 
 
 def program_name(text: str) -> str:
-    segment = text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip("{}()").casefold()
+    segment = text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold()
     return _VERSION.sub("", _SUFFIX.sub("", segment))
 
 
@@ -112,6 +116,7 @@ def program_name(text: str) -> str:
 class Simple:
     words: list[Word] = field(default_factory=list)
     redirects: list[Word] = field(default_factory=list)    # where its output goes
+    inputs: list[Word] = field(default_factory=list)       # what its input is read from (`< file`)
     bodies: list[str] = field(default_factory=list)        # its here-documents and here-strings
     expands: bool = False                                  # a here-document body runs a command substitution
     joiner: str = ""                                       # the operator after it
@@ -136,6 +141,7 @@ class Writes:
     targets: list[Target] = field(default_factory=list)
     context: list[str] = field(default_factory=list)       # the folders the command moves into, as written
     whole: bool = False                                    # check the whole command: the targets are not known
+    opaque: bool = False                                   # a program word is a variable or a pattern with no known value
     made: set[Path] = field(default_factory=set)           # the folders a `mkdir` in the command creates
 
 
@@ -147,15 +153,15 @@ class _Lexer:
         self.current = Simple()
         self.word: Word | None = None
         self.heredocs: list[tuple[str, bool, Simple, bool]] = []
-        self.next_is: str | None = None                   # "target", "delimiter", "string", "drop"
+        self.next_is: str | None = None                   # "target", "delimiter", "string", "input"
         self._strip_tabs = False
 
     def run(self) -> list[Simple]:
         while self.at < len(self.text):
             self.step()
         self.end_word()
-        if self.heredocs or self.next_is in ("delimiter", "string"):
-            raise Unreadable("a here-document is not terminated")
+        if self.heredocs or self.next_is is not None:
+            raise Unreadable("a here-document or a redirection is not finished")
         self.end_command("")
         return self.commands
 
@@ -175,18 +181,20 @@ class _Lexer:
         role, self.next_is = self.next_is, None
         if role == "target":
             self.current.redirects.append(word)
+        elif role == "input":
+            self.current.inputs.append(word)
         elif role == "delimiter":
             self.heredocs.append((word.text, self._strip_tabs, self.current, not word.partly_quoted))
         elif role == "string":
             self.current.bodies.append(word.text)
-        elif role is None:
+        else:
             self.current.words.append(word)
 
     def end_command(self, joiner: str) -> None:
         self.end_word()
         if self.next_is is not None:
             raise Unreadable("a redirection has no target")
-        if self.current.words or self.current.redirects or self.current.bodies or self.current.nested:
+        if self.current.words or self.current.redirects or self.current.bodies or self.current.nested or self.current.inputs:
             self.current.joiner = joiner
             self.commands.append(self.current)
         self.current = Simple()
@@ -229,6 +237,8 @@ class _Lexer:
             self.read_operator()
         elif char in "<>":
             self.read_redirect()
+        elif char == "\x00":
+            raise Unreadable("a NUL character")
         else:
             self.ensure_word().add(char, "plain")
             self.at += 1
@@ -352,7 +362,7 @@ class _Lexer:
                 self.at += 1
             return
         self._strip_tabs = op == "<<-"
-        self.next_is = {"<<": "delimiter", "<<-": "delimiter", "<<<": "string", "<": "drop", "<&": "drop"}.get(op, "target")
+        self.next_is = {"<<": "delimiter", "<<-": "delimiter", "<<<": "string", "<": "input", "<&": "input"}.get(op, "target")
 
     def read_heredocs(self) -> None:
         for delimiter, strip, owner, expands in self.heredocs:
@@ -372,6 +382,8 @@ class _Lexer:
 
 
 def lex(command: str, depth: int = 0) -> list[Simple]:
+    if len(command) > MAX_LENGTH:
+        raise Unreadable("the command is too long to read")
     return _Lexer(command, depth).run()
 
 
@@ -381,12 +393,12 @@ def _all_simple(commands: list[Simple]):
         yield simple
 
 
-# -- what the commands write ------------------------------------------------------------------------------------------
+# -- variables -----------------------------------------------------------------------------------------------------
 class _Unknown(Exception):
     """A word holds a value that cannot be known here."""
 
 
-SCRATCH = "greenlight-scratch"
+SCRATCH_FOLDER = "greenlight-scratch"                    # where `$(mktemp -d)` is taken to point
 
 
 def _expand(word: Word, assigned: dict[str, str | None], strict: bool) -> tuple[str, str, str]:
@@ -442,7 +454,7 @@ def _assignment(word: Word) -> tuple[str, Word] | None:
     if not match:
         return None
     value = Word([(word.parts[0][0][match.end():], "plain"), *word.parts[1:]], word.substitutions,
-                 word.windows[match.end():])
+                 [word.windows[match.end():]])
     return match.group(1), value
 
 
@@ -450,14 +462,9 @@ def _flag(word: Word) -> bool:
     return not word.quoted and word.text.startswith("-")
 
 
-PREFIXES = {"env", "sudo", "doas", "command", "builtin", "exec", "nohup", "time", "nice", "ionice", "timeout", "stdbuf",
-            "do", "then", "else", "elif", "if", "while", "until", "busybox"}
-DECLARATIONS = {"export", "local", "declare", "readonly", "typeset"}
-
-
 def _program_at(words: list[Word]) -> int:
-    """Where the program word is: after the prefixes (``sudo``, ``timeout 20``, ``do``, ``{``) and the assignments and
-    flags that belong to them."""
+    """Where the program word is: after the prefixes (``timeout 20``, ``do``, ``{``) and the assignments and flags that
+    belong to them."""
     at = 0
     while at < len(words):
         word = words[at]
@@ -473,33 +480,126 @@ def _program_at(words: list[Word]) -> int:
 def _stable(commands: list[Simple]) -> set[str]:
     """The variables the command assigns exactly once, by a plain ``NAME=value`` command of its own or a ``for`` list:
     one value is known for them. A variable assigned twice, by ``+=``, before a program (``NAME=x cmd``), after ``then`` or
-    ``do``, in a declaration, or by ``read``, ``mapfile``, ``printf -v`` or ``getopts`` may hold another value, so it is
-    not known."""
+    ``do``, or in a declaration may hold another value, so it is not known."""
     counts: dict[str, int] = {}
     unknown: set[str] = set()
     for simple in _all_simple(commands):
         words = simple.words
         plain = bool(words) and all(_assignment(w) for w in words)
-        for at, word in enumerate(words):
+        for word in words:
             found = _assignment(word) if not word.quoted else None
             if found:
                 counts[found[0]] = counts.get(found[0], 0) + 1
                 if not plain or re.match(r"[A-Za-z_]\w*\+=", word.parts[0][0]):
                     unknown.add(found[0])
-        names = [w.name() for w in words]
-        if names and names[0] == "for" and len(words) > 1:
+        if words and words[0].name() == "for" and len(words) > 1:
             counts[words[1].text] = counts.get(words[1].text, 0) + 1
-        start = _program_at(words)
-        program = names[start] if start < len(names) else ""
-        if program in READS_INTO:
-            unknown |= {w.text for w in words[start + 1:] if not _flag(w)}
-        if program == "printf" and any(w.text == "-v" for w in words):
-            unknown |= {w.text for w in words if w.text not in ("-v", "printf")}
-        if program in DECLARATIONS:
-            unknown |= {found[0] for w in words if (found := _assignment(w))}
     return {name for name, count in counts.items() if count == 1 and name not in unknown}
 
 
+def _known_values(commands: list[Simple]) -> dict[str, str | None]:
+    """The values plain assignments give stable variables (None: not a known literal)."""
+    stable, known = _stable(commands), {}
+    for simple in _all_simple(commands):
+        words = simple.words
+        if words and all(_assignment(w) for w in words):
+            for word in words:
+                name, value = _assignment(word)
+                text = value.text
+                known[name] = text if name in stable and not value.substitutions and "$" not in text else None
+    return known
+
+
+def _program_value(word: Word, known: dict[str, str | None]) -> str | None:
+    """The value of a program word that is one variable (``$P``, ``"${P}"``), if the command gave it one."""
+    if word.substitutions:
+        return None
+    match = re.fullmatch(r"\$\{?(\w+)\}?", word.text)
+    return known.get(match.group(1)) if match else None
+
+
+def _program(words: list[Word], known: dict[str, str | None]) -> str | None:
+    """The name of the program a simple command runs, the bdd command line run by ``sh`` included; None when it is not
+    a literal or a known single word."""
+    if not words:
+        return ""
+    first = words[0]
+    if "$" in first.text or first.substitutions:
+        value = _program_value(first, known)
+        if value is not None and _bdd_by_sh(value):
+            return "bdd"
+        if value is None or len(value.split()) != 1:
+            return None
+        text = value
+    else:
+        text = first.text
+    if re.search(r"[*?]|\[.+\]|\{[^}]*,", text) and not first.quoted:
+        return None                                            # the shell picks the program by a pattern
+    name = program_name(text)
+    if name in ("sh", "bash") and len(words) > 1 and program_name(_program_value(words[1], known) or words[1].text) == "bdd":
+        return "bdd"                                           # `sh "$CLAUDE_PLUGIN_ROOT/tools/bdd/bdd" route`
+    return name
+
+
+def _bdd_by_sh(value: str) -> bool:
+    """``B="sh <plugin>/tools/bdd/bdd"; $B route``: the bdd command line, run by sh."""
+    words = value.split()
+    return len(words) == 2 and program_name(words[0]) in ("sh", "bash") and program_name(words[1]) == "bdd"
+
+
+def _installed_runner(text: str) -> bool:
+    """A program the project installed, run from its folder (``node_modules/.bin/tsc``, ``.venv/bin/pytest``)."""
+    path = text.replace("\\", "/").casefold()
+    return bool(re.search(r"(?:^|/)node_modules/\.bin/[^/]+$|(?:^|/)\.?venv/(?:bin|scripts)/[^/]+$", path))
+
+
+def plain(commands: list[Simple]) -> bool:
+    """Is the command built only from what this module reads exactly: known programs (``PROGRAMS``, or one the project
+    installed) named by a literal or a known variable, no here-document that runs a substitution, no input fed to an
+    interpreter or a package tool, no ``find`` that acts, and no variable that moves the home or folder lookups? A command
+    or process substitution may only read (``$(pwd)``, ``$(mktemp -d)``): its value is not known, so a word that holds it
+    and is written to makes the whole command the target."""
+    known = _known_values(commands)
+    for simple in commands:
+        if simple.expands or not _reads_only(simple.nested):
+            return False
+        words = simple.words
+        for word in words:
+            found = _assignment(word)
+            if found and found[0].upper() in STEERS_FOLDERS:
+                return False
+        if words and all(_assignment(w) for w in words):
+            continue
+        start = _program_at(words)
+        while start < len(words) and _assignment(words[start]):
+            start += 1
+        rest = words[start:]
+        if not rest:
+            continue
+        name = _program(rest, known)
+        if name not in PROGRAMS and not (name and _installed_runner(rest[0].text)):
+            return False
+        if name in INTERPRETERS | PACKAGE_TOOLS and simple.inputs:
+            return False                                       # `python < script.py`
+        if name in PACKAGE_TOOLS and any(w.name() in RUN_BY_TOOLS for w in rest[1:]):
+            return False                                       # `uv run python -c ...`, `npx --no-install tsx -e ...`
+        if name == "find" and any(w.text in FIND_ACTIONS for w in rest):
+            return False
+        if name == "for" and len(rest) > 1:
+            continue
+    return True
+
+
+def _reads_only(commands: list[Simple]) -> bool:
+    """Do these commands (a substitution's) only read: known readers, with no output redirection and nothing nested?"""
+    for simple in commands:
+        words = simple.words[_program_at(simple.words):]
+        if simple.nested or simple.redirects or simple.bodies or (words and _program(words, {}) not in READERS | {"mktemp"}):
+            return False
+    return True
+
+
+# -- what the commands write ---------------------------------------------------------------------------------------
 class _Reader:
     def __init__(self, cwd: Path | None, stable: set[str]):
         self.assigned: dict[str, str | None] = {}
@@ -509,24 +609,17 @@ class _Reader:
         self.dirs = self.union
         self.found = Writes()
         self.scripts: dict[str, str] = {}                # the scripts the command writes, by file name
-        self.moves_codex = False                         # it sets CODEX_HOME
         self.exact: set[Path] = set()                    # folders a `cd` reached for sure (from an absolute path)
         self.after = ""                                  # the operator before the command being read
 
-    def read(self, commands: list[Simple], depth: int) -> None:
-        piped = chained = False
-        self.after = ""
+    def read(self, commands: list[Simple]) -> None:
+        chained = False
         for simple in commands:
             if not chained:
                 self.chain = None
-            chain = self.chain
-            self.dirs = chain if chain is not None else self.union
-            after = self.after
-            self.read(simple.nested, depth)
-            self.chain, self.after = chain, after
-            self.dirs = chain if chain is not None else self.union
-            self.read_simple(simple, piped, depth)
-            piped, chained = simple.joiner in ("|", "|&"), simple.joiner == "&&"
+            self.dirs = self.chain if self.chain is not None else self.union
+            self.read_simple(simple)
+            chained = simple.joiner == "&&"
             self.after = simple.joiner
 
     def target(self, word: Word, names_only: bool = False) -> None:
@@ -542,18 +635,21 @@ class _Reader:
                                          source=word.text))
 
     def remember_script(self, simple: Simple, words: list[Word]) -> None:
-        """A file the command writes may be run by it next: its here-document, or what ``echo`` or ``printf`` print."""
+        """A file the command writes may be run by it next: its here-document, or what ``echo`` or ``printf`` print
+        (their escapes decoded, as ``printf`` and ``echo -e`` do)."""
         data = "\n".join(simple.bodies)
         if not data and words and words[0].name() in ("echo", "printf"):
             data = " ".join(_expand(w, self.assigned, strict=False)[0] for w in words[1:])
-        for word in simple.redirects:
-            if data:
+            try:
+                data = data.encode("utf-8").decode("unicode_escape")
+            except UnicodeDecodeError:
+                pass
+        written = [*simple.redirects, *(words[1:] if words and words[0].name() == "tee" else [])]   # `tee x.py <<EOF`
+        for word in written:
+            if data and not _flag(word):
                 self.scripts[_basename(word.text)] = data
 
-    def read_simple(self, simple: Simple, piped: bool, depth: int) -> None:
-        if simple.expands:
-            self.found.whole = True                                # `<<EOF` with `$(...)` in it runs that command
-            return
+    def read_simple(self, simple: Simple) -> None:
         for word in simple.redirects:
             self.target(word)
         words = list(simple.words)
@@ -566,14 +662,13 @@ class _Reader:
             return
         start = _program_at(words)
         while start < len(words) and _assignment(words[start]):
-            self.moves_codex = self.moves_codex or _assignment(words[start])[0].upper() == "CODEX_HOME"
             start += 1                                         # `FOO=1 cmd`: for that command only
         words = words[start:]
         self.remember_script(simple, words)
         if not words:
             return
-        program = words[0].name() if not words[0].quoted or words[0].text else ""
-        if program in DECLARATIONS:
+        program = _program(words, self.assigned)
+        if program == "export":
             for word in words[1:]:
                 found = _assignment(word)
                 if found:
@@ -582,54 +677,21 @@ class _Reader:
         if program in MOVES:
             self.move(words[1:])
             return
-        try:
-            program_text = _expand(words[0], self.assigned, strict=True)[0]
-        except _Unknown:
-            self.found.whole = True                                # `$CMD x`, `$(...) x`: the program is not known
-            return
-        if not words[0].quoted and (re.search(r"[*?]|\[.+\]", program_text) or re.search(r"\{[^}]*,", program_text)):
-            self.found.whole = True                                # `/bin/r? x`, `{rm,x} y`: the shell picks the program
-            return
-        if program_text and _basename(program_text) in self.scripts and program not in SHELLS | INTERPRETERS:
-            self.shell([], [self.scripts[_basename(program_text)]], False, depth)    # `./fix.sh` written just before
-        for word in words:
-            if word.quoted and program_name(word.text.split(None, 1)[0] if word.text.split() else "") in RUNS:
-                self.shell([word], [], False, depth)               # `env -S 'rm x'`, `flock l -c 'rm x'`: a command in quotes
         names_only = any(not w.quoted and (w.text == "-C" or w.text.startswith(FOLDER_FLAGS)) for w in words)
-        names = [program_text and program_name(program_text)] + [("" if w.quoted else w.name()) for w in words[1:]]
-        every = [program_name(program_text)] + [w.name() for w in words[1:]]
-        runner = next((at for at, name in enumerate(every) if name in RUNNERS), None)
-        if runner is not None and any(n in WRITE_VERBS | SHELLS | INTERPRETERS | {"git", "sed", "perl", "find"}
-                                      for n in every[runner + 1:]):
-            self.found.whole = True                                # `... | xargs rm`: the names come from its input
-            return
         if program == "mkdir":
             self.make(words[1:])
-        if "ln" in names or "mklink" in names:
-            self.found.whole = True                                # a link made now can send a later write anywhere
-            return
-        interpreted = False
-        for at, name in enumerate(names):
-            if name in SHELLS and (at == 0 or name not in (".", "source", "eval")):
-                self.shell(words[at + 1:], simple.bodies, piped and at == 0, depth, name)
-            if name in INTERPRETERS and not interpreted:
-                interpreted = True
-                writing = AWK_WRITES if name in ("awk", "gawk") else CODE_WRITES
-                self.code(words[at:], simple.bodies, piped and at == 0, writing, name in ("perl", "ruby", "php"))
-            if name in WRITE_VERBS:
-                self.verb(name, words[at + 1:], names_only, simple.bodies)
-            if name == "git" and any(n in GIT_WRITES for n in names[at + 1:at + 4]):
-                self.verb(name, words[at + 1:], names_only, simple.bodies)
-            if name == "sed" and any(_flag(w) and (re.fullmatch(r"-\w*i\S*", w.text) or w.text.startswith("--in-place"))
-                                     for w in words[at + 1:]):
-                for word in words[at + 1:]:
-                    self.target(word, names_only)
-            if name == "perl" and any(_flag(w) and re.fullmatch(r"-\w*i\S*", w.text) for w in words[at + 1:]):
-                for word in words[at + 1:]:
-                    self.target(word, names_only)
-            if name == "find" and any(w.text in FIND_ACTIONS for w in words[at + 1:] if not w.quoted):
-                for word in words[at + 1:]:
-                    self.target(word, names_only=True)
+        if program in INTERPRETERS:
+            self.code(words, simple.bodies, AWK_WRITES if program in ("awk", "gawk") else CODE_WRITES)
+        if program in WRITE_VERBS:
+            self.verb(program, words[1:], names_only)
+        if program == "git" and any(w.name() in GIT_WRITES for w in words[1:4] if not w.quoted):
+            for body in simple.bodies:                         # `git apply <<EOF` names what it writes
+                self.found.targets.append(Target(body, body.replace("\\", "/"), "", tuple(self.dirs), code=True, source=body))
+            self.verb(program, words[1:], names_only)
+        if program == "sed" and any(_flag(w) and (re.fullmatch(r"-\w*i\S*", w.text) or w.text.startswith("--in-place"))
+                                    for w in words[1:]):
+            for word in words[1:]:
+                self.target(word, names_only)
 
     def loop(self, words: list[Word]) -> None:
         """``for NAME in w1 w2 ...``: NAME holds each word in turn, so a place it is written into names every one of them."""
@@ -645,13 +707,12 @@ class _Reader:
             self.assigned[name] = None
 
     def assign(self, name: str, value: Word) -> None:
-        self.moves_codex = self.moves_codex or name.upper() == "CODEX_HOME"
         if name not in self.stable:
             self.assigned[name] = None
             return
         if value.substitutions:
             made = value.text == "$(...)" and re.match(r"\s*mktemp(?:\s|$)", value.substitutions[0])
-            self.assigned[name] = (Path(tempfile.gettempdir()) / SCRATCH).as_posix() if made else None
+            self.assigned[name] = (Path(tempfile.gettempdir()) / SCRATCH_FOLDER).as_posix() if made else None
             return
         try:
             self.assigned[name] = _expand(value, self.assigned, strict=True)[0]
@@ -659,7 +720,7 @@ class _Reader:
             self.assigned[name] = None
 
     def move(self, operands: list[Word]) -> None:
-        if any(w.text == "-" for w in operands) or os.environ.get("CDPATH") or "CDPATH" in self.assigned:
+        if any(w.text == "-" for w in operands) or os.environ.get("CDPATH"):
             self.moved_to(None)                                    # `cd -`, or a CDPATH that may send it elsewhere
             return
         operand = next((w for w in operands if not _flag(w) and w.text.casefold() != "/d"), None)
@@ -698,47 +759,13 @@ class _Reader:
                     self.found.made.add(place)
                     place = place.parent
 
-    def shell(self, args: list[Word], bodies: list[str], piped: bool, depth: int, runner: str = "") -> None:
-        try:
-            texts = [_expand(w, self.assigned, strict=True)[0] for w in args]
-        except _Unknown:
-            self.found.whole = True                                # `eval "$X"`: the script is not known
-            return
-        script = next((self.scripts[_basename(t)] for t in texts if not t.startswith("-") and _basename(t) in self.scripts),
-                      None)                                         # `sh fix.sh`, `. fix.sh` written just before
-        for name in RECIPES.get(runner, ()):
-            script = script or self.scripts.get(name)               # `cat > Makefile <<EOF ...; make`
-        inner = " ".join(texts) + "".join("\n" + b for b in [*bodies, *([script] if script else [])])
-        if not inner.strip():
-            if piped:
-                self.found.whole = True                            # `... | sh`: the commands come from the pipe
-            return
-        if depth >= MAX_DEPTH:
-            self.found.whole = True
-            return
-        try:
-            commands = lex(inner, depth + 1)
-        except Unreadable:
-            self.found.whole = True
-            return
-        chain, dirs, union, after, assigned = self.chain, self.dirs, self.union, self.after, dict(self.assigned)
-        stable = self.stable
-        self.stable = (stable - _assigned_names(commands)) | (_stable(commands) - set(assigned))
-        self.union = list(dirs)                          # the script starts where the shell is
-        self.read(commands, depth + 1)
-        self.union = [*union, *(d for d in self.union if d not in union)]
-        self.chain, self.dirs, self.after, self.assigned, self.stable = chain, dirs, after, assigned, stable
-
-    def code(self, words: list[Word], bodies: list[str], piped: bool, writing: re.Pattern, runs_backticks: bool) -> None:
+    def code(self, words: list[Word], bodies: list[str], writing: re.Pattern) -> None:
         """An interpreter's code: its quoted and partly quoted arguments (variables put in), its here-documents, and a
         script this command wrote and runs."""
         written = [self.scripts[_basename(w.text)] for w in words[1:] if not w.quoted and _basename(w.text) in self.scripts]
         quoted = [_expand(w, self.assigned, strict=False)[0] for w in words[1:] if w.partly_quoted]
         code = "\n".join([*quoted, *bodies, *written])
-        if not code and piped:
-            self.found.whole = True
-            return
-        if not (writing.search(code) or (runs_backticks and SHELL_QUOTES.search(code))):
+        if not writing.search(code):
             return
         dirs = (None,) if re.search(r"\bchdir\b", code) else tuple(self.dirs)
         self.found.targets.append(Target(code, code.replace("\\", "/"), "", dirs, code=True, source=code))
@@ -746,9 +773,7 @@ class _Reader:
             if not word.quoted:
                 self.target(word)
 
-    def verb(self, name: str, args: list[Word], names_only: bool, bodies: list[str] = ()) -> None:
-        for body in bodies:                                    # what a writing command reads can name what it writes
-            self.found.targets.append(Target(body, body.replace("\\", "/"), "", tuple(self.dirs), code=True, source=body))
+    def verb(self, name: str, args: list[Word], names_only: bool) -> None:
         if name == "cp" and self.copy(args, names_only):
             return
         for word in args:
@@ -799,11 +824,7 @@ def _inside(folder: Word, source: Word) -> Word:
     name = source.text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
     windows = source.windows.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
     return Word([*folder.parts, ("/" + name, "single")], [*folder.substitutions, *source.substitutions],
-                folder.windows.rstrip("\\/") + "/" + windows)
-
-
-def _assigned_names(commands: list[Simple]) -> set[str]:
-    return {found[0] for simple in _all_simple(commands) for w in simple.words if (found := _assignment(w))}
+                [folder.windows.rstrip("\\/") + "/" + windows])
 
 
 def _basename(text: str) -> str:
@@ -829,52 +850,24 @@ def windows_path(text: str) -> str:
 
 
 def writes(command: str, cwd: Path | None) -> Writes | None:
-    """Where the command writes, or None when it writes nothing. ``whole`` set: the whole command counts."""
+    """Where a ``plain`` command writes, or None when it writes nothing. For any other command (and one that cannot be
+    read) a ``whole`` result: the caller judges the command by the old rule."""
     try:
         commands = lex(command)
     except Unreadable:
         return Writes(whole=True)
+    if not plain(commands):
+        known = _known_values(commands)
+        opaque = any(_program(simple.words[_program_at(simple.words):], known) is None for simple in _all_simple(commands)
+                     if not all(_assignment(w) for w in simple.words))
+        return Writes(whole=True, opaque=opaque)
     reader = _Reader(cwd, _stable(commands))
-    reader.read(commands, 0)
+    reader.read(commands)
     found = reader.found
-    if reader.moves_codex and found.targets:
-        found.whole = True                                     # it writes with Codex's home moved somewhere else
     return found if found.targets or found.whole else None
 
 
-def runs_code(command: str) -> bool:
-    """Could the command run something the guard does not read off its words: a shell or an interpreter (of a script, a
-    string or its input), a program named by a variable or a substitution, a runner such as ``xargs``? Or can it not be
-    read at all?"""
-    try:
-        commands = lex(command)
-    except Unreadable:
-        return True
-    known = _known_values(commands)
-    for simple in _all_simple(commands):
-        words = simple.words
-        if words and words[0].name() == "for" and not words[0].quoted:
-            continue                                           # its word list is data
-        if words and all(_assignment(w) for w in words):
-            continue
-        words = words[_program_at(words):]
-        if simple.expands or any(w.substitutions for w in words[:1]):
-            return True
-        if words and not words[0].quoted and (re.search(r"[*?]|\[.+\]", words[0].text) or re.search(r"\{[^}]*,", words[0].text)):
-            return True                                        # the shell picks the program
-        if words and "$" in words[0].text:
-            value = _program_value(words[0], known)
-            if value is None or len(value.split()) != 1 or program_name(value) in SHELLS | INTERPRETERS | RUNNERS:
-                return True                                    # `$B route` with B the bdd command line is fine
-        if any(w.name() in SHELLS | INTERPRETERS | RUNNERS and (at == 0 or w.name() not in (".", "source", "eval"))
-               and not (w.name() in INTERPRETERS and all(x.text in VERSION_ONLY for x in words[at + 1:]))
-               for at, w in enumerate(words)):
-            return True
-        if any(w.quoted and program_name(w.text.split(None, 1)[0] if w.text.split() else "") in RUNS for w in words):
-            return True
-    return False
-
-
+# -- the programs a command runs, for the install checks --------------------------------------------------------------
 PACKAGE_WORDS = {"install", "i", "add", "ci", "sync", "update", "up", "upgrade", "remove", "rm", "uninstall", "un", "exec",
                  "dlx", "x", "link", "global", "get"}
 
@@ -886,12 +879,11 @@ class Programs:
 
 
 def programs(command: str) -> Programs:
-    """The programs a command runs, for the install checks. The view is the command with what is data to it taken out:
-    quoted arguments (but not a quoted program), here-documents, the values of assignments and the word list of a ``for``
-    loop, with a program word held in a variable replaced by the value the command gave it (``P=pnpm; $P add x`` runs
-    ``pnpm add x``). For a command that ``runs_code``, and one that cannot be read, the view is the command as it is.
-    ``unknown``: a program word that holds a variable or a substitution with no known value (``$PM install``) is given a
-    package-tool subcommand."""
+    """The programs a command runs. For a ``plain`` command the view is the command with what is data to it taken out:
+    quoted arguments of programs other than package tools, here-documents, and the word list of a ``for`` loop, with every
+    variable the command gave a known value put in (``P=pnpm; $P add x`` runs ``pnpm add x``). For any other command, and
+    one that cannot be read, the view is the command as it is. ``unknown``: a program word that holds a variable or a
+    substitution with no known value (``$PM install``) is given a package-tool subcommand."""
     try:
         commands = lex(command)
     except Unreadable:
@@ -902,57 +894,37 @@ def programs(command: str) -> Programs:
         words = simple.words[_program_at(simple.words):]
         if words and (words[0].substitutions or "$" in words[0].text) and _program_value(words[0], known) is None:
             unknown = unknown or any(w.text.casefold() in PACKAGE_WORDS for w in words[1:] if not _flag(w))
-    view = command if runs_code(command) else "\n".join(_view(commands, known))
+    view = "\n".join(_view(commands, known)) if plain(commands) else command
     return Programs(view, unknown)
-
-
-def program_view(command: str) -> str:
-    return programs(command).view
-
-
-def _known_values(commands: list[Simple]) -> dict[str, str | None]:
-    """The values plain assignments give stable variables, in order (None: not a single known word)."""
-    stable, known = _stable(commands), {}
-    for simple in _all_simple(commands):
-        words = simple.words
-        if words and all(_assignment(w) for w in words):
-            for word in words:
-                name, value = _assignment(word)
-                text = value.text
-                known[name] = text if name in stable and not value.substitutions and "$" not in text else None
-    return known
-
-
-def _program_value(word: Word, known: dict[str, str | None]) -> str | None:
-    """The value of a program word that is one variable (``$P``, ``"${P}"``), if the command gave it one."""
-    if word.substitutions:
-        return None
-    match = re.fullmatch(r"\$\{?(\w+)\}?", word.text)
-    return known.get(match.group(1)) if match else None
 
 
 def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
     lines: list[str] = []
     for simple in commands:
-        lines += _view(simple.nested, known)
         words = simple.words
         if words and words[0].name() == "for":
             continue
         program = _program_at(words)
+        runs = _program(words[program:], known) in PACKAGE_TOOLS | INTERPRETERS   # their quoted words are not data
         shown = []
         for at, word in enumerate(words):
             assignment = _assignment(word)
             if assignment:
                 shown.append(assignment[0] + '=""')
-            elif word.quoted and at > program:
+            elif word.quoted and at > program and not runs:
                 shown.append('""')
-            elif at == program and _program_value(word, known):
-                shown.append(_program_value(word, known))
             else:
-                shown.append(word.windows)
+                shown.append(_known_text(word.windows, known))
         shown += [f"> {word.windows}" for word in simple.redirects]
         lines.append(" ".join(shown))
+        if runs:
+            lines += simple.bodies                             # an interpreter's here-document is its code
     return lines
+
+
+def _known_text(text: str, known: dict[str, str | None]) -> str:
+    """The text with the variables the command gave a known value put in, and no other."""
+    return _VARIABLE.sub(lambda m: known.get(m.group(1) or m.group(2) or "") or m.group(0), text)
 
 
 def without_data(command: str) -> str:
@@ -963,15 +935,16 @@ def without_data(command: str) -> str:
         commands = lex(command)
     except Unreadable:
         return command
-    data = [body for simple in _all_simple(commands) if simple.bodies and not runs_code_simple(simple)
+    data = [body for simple in _all_simple(commands) if simple.bodies and not _runs_shell(simple)
             for body in simple.bodies if len(body) > 200]
     for body in data:
         command = command.replace(body, "", 1)
     return command
 
 
-def runs_code_simple(simple: Simple) -> bool:
-    """Is a here-document of this command run as shell commands (a shell reads it, or it is piped on)? Interpreter code
-    is not shell: its braces and quotes are not the shell's, and the raw command is still checked as it is."""
+def _runs_shell(simple: Simple) -> bool:
+    """Is a here-document of this command run as shell commands: anything but a known program reads it, or it is piped
+    on? Interpreter code is not shell: its braces and quotes are not the shell's, and the raw command is still checked."""
     words = simple.words[_program_at(simple.words):]
-    return simple.expands or any(w.name() in SHELLS | RUNNERS for w in words) or simple.joiner in ("|", "|&")
+    name = _program(words, {})
+    return simple.expands or name not in PROGRAMS or simple.joiner in ("|", "|&")

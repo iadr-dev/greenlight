@@ -371,7 +371,7 @@ VERSION_FLAGS = {"--version", "-v", "-V", "--help", "-h"}
 QUIET_FLAGS = {"--silent", "-s", "--no-color", "--no-progress"}
 AUDIT_FLAGS = ("--json", "--production", "--omit=", "--audit-level=", "--dir=", "--prefix=")   # all `audit` may take
 AUDIT_FOLDER_FLAGS = {"--dir", "--prefix"}                                # and these, each with the folder after it
-NO_INSTALL_FLAGS = {"--no-install", "--no"}
+NO_INSTALL_FLAGS = {"--no-install"}
 CHANGING_WORDS = {"install", "i", "add", "ci", "clean-install", "link", "ln", "unlink", "uninstall", "un", "remove", "rm", "r",
                   "update", "up", "upgrade", "rebuild", "prune", "dedupe", "ddp", "it", "cit", "install-test", "install-ci-test",
                   "exec", "dlx", "x", "init", "create", "publish", "global"}
@@ -413,6 +413,7 @@ _PLUMBING = re.compile(r"\b(?:un)?lock\b[^;&|\n]*--plumbing\b", re.IGNORECASE)
 PLUMBING_MESSAGE = ("greenlight: the shared test plumbing is every feature's, so the person or the orchestrator releases it "
                     "(`bdd unlock --plumbing`) and locks it again (`bdd lock --plumbing`), not an agent. Say in your report "
                     "which file has to change and why.")
+_FIND_ACTS = re.compile(r"(?<![\w-])-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b")
 _PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
 PR_FILE = "PULL_REQUEST.md"
 
@@ -463,7 +464,7 @@ def node_arguments_are_safe(args: list[str]) -> bool:
 
 
 def runs_installed(word: str, args: list[str]) -> bool:
-    """``npx --no-install <tool>`` (or ``--no``) runs a tool that is already installed and never fetches one; the tool
+    """``npx --no-install <tool>`` runs a tool that is already installed and never fetches one; the tool
     it runs is then judged as a command of its own. Any other flag before the tool (``--yes``, ``-p``) may fetch."""
     if _last_segment(word).split(".", 1)[0] != "npx" or not args or args[0] not in NO_INSTALL_FLAGS:
         return False
@@ -732,7 +733,9 @@ def target_places(token: str, target: shellwrites.Target, bare: bool = False,
     word = token.replace("\\", "/")
     if target.names_only or _GLOB.search(word) or "$" in word or not word.strip("/."):
         return None
-    segments = [part for part in word.split("/")[:-1] if part not in ("", ".", "..")]
+    segments = [part for part in word.split("/")[:-1] if part not in ("", ".", "..") and not re.fullmatch(r"[A-Za-z]:", part)]
+    if target.code and not segments:
+        return None                                    # `'/a.feature'` in code may be the end of `'features' + '/a.feature'`
     placeable = not target.code and (bare or target.certain)       # a name after `cd /abs/path &&` lands there
     if not segments and not word.startswith("/") and not re.match(r"[A-Za-z]:/", word) and not placeable:
         return None
@@ -993,11 +996,11 @@ def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | No
         written = check_file_write(project, project.root / PR_FILE, agent)
         if written:
             return written
-    if _COST_AMEND.search(scrubbed):
-        return COST_AMEND_MESSAGE
-    if _PLUMBING.search(scrubbed):
-        return PLUMBING_MESSAGE
     found = shellwrites.programs(scrubbed)
+    if _COST_AMEND.search(found.view):
+        return COST_AMEND_MESSAGE
+    if _PLUMBING.search(found.view):
+        return PLUMBING_MESSAGE
     readings = [found.view.replace('"', "").replace("'", ""), *shell_readings(shellwrites.without_data(found.view))]
     if any(_INSTALL.search(reading) for reading in readings):
         return INSTALL_MESSAGE
@@ -1026,14 +1029,16 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
         return PIN_MESSAGE
     if _HELPERS_INSTALL.search(scrubbed):
         return HELPERS_MESSAGE
-    if _DENY_RULES.search(scrubbed):
+    if _DENY_RULES.search(shellwrites.programs(scrubbed).view):     # not `git commit -m "... --add-deny-rules"`
         return DENY_RULES_MESSAGE
     refused = check_agent_command(project, scrubbed, agent) if agent else None
     if refused:
         return refused
     found = shellwrites.writes(command, cwd)
-    if found is None:
-        return None
+    looks_like_a_write = (found is not None and (found.opaque or _SHELL_WRITES.search(scrubbed) or _FIND_ACTS.search(scrubbed)
+                                                 or shellwrites.CODE_WRITES.search(scrubbed)))
+    if found is None or (found.whole and not looks_like_a_write):
+        return None                                    # a command read whole is judged as before: only if it looks like a write
     return check_writes(project, spelled(command, found), agent, cwd)
 
 

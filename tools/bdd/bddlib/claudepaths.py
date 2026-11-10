@@ -33,7 +33,8 @@ STEERING_ENV = re.compile(
     r"NPM_.*|YARN_.*|PNPM_.*|BUN_.*|DENO_.*|COREPACK_.*|TS_NODE_.*|TSX_.*|CUCUMBER_.*|PLAYWRIGHT_.*|VITEST_.*|JEST_.*|"
     r"MOCHA_.*|CYPRESS_.*|DOTNET_.*|NUGET_.*|MSBUILD.*|CGO_.*|GO(?:FLAGS|PATH|ROOT|OS|ARCH|PROXY|SUMDB|NOSUMDB|PRIVATE|"
     r"NOPROXY|INSECURE|TOOLCHAIN|EXPERIMENT|CACHE|MODCACHE|WORK|ENV|DEBUG|BIN)|CARGO_.*|RUSTFLAGS|RUSTUP_.*|RUSTC_.*|"
-    r"DART_.*|FLUTTER_.*|PUB_.*|GEM_HOME|GEM_PATH|BUNDLE_.*|PHP_.*|COMPOSER_.*|ANDROID_.*|KOTLIN_.*|BDD_.*|CI",
+    r"DART_.*|FLUTTER_.*|PUB_.*|GEM_HOME|GEM_PATH|BUNDLE_.*|PHP_.*|COMPOSER_.*|ANDROID_.*|KOTLIN_.*|BDD_.*|CI|"
+    r"CORECLR_.*|COR_.*|COMPLUS_.*|POSIXLY_CORRECT|GLOBIGNORE|BASH_.*|ERL_.*|ELIXIR_.*|MIX_.*|LUA_.*|R_.*|LANG|LC_.*",
     re.IGNORECASE)                 # and what steers the test runners, which decide red and green
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")      # a name any shell takes as one, with a text value
 
@@ -87,10 +88,19 @@ def parse_settings(text: str) -> dict:
     return data
 
 
+HARMLESS_TYPES = {"$schema": str, "model": str, "outputStyle": str, "language": str, "includeCoAuthoredBy": bool,
+                  "alwaysThinkingEnabled": bool, "spinnerTipsEnabled": bool}
+
+
+def _strings(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
 def settings_view(data: dict) -> dict:
     """The parts of a settings file that can switch greenlight off: everything but the harmless keys, the environment
     variables that steer the tools, and greenlight's own deny rules. Two files with the same view are the same to it."""
-    view = {key: value for key, value in data.items() if key not in HARMLESS_KEYS}
+    view = {key: value for key, value in data.items()                # a harmless key of the wrong type may break the file
+            if key not in HARMLESS_KEYS or (key in HARMLESS_TYPES and not isinstance(value, HARMLESS_TYPES[key]))}
     env = data.get("env")
     if isinstance(env, dict):
         steering = {name: value for name, value in env.items()
@@ -101,7 +111,7 @@ def settings_view(data: dict) -> dict:
         view["env"] = env
     permissions = data.get("permissions")
     if isinstance(permissions, dict):
-        kept = {key: value for key, value in permissions.items() if key not in HARMLESS_PERMISSIONS}
+        kept = {key: value for key, value in permissions.items() if key not in HARMLESS_PERMISSIONS or not _strings(value)}
         deny = permissions.get("deny", [])
         if not isinstance(deny, list):
             kept["deny"] = deny

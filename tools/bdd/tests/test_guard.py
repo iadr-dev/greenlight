@@ -957,6 +957,35 @@ class PrecisionTest(GuardCase):
             self.assertIn("may not write", self.call("Write", agent="greenlight:spec-auditor",
                                                      file_path=str(Path(scratch) / "x.py")) or "")
 
+    def test_the_third_review_found_these_and_they_are_refused(self):
+        """Commands outside what the reader reads exactly are judged whole, as before this change."""
+        for command in ["pypy3 -c \"open('features/a.feature','w').write('x')\"", "ipython -c \"open('features/a.feature','w')\"",
+                        "alias r=rm\nr features/a.feature", "fd a.feature features --exec rm {}",
+                        "cat > /tmp/s.sh <<'EOF'\nrm features/a.feature\nEOF\nsh < /tmp/s.sh",
+                        "cat > /tmp/r.py <<'EOF'\nopen('features/a.feature','w')\nEOF\npython < /tmp/r.py",
+                        "printf 'all:\\n\\trm features/a.feature\\n' > Makefile && make",
+                        "cd features && pushd /tmp && popd && rm a.feature", f"cd /tmp && eval 'cd {self.root.as_posix()}/features' && rm a.feature",
+                        f"cd /tmp && HOME={self.root.as_posix()}/features && cd && rm a.feature",
+                        "python -c \"open('features' + '/a.feature','w')\"", "python -c \"d='features'; open(f'{d}/a.feature','w')\"",
+                        "tee /tmp/y.py >/dev/null <<'EOF'\nopen('features/a.feature','w').write('x')\nEOF\npython /tmp/y.py",
+                        "uv run python -c \"open('features/a.feature','w')\"",
+                        "npx --no-install tsx -e \"require('fs').writeFileSync('features/a.feature','x')\""]:
+            with self.subTest(command=command):
+                self.assertIn("is locked by FEAT-001", self.bash(command) or "", command)
+        self.assertIsNotNone(self.bash("rm features/a.feature\x00"))
+        for command in ["uv 'add' requests", "poetry 'add' requests", "S=install; pip $S requests"]:
+            with self.subTest(command=command):
+                self.assertIn("install", self.bash(command) or "", command)
+        for command in ['git commit -m "Add bdd doctor --add-deny-rules"', 'git commit -m "document bdd unlock --plumbing"']:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_a_deeply_nested_command_is_read_quickly(self):
+        start = time.perf_counter()
+        self.assertIsNotNone(self.bash("bash -c " * 100 + "'rm features/a.feature'"))
+        self.assertIsNotNone(self.bash("sh x " * 100 + "; rm features/a.feature"))
+        self.assertLess(time.perf_counter() - start, 2.0)
+
     def test_the_bdd_command_line_by_a_variable_is_still_the_bdd_command_line(self):
         self.assertIn("cost corrections", self.bash('B="/p/tools/bdd/bdd"; "$B" cost FEAT-001 --amend implement --tokens 1 '
                                                     '--seconds 1 --reason x') or "")
@@ -999,7 +1028,7 @@ class PrecisionTest(GuardCase):
         self.assertIn("session transcript", self.call("Write", file_path=str(memory / "link.md")) or "")
 
     def test_running_an_installed_tool_is_not_installing_one(self):
-        for command in ["npx --no-install tsc -p tsconfig.json --noEmit", "npx --no tsc --noEmit",
+        for command in ["npx --no-install tsc -p tsconfig.json --noEmit",
                         "node_modules/.bin/tsc --noEmit > /tmp/tc.txt", "./node_modules/.bin/vitest run 2>&1 | tail",
                         "pnpm audit --dir api", "for p in fastify pnpm; do npm view $p version; done",
                         "node --import ./tests/node_modules/tsx/dist/loader.mjs tests/node_modules/x/cli.js > /tmp/out.txt"]:
@@ -1009,7 +1038,8 @@ class PrecisionTest(GuardCase):
     def test_a_real_install_is_still_refused(self):
         for command in ["pnpm add left-pad", "npm install", "npx tsc", "npx --no-install npm install x", "pip install x",
                         "rm -rf node_modules", "cp x node_modules/foo/index.js", "sh -c 'npm install x'", "npx -p x y",
-                        "pnpm audit --fix", "bash <<'EOF'\nnpm i x\nEOF"]:
+                        "pnpm audit --fix", "bash <<'EOF'\nnpm i x\nEOF",
+                        "npx --no tsc --noEmit"]:
             with self.subTest(command=command):
                 self.assertIn("may not install packages", self.bash(command) or "", command)
 
@@ -1090,7 +1120,8 @@ class SettingsEffectTest(GuardCase):
     def test_spellings_that_are_the_same_key_are_the_same_key(self):
         for content in ['{"hoo\\u006bs": {}}', '{"env": {}, "env": {"PATH": "/x"}}', '{"hooks": {}, "hooks": null}', "{", "[]",
                         "// comment\n{}", '{"env": {"A": NaN}}', '{"model": Infinity}', '{"env": {"PATH=/evil:": "x"}}',
-                        '{"env": {"A": 1}}']:
+                        '{"env": {"A": 1}}', '{"model": 123}', '{"permissions": {"allow": "Bash(ls)"}}',
+                        '{"env": {"CORECLR_PROFILER_PATH": "x"}}', '{"env": {"POSIXLY_CORRECT": "1"}}']:
             with self.subTest(content=content):
                 self.assertIn("is a Claude Code settings file", self.call("Write", file_path=str(self.settings), content=content))
 
