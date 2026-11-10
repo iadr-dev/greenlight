@@ -980,6 +980,26 @@ class PrecisionTest(GuardCase):
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command), command)
 
+    def test_the_fourth_review_found_these_and_they_are_refused(self):
+        for command, said in [('bdd cost FEAT-001 "--amend" implement --tokens 1 --seconds 1 --reason x', "cost corrections"),
+                              ('bdd "unlock" --plumbing --reason x', "releases it"), ('bdd lock "--plumbing" --reason x', "releases it"),
+                              ('B=bdd; "$B" unlock "--plumbing" --reason x', "releases it"),
+                              ("ruby -e \"File.write('.bdd/features/FEAT-001-a/state.json','x')\"", "managed by"),
+                              ("php -r \"file_put_contents('tests/drivers/barrier.ts','x');\"", "is locked by FEAT-001"),
+                              ("perl -e 'open F,\">tests/drivers/barrier.ts\"'", "is locked by FEAT-001"),
+                              ('pwsh -c "Set-Content tests/drivers/barrier.ts x"', "is locked by FEAT-001"),
+                              ("sort -o tests/drivers/barrier.ts x", "is locked by FEAT-001"),
+                              ("uniq x tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              ("sed 's/a/b/w tests/drivers/barrier.ts' x", "is locked by FEAT-001"),
+                              ("git diff --output=tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              ("gh run download -D tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              (".venv/bin/bash -c 'rm tests/drivers/barrier.ts'", "greenlight:")]:
+            with self.subTest(command=command):
+                self.assertIn(said, self.bash(command) or "", command)
+        self.assertIsNone(self.bash('git commit -m "Add bdd doctor --add-deny-rules and bdd cost --amend"', agent=None))
+        self.assertIn("additionalDirectories", self.call("Write", file_path=str(self.root / ".claude" / "settings.json"),
+                                                         content='{"permissions": {"additionalDirectories": ["/x"]}}') or "")
+
     def test_a_deeply_nested_command_is_read_quickly(self):
         start = time.perf_counter()
         self.assertIsNotNone(self.bash("bash -c " * 100 + "'rm features/a.feature'"))

@@ -22,7 +22,7 @@ RECOMMENDED_DENY = (
 # (permissions.defaultMode), so it is the person's; so is a key Claude Code adds later, until it is listed here.
 HARMLESS_KEYS = ("$schema", "model", "outputStyle", "includeCoAuthoredBy", "alwaysThinkingEnabled", "language",
                  "spinnerTipsEnabled", "env", "permissions")
-HARMLESS_PERMISSIONS = ("allow", "ask", "additionalDirectories", "deny")
+HARMLESS_PERMISSIONS = ("allow", "ask", "deny")
 # Environment variables that steer the hooks' shell, Python, the tools they find, or where greenlight looks.
 STEERING_ENV = re.compile(
     r"PATH|PATHEXT|ENV|BASH_ENV|BASH_FUNC_.*|SHELL|SHELLOPTS|BASHOPTS|IFS|CDPATH|PS4|PROMPT_COMMAND|HOME|USERPROFILE|"

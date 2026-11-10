@@ -26,10 +26,11 @@ COPY_VERBS = {"cp", "mv", "install"}                    # they write into a fold
 GIT_WRITES = {"checkout", "restore", "reset", "stash", "apply", "rm", "mv", "clean"}
 INTERPRETERS = {"python", "py", "node", "tsx", "awk", "gawk"}
 PACKAGE_TOOLS = {"npm", "pnpm", "yarn", "npx", "bun", "pip", "uv", "poetry", "pipx", "pipenv", "conda"}
-READERS = {"cat", "grep", "egrep", "fgrep", "rg", "ls", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "cmp",
-           "jq", "echo", "printf", "file", "stat", "du", "df", "tree", "which", "where", "realpath", "readlink", "basename",
-           "dirname", "date", "pwd", "true", "false", "test", "[", "[[", "]", "]]", "sleep", "nl", "column", "comm", "paste",
-           "fold", "md5sum", "sha1sum", "sha256sum", "xxd", "od", "seq", "sed", "find", "gh", "git", "mkdir", "bdd"}
+READERS = {"cat", "grep", "egrep", "fgrep", "rg", "ls", "head", "tail", "wc", "cut", "tr", "diff", "cmp", "jq", "echo",
+           "printf", "file", "stat", "du", "df", "which", "where", "realpath", "readlink", "basename", "dirname", "date", "pwd",
+           "true", "false", "test", "[", "[[", "]", "]]", "sleep", "nl", "column", "comm", "paste", "fold", "md5sum", "sha1sum",
+           "sha256sum", "od", "seq", "sed", "find", "git", "mkdir", "bdd", "sort", "uniq", "gh"}   # see ``plain`` for their options
+WRITING_OPTIONS = re.compile(r"--?(?:output[\w-]*|pre|exec|fprint|fls|delete)(?![\w-])|--?o(?:ut)?=")   # then the command is not plain
 KEYWORDS = {"for", "do", "done", "if", "then", "else", "elif", "fi", "while", "until", "{", "}", "!", "time"}
 PREFIXES = {"env", "time", "nice", "timeout", "do", "then", "else", "elif", "if", "while", "until", "{", "}", "!"}
 PROGRAMS = READERS | WRITE_VERBS | INTERPRETERS | PACKAGE_TOOLS | KEYWORDS | {"cd", "export"}
@@ -56,6 +57,15 @@ CODE_WRITES = re.compile(
     r"symlinkSync|chmodSync|mkdirSync)\w*\s*\("
     r"|\bunlink\b|subprocess|\bos\.(?:system|popen|exec\w*|spawn\w*)|\bPopen\b|child_process|\bexec\w*\b|\bspawn\w*\b"
     r"|\bsystem\b|\bgetattr\b|__import__|\bimportlib\b|\beval\b|\bcompile\s*\(")
+# Other interpreters' writes, for a command read whole: it is checked if it looks like a write in any of these spellings.
+OTHER_CODE = re.compile(r"(?:^|[\s;&|(`])(?:ruby|php|perl|lua|luajit|pypy\w*|ipython|jython|groovy|julia|rscript|osascript|"
+                        r"wscript|cscript)(?:\.exe)?\s|\bFile\.(?:write|open|delete|binwrite|rename|unlink)|file_put_contents|"
+                        r"\bfopen\b|FileUtils|\bqx\b|\bmklink\b|Deno\.\w*[Ww]rite|Bun\.write|"
+                        r"\bopen\s*\(?\s*\w+\s*,\s*[\"']?\s*[>+]", re.IGNORECASE)
+GH_WRITES = {"checkout", "download", "clone", "sync", "extension", "alias", "codespace", "gist", "--output", "-O"}
+# sed's own write commands: `w file`, `W file`, `e` (run a command), and the `w` and `e` flags of `s///`.
+SED_WRITES = re.compile(r"(?:^|[;{}\n])\s*(?:\d+|\$|/[^/]*/)?\s*(?:,\s*(?:\d+|\$|/[^/]*/))?\s*[wWe](?:\s|$)"
+                        r"|(?:^|[;{}\n])\s*[\d$,\s]*s(?P<d>[^\w\s\\]).*?(?P=d).*?(?P=d)[a-zA-Z0-9]*[we]")
 AWK_WRITES = re.compile(r"\bprintf?\b[^;}\n]*>|\bsystem\s*\(|\|\s*\"")       # awk: `print > "file"`, `system(...)`, a pipe
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+)|(\{[^}]*\}|[@*#?$!\-]))")
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(\+?)=")
@@ -553,21 +563,24 @@ def _installed_runner(text: str) -> bool:
     return bool(re.search(r"(?:^|/)node_modules/\.bin/[^/]+$|(?:^|/)\.?venv/(?:bin|scripts)/[^/]+$", path))
 
 
-def plain(commands: list[Simple]) -> bool:
+def judge(commands: list[Simple]) -> str:
     """Is the command built only from what this module reads exactly: known programs (``PROGRAMS``, or one the project
     installed) named by a literal or a known variable, no here-document that runs a substitution, no input fed to an
     interpreter or a package tool, no ``find`` that acts, and no variable that moves the home or folder lookups? A command
     or process substitution may only read (``$(pwd)``, ``$(mktemp -d)``): its value is not known, so a word that holds it
-    and is written to makes the whole command the target."""
+    and is written to makes the whole command the target.
+
+    ``PLAIN`` (an empty text) when it is; ``WRITES`` when it is not because of something that writes (an option or a
+    command of a known program that writes a file, an installed shell); ``OTHER`` otherwise."""
     known = _known_values(commands)
     for simple in commands:
         if simple.expands or not _reads_only(simple.nested):
-            return False
+            return OTHER
         words = simple.words
         for word in words:
             found = _assignment(word)
             if found and found[0].upper() in STEERS_FOLDERS:
-                return False
+                return OTHER
         if words and all(_assignment(w) for w in words):
             continue
         start = _program_at(words)
@@ -577,17 +590,38 @@ def plain(commands: list[Simple]) -> bool:
         if not rest:
             continue
         name = _program(rest, known)
-        if name not in PROGRAMS and not (name and _installed_runner(rest[0].text)):
-            return False
+        if name not in PROGRAMS and not (_installed_runner(rest[0].text) and not any(w.partly_quoted for w in rest)
+                                         and name not in INSTALLED_SHELLS):
+            return WRITES if rest and _installed_runner(rest[0].text) else OTHER   # an installed tool given only paths and flags
         if name in INTERPRETERS | PACKAGE_TOOLS and simple.inputs:
-            return False                                       # `python < script.py`
+            return WRITES                                      # `python < script.py`
         if name in PACKAGE_TOOLS and any(w.name() in RUN_BY_TOOLS for w in rest[1:]):
-            return False                                       # `uv run python -c ...`, `npx --no-install tsx -e ...`
+            return WRITES                                       # `uv run python -c ...`, `npx --no-install tsx -e ...`
         if name == "find" and any(w.text in FIND_ACTIONS for w in rest):
-            return False
+            return WRITES
+        if any(WRITING_OPTIONS.match(w.text) for w in rest[1:] if not w.quoted):
+            return WRITES                                       # `git diff --output=x`, `rg --pre cmd`
+        if name == "sed" and any(SED_WRITES.search(w.text) for w in rest[1:] if not _flag(w)):
+            return WRITES                                       # `sed 's/a/b/w out'`
+        if name == "sort" and any(re.match(r"-[a-zA-Z]*o|--output", w.text) for w in rest[1:] if not w.quoted):
+            return WRITES                                       # `sort -o file`
+        if name == "uniq" and len([w for w in rest[1:] if not _flag(w)]) > 1:
+            return WRITES                                       # `uniq input output`
+        if name == "gh" and any(w.text in GH_WRITES for w in rest[1:]):
+            return WRITES                                       # `gh pr checkout`, `gh run download`
+
         if name == "for" and len(rest) > 1:
             continue
-    return True
+    return PLAIN
+
+
+
+PLAIN, WRITES, OTHER = "", "writes", "other"
+INSTALLED_SHELLS = {"sh", "bash", "zsh", "dash", "pwsh", "powershell", "cmd"}
+
+
+def plain(commands: list[Simple]) -> bool:
+    return judge(commands) == PLAIN
 
 
 def _reads_only(commands: list[Simple]) -> bool:
@@ -856,10 +890,11 @@ def writes(command: str, cwd: Path | None) -> Writes | None:
         commands = lex(command)
     except Unreadable:
         return Writes(whole=True)
-    if not plain(commands):
+    verdict = judge(commands)
+    if verdict != PLAIN:
         known = _known_values(commands)
-        opaque = any(_program(simple.words[_program_at(simple.words):], known) is None for simple in _all_simple(commands)
-                     if not all(_assignment(w) for w in simple.words))
+        opaque = verdict == WRITES or any(_program(simple.words[_program_at(simple.words):], known) is None
+                                          for simple in _all_simple(commands) if not all(_assignment(w) for w in simple.words))
         return Writes(whole=True, opaque=opaque)
     reader = _Reader(cwd, _stable(commands))
     reader.read(commands)
@@ -905,7 +940,7 @@ def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
         if words and words[0].name() == "for":
             continue
         program = _program_at(words)
-        runs = _program(words[program:], known) in PACKAGE_TOOLS | INTERPRETERS   # their quoted words are not data
+        runs = _program(words[program:], known) in PACKAGE_TOOLS | INTERPRETERS | {"bdd"}   # their quoted words are not data
         shown = []
         for at, word in enumerate(words):
             assignment = _assignment(word)
