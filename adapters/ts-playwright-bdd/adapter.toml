@@ -19,7 +19,7 @@ support = ["tests/bdd.config.ts", "tests/run.mjs", "tests/junit-reporter.mjs", "
 
 [run]
 # One bound script, tests/run.mjs, generates the test files from the features (bddgen) and runs Playwright with the
-# test tooling in tests/node_modules (installed with `npm ci --prefix tests`), without a shell. Playwright reads its settings only from tests/bdd.config.ts (-c). The
+# test tooling in tests/node_modules (installed with `pnpm install --frozen-lockfile --dir tests`), without a shell. Playwright reads its settings only from tests/bdd.config.ts (-c). The
 # script writes the JUnit report to --out and selects the scenarios by the tag (and the name, when isolated).
 # Variables that change what node loads (NODE_*) or how Playwright behaves (PW_*, PLAYWRIGHT_*) are not passed on.
 by_tag = 'node tests/run.mjs --tag {tag}'
