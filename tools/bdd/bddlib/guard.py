@@ -479,10 +479,12 @@ def _command_refuses(simple: str, interpreting: bool) -> bool:
     # A path given to a plain read command is data. Not when the command redirects, or when something in the same command
     # can run what it is given (a shell, xargs, node ...): then every path counts.
     data = not interpreting and _last_segment(words[0]) in DATA_COMMANDS and not re.search("[<>]", simple)
+    run_by_interpreter = False                          # an earlier word is an interpreter; flags may sit in between
     for at, word in enumerate(words):
+        if at > 0:
+            run_by_interpreter = run_by_interpreter or _last_segment(words[at - 1]) in INTERPRETERS
         if data and at > 0 and ("/" in word or "\\" in word):
             continue
-        run_by_interpreter = any(_last_segment(earlier) in INTERPRETERS for earlier in words[:at])   # flags may sit in between
         program = node_program(word, run_by_interpreter)
         if program == "fetch" and runs_installed(word, words[at + 1:]):
             continue

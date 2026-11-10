@@ -186,7 +186,7 @@ def run_assume(argv: list[str]) -> int:
 
 
 def run_cost(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="bdd cost", description="Add tokens and time spent in a phase, or collect what the agents "
+    ap = argparse.ArgumentParser(prog="bdd cost", allow_abbrev=False, description="Add tokens and time spent in a phase, or collect what the agents "
                                  "that finished cost (their time from the hook, their tokens from their own transcripts).")
     ap.add_argument("feature")
     ap.add_argument("--phase", choices=state.PHASES, help="the phase; with --collect, only for agents the hook could not place")

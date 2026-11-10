@@ -22,7 +22,7 @@ RECOMMENDED_DENY = (
 # (permissions.defaultMode), so it is the person's; so is a key Claude Code adds later, until it is listed here.
 HARMLESS_KEYS = ("$schema", "model", "outputStyle", "includeCoAuthoredBy", "alwaysThinkingEnabled", "language",
                  "spinnerTipsEnabled", "env", "permissions")
-HARMLESS_PERMISSIONS = ("allow", "ask", "deny")
+HARMLESS_PERMISSIONS = ("allow", "ask")              # a deny rule, the person's or greenlight's, is the person's
 # Environment variables that steer the hooks' shell, Python, the tools they find, or where greenlight looks.
 STEERING_ENV = re.compile(
     r"PATH|PATHEXT|ENV|BASH_ENV|BASH_FUNC_.*|SHELL|SHELLOPTS|BASHOPTS|IFS|CDPATH|PS4|PROMPT_COMMAND|HOME|USERPROFILE|"
@@ -34,7 +34,7 @@ STEERING_ENV = re.compile(
     r"MOCHA_.*|CYPRESS_.*|DOTNET_.*|NUGET_.*|MSBUILD.*|CGO_.*|GO(?:FLAGS|PATH|ROOT|OS|ARCH|PROXY|SUMDB|NOSUMDB|PRIVATE|"
     r"NOPROXY|INSECURE|TOOLCHAIN|EXPERIMENT|CACHE|MODCACHE|WORK|ENV|DEBUG|BIN)|CARGO_.*|RUSTFLAGS|RUSTUP_.*|RUSTC_.*|"
     r"DART_.*|FLUTTER_.*|PUB_.*|GEM_HOME|GEM_PATH|BUNDLE_.*|PHP_.*|COMPOSER_.*|ANDROID_.*|KOTLIN_.*|BDD_.*|CI|"
-    r"CORECLR_.*|COR_.*|COMPLUS_.*|POSIXLY_CORRECT|GLOBIGNORE|BASH_.*|ERL_.*|ELIXIR_.*|MIX_.*|LUA_.*|R_.*|LANG|LC_.*",
+    r"CORECLR_.*|COR_.*|COMPLUS_.*|POSIXLY_CORRECT|GLOBIGNORE|BASH_.*|ZDOTDIR|FPATH|ZSH.*|ERL_.*|ELIXIR_.*|MIX_.*|LUA_.*|R_.*|LANG|LC_.*",
     re.IGNORECASE)                 # and what steers the test runners, which decide red and green
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")      # a name any shell takes as one, with a text value
 
@@ -112,11 +112,8 @@ def settings_view(data: dict) -> dict:
     permissions = data.get("permissions")
     if isinstance(permissions, dict):
         kept = {key: value for key, value in permissions.items() if key not in HARMLESS_PERMISSIONS or not _strings(value)}
-        deny = permissions.get("deny", [])
-        if not isinstance(deny, list):
-            kept["deny"] = deny
-        elif any(rule in RECOMMENDED_DENY for rule in deny):
-            kept["deny"] = sorted({rule for rule in deny if rule in RECOMMENDED_DENY})
+        if isinstance(kept.get("deny"), list) and _strings(kept["deny"]):
+            kept["deny"] = sorted(set(kept["deny"]))
         if kept:
             view["permissions"] = kept
     elif permissions is not None:

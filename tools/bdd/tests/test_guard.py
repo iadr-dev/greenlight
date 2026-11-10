@@ -1006,6 +1006,43 @@ class PrecisionTest(GuardCase):
         self.assertIsNotNone(self.bash("sh x " * 100 + "; rm features/a.feature"))
         self.assertLess(time.perf_counter() - start, 2.0)
 
+    def test_the_fifth_review_found_these_and_they_are_refused(self):
+        for command, said in [("echo $(git checkout -- tests/drivers/barrier.ts)", "is locked by FEAT-001"),
+                              ("echo $(sed -i s/a/b/ tests/drivers/barrier.ts)", "is locked by FEAT-001"),
+                              ("echo $(bdd unlock --plumbing --reason x)", "releases it"),
+                              ("env -S'rm tests/drivers/barrier.ts'", "is locked by FEAT-001"),
+                              ("env --chdir=tests/drivers rm barrier.ts", "is locked by FEAT-001"),
+                              ("cd a; " * 40 + "cd tests/drivers; rm barrier.ts", "is locked by FEAT-001"),
+                              ("git checkout-index -f -- tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              ("git -C . checkout -- tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              ("git -c alias.x='!rm tests/drivers/barrier.ts' x", "is locked by FEAT-001"),
+                              ("C=\"open('tests/drivers/barrier.ts','w')\"; X=$C; python -c \"$X\"", "is locked by FEAT-001"),
+                              ("sed -e 's/a/b/' -e 'w tests/drivers/barrier.ts' x", "is locked by FEAT-001"),
+                              ("sed -f edit.sed tests/drivers/barrier.ts", "is locked by FEAT-001"),
+                              ("bdd unlock --plumb\\ing --reason x", "releases it"),
+                              ("cat <(sort -o tests/drivers/barrier.ts src/a.ts)", "is locked by FEAT-001"),
+                              ("awk -i inplace '{print}' tests/drivers/barrier.ts", "is locked by FEAT-001")]:
+            with self.subTest(command=command):
+                self.assertIn(said, self.bash(command) or "", command)
+        for command in ["echo $(pwd)", "node /tmp/probe.cjs \"$(pwd)\"", "sed -i 's/{ a }/{ b }/; s/x;y/z/' src/a.ts",
+                        "sed -n '125,196p' package.json", "git -C api status", "git log --oneline -3"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_a_long_sed_script_and_many_folders_are_read_quickly(self):
+        start = time.perf_counter()
+        self.assertIsNotNone(self.bash("sed -i '" + "s/a/b/;" * 700 + "' tests/drivers/barrier.ts"))
+        self.assertIsNone(self.bash("sed -n '" + "/x/p;" * 500 + "' src/a.ts"))
+        self.assertIsNotNone(self.bash("cd a; " * 100 + "rm barrier.ts; cd tests/drivers"))
+        self.assertIsNone(self.bash("awk '" + "print " * 30000 + "' src/a.ts"))
+        self.assertLess(time.perf_counter() - start, 2.0)
+
+    def test_bdd_takes_no_shortened_option(self):
+        from bddlib import lockcmd
+        for parser in (lockcmd.lock_parser(), lockcmd.unlock_parser()):
+            with self.subTest(parser=parser.prog), self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+                parser.parse_args(["--plumb", "--reason", "x"])
+
     def test_the_bdd_command_line_by_a_variable_is_still_the_bdd_command_line(self):
         self.assertIn("cost corrections", self.bash('B="/p/tools/bdd/bdd"; "$B" cost FEAT-001 --amend implement --tokens 1 '
                                                     '--seconds 1 --reason x') or "")
@@ -1115,7 +1152,6 @@ class SettingsEffectTest(GuardCase):
         base = self.current()
         for data in [{**base, "env": {"A": "2", "TEST_DATABASE_URL": "x"}}, {**base, "model": "sonnet"},
                      {**base, "permissions": {**base["permissions"], "allow": ["Bash(ls)", "Bash(npm test)"]}},
-                     {**base, "permissions": {**base["permissions"], "deny": [*base["permissions"]["deny"], "Bash(rm:*)"]}},
                      {**base, "permissions": {**base["permissions"], "ask": ["Bash(git push:*)"]}}]:
             with self.subTest(data=str(data)[:80]):
                 self.assertIsNone(self.change(data))
@@ -1132,7 +1168,9 @@ class SettingsEffectTest(GuardCase):
                             ({**base, "statusLine": {"type": "command", "command": "x"}}, "statusLine"),
                             ({**base, "apiKeyHelper": "x"}, "apiKeyHelper"), ({**base, "env": {"A": "1", "PATH": "/x"}}, "env.PATH"),
                             ({**base, "env": {"A": "1", "CLAUDE_CONFIG_DIR": "/x"}}, "env.CLAUDE_CONFIG_DIR"),
-                            ({**base, "env": {"A": "1", "path": "/x"}}, "env.path"), ({**base, "unknownFutureKey": 1}, "unknownFutureKey")]:
+                            ({**base, "env": {"A": "1", "path": "/x"}}, "env.path"), ({**base, "unknownFutureKey": 1}, "unknownFutureKey"),
+                            ({**base, "permissions": {**base["permissions"], "deny": [*base["permissions"]["deny"], "Bash(rm:*)"]}},
+                             "permissions.deny"), ({**base, "env": {"A": "1", "ZDOTDIR": "/x"}}, "env.ZDOTDIR")]:
             with self.subTest(named=named):
                 self.assertIn(named, self.change(data) or "")
         self.assertIn("bdd doctor --add-deny-rules", self.change({**base, "permissions": {**base["permissions"], "deny": deny}}))

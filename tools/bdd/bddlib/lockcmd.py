@@ -49,7 +49,7 @@ def plumbing_candidates(root: Path) -> set[str]:
 
 
 def lock_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="bdd lock", description="Hash-lock approved specs, bound steps and the shared plumbing.")
+    ap = argparse.ArgumentParser(prog="bdd lock", allow_abbrev=False, description="Hash-lock approved specs, bound steps and the shared plumbing.")
     ap.add_argument("feature", nargs="?", help="feature id, e.g. FEAT-007")
     ap.add_argument("paths", nargs="*", type=Path, help="files or directories to lock")
     ap.add_argument("--scope", choices=lockfile.SCOPES, help="spec = .feature files, bind = steps and drivers")
@@ -178,7 +178,7 @@ def run_lock(argv: list[str]) -> int:
 
 
 def unlock_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="bdd unlock", description="Release a lock, recording why.")
+    ap = argparse.ArgumentParser(prog="bdd unlock", allow_abbrev=False, description="Release a lock, recording why.")
     ap.add_argument("feature", nargs="?")
     ap.add_argument("--scope", choices=lockfile.SCOPES)
     ap.add_argument("--plumbing", action="store_true", help="release the shared test plumbing so it can be changed")

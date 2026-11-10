@@ -36,6 +36,9 @@ PREFIXES = {"env", "time", "nice", "timeout", "do", "then", "else", "elif", "if"
 PROGRAMS = READERS | WRITE_VERBS | INTERPRETERS | PACKAGE_TOOLS | KEYWORDS | {"cd", "export"}
 RUN_BY_TOOLS = INTERPRETERS | WRITE_VERBS | {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "eval", "make"}
 MOVES = {"cd"}
+PURE_READERS = {"pwd", "mktemp", "date", "basename", "dirname", "realpath", "cat", "ls", "echo", "printf", "head", "tail", "wc"}
+PREFIX_FLAGS = {("env", "-i"), ("time", "-p"), ("nice", "-n")}       # the only prefix options a plain command may use
+MAX_FOLDERS = 32
 STEERS_FOLDERS = {"HOME", "CDPATH", "PWD", "OLDPWD", "USERPROFILE", "CODEX_HOME", "IFS"}   # a command may not set these
 FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 FOLDER_FLAGS = ("--directory", "--chdir", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir")
@@ -64,9 +67,115 @@ OTHER_CODE = re.compile(r"(?:^|[\s;&|(`])(?:ruby|php|perl|lua|luajit|pypy\w*|ipy
                         r"\bopen\s*\(?\s*\w+\s*,\s*[\"']?\s*[>+]", re.IGNORECASE)
 GH_WRITES = {"checkout", "download", "clone", "sync", "extension", "alias", "codespace", "gist", "--output", "-O"}
 # sed's own write commands: `w file`, `W file`, `e` (run a command), and the `w` and `e` flags of `s///`.
-SED_WRITES = re.compile(r"(?:^|[;{}\n])\s*(?:\d+|\$|/[^/]*/)?\s*(?:,\s*(?:\d+|\$|/[^/]*/))?\s*[wWe](?:\s|$)"
-                        r"|(?:^|[;{}\n])\s*[\d$,\s]*s(?P<d>[^\w\s\\]).*?(?P=d).*?(?P=d)[a-zA-Z0-9]*[we]")
-AWK_WRITES = re.compile(r"\bprintf?\b[^;}\n]*>|\bsystem\s*\(|\|\s*\"")       # awk: `print > "file"`, `system(...)`, a pipe
+def _sed_writes(args: list[Word]) -> bool:
+    """Do sed's scripts write or run anything: each ``-e``/``--expression`` script, or else its first word that is not an
+    option? A script read from a file (``-f``) is not known, so it counts as one that does."""
+    scripts, given, at = [], False, 0
+    while at < len(args):
+        word = args[at]
+        if not word.quoted and word.text in ("-e", "--expression"):
+            given = True
+            scripts += [args[at + 1].text] if at + 1 < len(args) else []
+            at += 2
+            continue
+        if not word.quoted and (word.text.startswith(("--expression=", "-f", "--file")) or re.fullmatch(r"-[a-zA-Z]*[ef]\S*", word.text)):
+            if word.text.startswith("--expression="):
+                given = True
+                scripts.append(word.text.split("=", 1)[1])
+            else:
+                return True                                    # `-f script.sed`, `-nf x`, `-es/a/b/`: not read here
+        at += 1
+    if not given:
+        scripts = [w.text for w in args if not _flag(w)][:1]
+    return any(sed_writes(script) for script in scripts)
+
+
+def sed_writes(script: str) -> bool:
+    """Does a sed script hold a command that writes (``w``, ``W``) or runs one (``e``), or an ``s`` with the ``w`` or ``e``
+    flag? Read once, left to right, as sed reads it; a script too long to read, or one this reading cannot follow, counts
+    as one."""
+    if len(script) > 4000:
+        return True
+    at, end = 0, len(script)
+
+    def skip_regex(at: int, delimiter: str) -> int:        # past the closing delimiter, or -1
+        while at < end:
+            if script[at] == "\\":
+                at += 2
+            elif script[at] == delimiter:
+                return at + 1
+            elif script[at] == "\n":
+                return -1
+            else:
+                at += 1
+        return -1
+
+    while at < end:
+        char = script[at]
+        if char in " \t\n;{}!" or char.isdigit() or char in "$,~+":
+            at += 1
+            continue
+        if char in "/\\":                                     # an address: `/re/`, `\cREc`, then its flags
+            if char == "\\":
+                if at + 1 >= end:
+                    return True
+                at += 1
+            at = skip_regex(at + 1, script[at])
+            if at < 0:
+                return True
+            while at < end and script[at] in "IM":
+                at += 1
+            continue
+        if char in "wWe":
+            return True
+        if char in "aicrRbtTlq:#vQ":                         # the rest of the line is its text, label or file
+            newline = script.find("\n", at)
+            if char in "aic" or char == "#" or char == ":":
+                while 0 <= newline and char in "aic" and script[:newline].endswith("\\"):
+                    newline = script.find("\n", newline + 1)      # `a\` text goes on while its lines end in a backslash
+                at = end if newline < 0 else newline + 1
+                continue
+            semicolon = script.find(";", at)
+            stops = [i for i in (newline, semicolon) if i >= 0]
+            at = min(stops) + 1 if stops else end
+            continue
+        if char in "sy":
+            if at + 1 >= end:
+                return True
+            delimiter = script[at + 1]
+            if delimiter in "\\\n":
+                return True
+            at = skip_regex(at + 2, delimiter)
+            at = skip_regex(at, delimiter) if at >= 0 else -1
+            if at < 0:
+                return True
+            if char == "s":
+                while at < end and script[at] not in ";\n}":
+                    if script[at] in "we":
+                        return True
+                    at += 1
+            continue
+        if char in "dDgGhHnNpPxz=F":
+            at += 1
+            continue
+        return True                                         # a command this reading does not know
+    return False
+class _AwkWrites:
+    """awk code that writes: ``print > "file"`` (a ``>`` after a print in the same statement), ``system(...)``, a pipe.
+    Read in one pass per statement, however long the program is."""
+    RUNS = re.compile(r"\bsystem\s*\(|\|\s*\"")
+
+    def search(self, code: str) -> bool:
+        if self.RUNS.search(code):
+            return True
+        for statement in re.split(r"[;}\n]", code):
+            found = re.search(r"\bprintf?\b", statement)
+            if found and ">" in statement[found.end():]:
+                return True
+        return False
+
+
+AWK_WRITES = _AwkWrites()
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+)|(\{[^}]*\}|[@*#?$!\-]))")
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(\+?)=")
 _SUFFIX = re.compile(r"\.(?:exe|cmd|bat|ps1)$")
@@ -574,8 +683,10 @@ def judge(commands: list[Simple]) -> str:
     command of a known program that writes a file, an installed shell); ``OTHER`` otherwise."""
     known = _known_values(commands)
     for simple in commands:
-        if simple.expands or not _reads_only(simple.nested):
+        if simple.expands:
             return OTHER
+        if not _reads_only(simple.nested):
+            return WRITES                                      # `echo $(git checkout x)`: what runs inside is not read here
         words = simple.words
         for word in words:
             found = _assignment(word)
@@ -587,6 +698,12 @@ def judge(commands: list[Simple]) -> str:
         while start < len(words) and _assignment(words[start]):
             start += 1
         rest = words[start:]
+        prefix = ""
+        for word in words[:start]:
+            if not word.quoted and word.name() in PREFIXES:
+                prefix = word.name()
+            elif _flag(word) and (prefix, word.text) not in PREFIX_FLAGS:
+                return OTHER                                   # `env -S 'rm x'`, `env --chdir=x`, `sudo -u x`
         if not rest:
             continue
         name = _program(rest, known)
@@ -601,12 +718,17 @@ def judge(commands: list[Simple]) -> str:
             return WRITES
         if any(WRITING_OPTIONS.match(w.text) for w in rest[1:] if not w.quoted):
             return WRITES                                       # `git diff --output=x`, `rg --pre cmd`
-        if name == "sed" and any(SED_WRITES.search(w.text) for w in rest[1:] if not _flag(w)):
+        if name == "sed" and _sed_writes(rest[1:]):
             return WRITES                                       # `sed 's/a/b/w out'`
+        if name in ("awk", "gawk") and any(w.text.startswith(("-i", "--include")) for w in rest[1:] if not w.quoted):
+            return WRITES                                      # `awk -i inplace`
         if name == "sort" and any(re.match(r"-[a-zA-Z]*o|--output", w.text) for w in rest[1:] if not w.quoted):
             return WRITES                                       # `sort -o file`
         if name == "uniq" and len([w for w in rest[1:] if not _flag(w)]) > 1:
             return WRITES                                       # `uniq input output`
+        if name == "git" and any(w.text == "-c" or w.text.startswith("-c") and len(w.text) > 2 and "=" in w.text
+                                 or w.text.startswith("--config-env") for w in rest[1:] if not w.quoted):
+            return WRITES                                      # `git -c alias.x='!rm ...'`, `-c core.fsmonitor=...` run programs
         if name == "gh" and any(w.text in GH_WRITES for w in rest[1:]):
             return WRITES                                       # `gh pr checkout`, `gh run download`
 
@@ -628,7 +750,7 @@ def _reads_only(commands: list[Simple]) -> bool:
     """Do these commands (a substitution's) only read: known readers, with no output redirection and nothing nested?"""
     for simple in commands:
         words = simple.words[_program_at(simple.words):]
-        if simple.nested or simple.redirects or simple.bodies or (words and _program(words, {}) not in READERS | {"mktemp"}):
+        if simple.nested or simple.redirects or simple.bodies or (words and _program(words, {}) not in PURE_READERS):
             return False
     return True
 
@@ -718,7 +840,7 @@ class _Reader:
             self.code(words, simple.bodies, AWK_WRITES if program in ("awk", "gawk") else CODE_WRITES)
         if program in WRITE_VERBS:
             self.verb(program, words[1:], names_only)
-        if program == "git" and any(w.name() in GIT_WRITES for w in words[1:4] if not w.quoted):
+        if program == "git" and any(w.name().startswith(tuple(GIT_WRITES)) for w in words[1:] if not w.quoted and not _flag(w)):
             for body in simple.bodies:                         # `git apply <<EOF` names what it writes
                 self.found.targets.append(Target(body, body.replace("\\", "/"), "", tuple(self.dirs), code=True, source=body))
             self.verb(program, words[1:], names_only)
@@ -772,6 +894,8 @@ class _Reader:
         absolute = Path(windows_path(text)).is_absolute()
         self.exact |= {_join(b, text) for b in self.dirs if _join(b, text) is not None and (absolute or b in self.exact)}
         self.union = [*self.union, *(d for d in moved if d not in self.union)]
+        if len(self.union) > MAX_FOLDERS:
+            self.union = [None]                                    # too many places to follow: a written name counts by name
         self.chain = moved if self.after != "||" else None        # after `||` the move may not have run
 
     def moved_to(self, folder: Path | None) -> None:
@@ -793,11 +917,16 @@ class _Reader:
                     self.found.made.add(place)
                     place = place.parent
 
-    def code(self, words: list[Word], bodies: list[str], writing: re.Pattern) -> None:
+    def code(self, words: list[Word], bodies: list[str], writing: re.Pattern | _AwkWrites) -> None:
         """An interpreter's code: its quoted and partly quoted arguments (variables put in), its here-documents, and a
         script this command wrote and runs."""
+        try:
+            [_expand(w, self.assigned, strict=True) for w in _code_words(words) if "$" in w.text]
+        except _Unknown:
+            self.found.whole = True                                # `python -c "$C"`: the code is not known
+            return
         written = [self.scripts[_basename(w.text)] for w in words[1:] if not w.quoted and _basename(w.text) in self.scripts]
-        quoted = [_expand(w, self.assigned, strict=False)[0] for w in words[1:] if w.partly_quoted]
+        quoted = [_expand(w, self.assigned, strict=False)[0] for w in words[1:] if w.partly_quoted or "$" in w.text]
         code = "\n".join([*quoted, *bodies, *written])
         if not writing.search(code):
             return
@@ -851,6 +980,18 @@ class _Reader:
             return True
         places = [_join(base, text) for base in self.dirs]
         return any(place is None or place.is_dir() or place in self.found.made for place in places)
+
+
+CODE_FLAGS = {"-c", "-e", "-p", "--eval", "--print", "-pe", "-ne"}
+
+
+def _code_words(words: list[Word]) -> list[Word]:
+    """The words an interpreter runs as code: the argument of ``-c``/``-e``/``--eval``, and awk's program (its first
+    word that is not an option, when no ``-f`` names a file). A script's path and its arguments are not code."""
+    found = [words[at + 1] for at in range(1, len(words) - 1) if not words[at].quoted and words[at].text in CODE_FLAGS]
+    if program_name(words[0].text) in ("awk", "gawk") and not any(w.text.startswith("-f") for w in words[1:]):
+        found += [w for w in words[1:] if not _flag(w)][:1]
+    return found
 
 
 def _inside(folder: Word, source: Word) -> Word:
@@ -949,9 +1090,11 @@ def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
             elif word.quoted and at > program and not runs:
                 shown.append('""')
             else:
-                shown.append(_known_text(word.windows, known))
+                shown.append(_known_text(word.text, known))
         shown += [f"> {word.windows}" for word in simple.redirects]
         lines.append(" ".join(shown))
+        if any(w.windows != w.text for w in words):
+            lines.append(" ".join(_known_text(w.windows, known) for w in words))   # `C:\Tools\npm.cmd`
         if runs:
             lines += simple.bodies                             # an interpreter's here-document is its code
     return lines
