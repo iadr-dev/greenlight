@@ -193,7 +193,9 @@ spec-auditor. Each has an explicit tool list and write permissions (the writers 
 only their report under `.bdd/`, the auditor cannot write at all). An agent that is not one of greenlight's (a built-in
 one, your own, another plugin's) may write production code and `.bdd/` data but never the feature files or the steps.
 They read files, never chat history, and report instead of recording; the orchestrator (`/greenlight:feature`) records
-everything.
+everything. Each agent runs on the model its file names. `[models]` in `.bdd/config.toml` names another for one agent
+(`implementer = "opus"`; the Agent call accepts `fable`, `haiku`, `opus` and `sonnet`), the orchestrator passes it on every
+call, `bdd status` prints the model of every agent, and `bdd doctor` reports a name it cannot use.
 
 ### Routing the code stage
 

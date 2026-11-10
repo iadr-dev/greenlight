@@ -121,7 +121,8 @@ Run commands in a member with `bdd --in web run FEAT-007`, or in all of them wit
 ## Quality checks (optional)
 
 The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does
-not choose them. One table per check, in the order they should run:
+not choose them, and `bdd init` writes none of these tables, so until you add them `bdd check` reports that no quality
+check is configured. One table per check, in the order they should run:
 
 ```toml
 [adapters.quality.format]
