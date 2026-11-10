@@ -5,6 +5,14 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `tools/bdd/tests/test_readme.py` (D69) fails when the README, `docs/quickstart.md` or `docs/troubleshooting.md` shows a `bdd` command or a flag that `bdd COMMAND --help` does not list, when a relative link or an anchor in the README or `docs/*.md` has no target, when a stated count (skills, slash commands, agents, test stacks, "the nine adapters", phases, recommended plugins) differs from the files, or when a code span names a repository path that does not exist. A fenced block opened with `not-bdd` after the language is skipped.
+- README: how to run `bdd` by its path (it is not on the `PATH`), the warnings `bdd doctor` shows on the first run and which are normal, who does the work in each phase (all ten agents are named), mid-run autonomy switches, `--quick`, `bdd init --detect`, the approval summary, the integrity acknowledgement, the shared plumbing lock, `[models]`, and the earlier checks of D66. `docs/upgrading.md` gains "Upgrading with features in progress": what a new version asks of a feature in each phase and what to do.
+
+### Fixed
+- The README and the docs matched an older greenlight in places: the pipeline line and the phase list left out test design and tasks; the auditor was said to write `report.md` (it returns text and the orchestrator saves it) and `Verdict: PASS` to mean less than it does; `bdd check` was said to run tools that only run once `[adapters.quality.NAME]` names them; CI was said to re-check without the workflow being copied; init was said to pick an adapter (it recommends one); CI uses Node 26 and JDK 25 (only the Kotlin language card holds 21); the quickstart said seven adapters (nine), named the wrong detection rule for Python, and said `guided` stops twice (it also stops after test design and shows the design view); the helper plugin table now lists the real ids, which of them `bdd helpers` offers, and that context7 and microsoft-docs serve the writers only; uninstalling mentions Codex hooks and deny rules; the known limit on Next.js names what the code checks (`next/package.json` in a dependency folder).
+- The comments of the `ts-cucumber-js` and `ts-playwright-bdd` adapters named `npm ci --prefix tests`; the install command is `pnpm install --frozen-lockfile --dir tests`.
+
 ## [1.2.2] - 2026-11-09
 
 A patch release made by the update automation: the language versions the workflows and the adapters' CI templates pin were brought up to date.
