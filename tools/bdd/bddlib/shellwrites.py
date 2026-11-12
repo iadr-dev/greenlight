@@ -23,24 +23,31 @@ from pathlib import Path
 
 WRITE_VERBS = {"tee", "cp", "mv", "rm", "truncate", "dd", "install", "chmod", "touch"}
 COPY_VERBS = {"cp", "mv", "install"}                    # they write into a folder too
-GIT_WRITES = {"checkout", "restore", "reset", "stash", "apply", "rm", "mv", "clean"}
-INTERPRETERS = {"python", "py", "node", "tsx", "awk", "gawk"}
+INTERPRETERS = {"python", "py", "node", "tsx"}
 PACKAGE_TOOLS = {"npm", "pnpm", "yarn", "npx", "bun", "pip", "uv", "poetry", "pipx", "pipenv", "conda"}
-READERS = {"cat", "grep", "egrep", "fgrep", "rg", "ls", "head", "tail", "wc", "cut", "tr", "diff", "cmp", "jq", "echo",
-           "printf", "file", "stat", "du", "df", "which", "where", "realpath", "readlink", "basename", "dirname", "date", "pwd",
-           "true", "false", "test", "[", "[[", "]", "]]", "sleep", "nl", "column", "comm", "paste", "fold", "md5sum", "sha1sum",
-           "sha256sum", "od", "seq", "sed", "find", "git", "mkdir", "bdd", "sort", "uniq", "gh"}   # see ``plain`` for their options
-WRITING_OPTIONS = re.compile(r"--?(?:output[\w-]*|pre|exec|fprint|fls|delete)(?![\w-])|--?o(?:ut)?=")   # then the command is not plain
+# Programs no option or argument of which writes a file, runs a command or loads code. Any other program (sed, awk,
+# git, find, sort, ...) makes the command one that is judged whole.
+READERS = {"cat", "grep", "egrep", "fgrep", "ls", "head", "tail", "wc", "cut", "tr", "diff", "cmp", "jq", "echo", "printf",
+           "stat", "du", "df", "which", "realpath", "readlink", "basename", "dirname", "date", "uname", "pwd", "true", "false",
+           "test", "[", "[[", "]", "]]", "sleep", "nl", "comm", "paste", "fold", "md5sum", "sha1sum", "sha256sum", "seq",
+           "mkdir", "bdd"}
 KEYWORDS = {"for", "do", "done", "if", "then", "else", "elif", "fi", "while", "until", "{", "}", "!", "time"}
 PREFIXES = {"env", "time", "nice", "timeout", "do", "then", "else", "elif", "if", "while", "until", "{", "}", "!"}
 PROGRAMS = READERS | WRITE_VERBS | INTERPRETERS | PACKAGE_TOOLS | KEYWORDS | {"cd", "export"}
-RUN_BY_TOOLS = INTERPRETERS | WRITE_VERBS | {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "eval", "make"}
+RUN_BY_TOOLS = INTERPRETERS | WRITE_VERBS | {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "eval", "make", "awk",
+                                             "gawk"}
 MOVES = {"cd"}
 PURE_READERS = {"pwd", "mktemp", "date", "basename", "dirname", "realpath", "cat", "ls", "echo", "printf", "head", "tail", "wc"}
+MKTEMP_FLAGS = {"-d", "-q", "-u", "--directory", "--quiet", "--dry-run"}   # `mktemp -p dir`, `mktemp x.XXX` make a file elsewhere
 PREFIX_FLAGS = {("env", "-i"), ("time", "-p"), ("nice", "-n")}       # the only prefix options a plain command may use
 MAX_FOLDERS = 32
-STEERS_FOLDERS = {"HOME", "CDPATH", "PWD", "OLDPWD", "USERPROFILE", "CODEX_HOME", "IFS"}   # a command may not set these
-FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
+MAX_JOINED = 40                                         # words of an unknown program joined each to each
+# A command may set no variable that moves the folders or steers what a program runs or loads (``PATH``,
+# ``NODE_OPTIONS``, ``GIT_*``, ``LD_PRELOAD`` ...), nor one that is in its environment already.
+STEERS = re.compile(r"HOME|CDPATH|PWD|OLDPWD|USERPROFILE|CODEX_HOME|IFS|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|PS4|"
+                    r"PROMPT_COMMAND|TMPDIR|TEMP|TMP|PAGER|EDITOR|VISUAL|SHELL|(?:PATH|GIT|NODE|NPM|PYTHON|LD|DYLD|BUN|DENO|"
+                    r"PNPM|YARN|UV|PIP|CONDA|POETRY|PERL|RUBY|JQ|LESS|GREP|GREENLIGHT|CLAUDE)\w*|npm_config_\w*|\w*PATH",
+                    re.IGNORECASE)
 FOLDER_FLAGS = ("--directory", "--chdir", "--git-dir", "--work-tree", "--prefix", "--cwd", "--dir")
 # The flags with which `cp` writes only its destination (a folder target, a link or a hard link writes elsewhere too).
 CP_SAFE_SHORT = set("aRrfpvniuPLdHx")
@@ -65,117 +72,6 @@ OTHER_CODE = re.compile(r"(?:^|[\s;&|(`])(?:ruby|php|perl|lua|luajit|pypy\w*|ipy
                         r"wscript|cscript)(?:\.exe)?\s|\bFile\.(?:write|open|delete|binwrite|rename|unlink)|file_put_contents|"
                         r"\bfopen\b|FileUtils|\bqx\b|\bmklink\b|Deno\.\w*[Ww]rite|Bun\.write|"
                         r"\bopen\s*\(?\s*\w+\s*,\s*[\"']?\s*[>+]", re.IGNORECASE)
-GH_WRITES = {"checkout", "download", "clone", "sync", "extension", "alias", "codespace", "gist", "--output", "-O"}
-# sed's own write commands: `w file`, `W file`, `e` (run a command), and the `w` and `e` flags of `s///`.
-def _sed_writes(args: list[Word]) -> bool:
-    """Do sed's scripts write or run anything: each ``-e``/``--expression`` script, or else its first word that is not an
-    option? A script read from a file (``-f``) is not known, so it counts as one that does."""
-    scripts, given, at = [], False, 0
-    while at < len(args):
-        word = args[at]
-        if not word.quoted and word.text in ("-e", "--expression"):
-            given = True
-            scripts += [args[at + 1].text] if at + 1 < len(args) else []
-            at += 2
-            continue
-        if not word.quoted and (word.text.startswith(("--expression=", "-f", "--file")) or re.fullmatch(r"-[a-zA-Z]*[ef]\S*", word.text)):
-            if word.text.startswith("--expression="):
-                given = True
-                scripts.append(word.text.split("=", 1)[1])
-            else:
-                return True                                    # `-f script.sed`, `-nf x`, `-es/a/b/`: not read here
-        at += 1
-    if not given:
-        scripts = [w.text for w in args if not _flag(w)][:1]
-    return any(sed_writes(script) for script in scripts)
-
-
-def sed_writes(script: str) -> bool:
-    """Does a sed script hold a command that writes (``w``, ``W``) or runs one (``e``), or an ``s`` with the ``w`` or ``e``
-    flag? Read once, left to right, as sed reads it; a script too long to read, or one this reading cannot follow, counts
-    as one."""
-    if len(script) > 4000:
-        return True
-    at, end = 0, len(script)
-
-    def skip_regex(at: int, delimiter: str) -> int:        # past the closing delimiter, or -1
-        while at < end:
-            if script[at] == "\\":
-                at += 2
-            elif script[at] == delimiter:
-                return at + 1
-            elif script[at] == "\n":
-                return -1
-            else:
-                at += 1
-        return -1
-
-    while at < end:
-        char = script[at]
-        if char in " \t\n;{}!" or char.isdigit() or char in "$,~+":
-            at += 1
-            continue
-        if char in "/\\":                                     # an address: `/re/`, `\cREc`, then its flags
-            if char == "\\":
-                if at + 1 >= end:
-                    return True
-                at += 1
-            at = skip_regex(at + 1, script[at])
-            if at < 0:
-                return True
-            while at < end and script[at] in "IM":
-                at += 1
-            continue
-        if char in "wWe":
-            return True
-        if char in "aicrRbtTlq:#vQ":                         # the rest of the line is its text, label or file
-            newline = script.find("\n", at)
-            if char in "aic" or char == "#" or char == ":":
-                while 0 <= newline and char in "aic" and script[:newline].endswith("\\"):
-                    newline = script.find("\n", newline + 1)      # `a\` text goes on while its lines end in a backslash
-                at = end if newline < 0 else newline + 1
-                continue
-            semicolon = script.find(";", at)
-            stops = [i for i in (newline, semicolon) if i >= 0]
-            at = min(stops) + 1 if stops else end
-            continue
-        if char in "sy":
-            if at + 1 >= end:
-                return True
-            delimiter = script[at + 1]
-            if delimiter in "\\\n":
-                return True
-            at = skip_regex(at + 2, delimiter)
-            at = skip_regex(at, delimiter) if at >= 0 else -1
-            if at < 0:
-                return True
-            if char == "s":
-                while at < end and script[at] not in ";\n}":
-                    if script[at] in "we":
-                        return True
-                    at += 1
-            continue
-        if char in "dDgGhHnNpPxz=F":
-            at += 1
-            continue
-        return True                                         # a command this reading does not know
-    return False
-class _AwkWrites:
-    """awk code that writes: ``print > "file"`` (a ``>`` after a print in the same statement), ``system(...)``, a pipe.
-    Read in one pass per statement, however long the program is."""
-    RUNS = re.compile(r"\bsystem\s*\(|\|\s*\"")
-
-    def search(self, code: str) -> bool:
-        if self.RUNS.search(code):
-            return True
-        for statement in re.split(r"[;}\n]", code):
-            found = re.search(r"\bprintf?\b", statement)
-            if found and ">" in statement[found.end():]:
-                return True
-        return False
-
-
-AWK_WRITES = _AwkWrites()
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+)|(\{[^}]*\}|[@*#?$!\-]))")
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(\+?)=")
 _SUFFIX = re.compile(r"\.(?:exe|cmd|bat|ps1)$")
@@ -262,6 +158,23 @@ class Writes:
     whole: bool = False                                    # check the whole command: the targets are not known
     opaque: bool = False                                   # a program word is a variable or a pattern with no known value
     made: set[Path] = field(default_factory=set)           # the folders a `mkdir` in the command creates
+    every: bool = False                                    # every word of a program not known counts as written
+
+
+# Write forms of programs that are not read exactly, matched in the command's text whatever its quoting: sed's `w`, `W`
+# and `e` commands, `-i` and `-f`; git's `-c` and `--config-env`; awk's in-place, include and load; sort's output and
+# compress program; uniq's output operand; `xxd -r`; tree's and gh's output and download; any output option. They only
+# decide that the words such a program is given are checked; a false match refuses only a command that is also given a
+# protected path.
+WRITE_HINTS = re.compile(
+    r"\bsed\b[^|;&\n]*?(?:[\s\"'/;:{}!$,\d](?:[wWe])(?=[\s\"';}]|$)|[\s\"'](?:-\w*[if]|--in\S*|--f\S*))"
+    r"|\bgit\b[^|;&\n]*?[\s\"'](?:-c|-C|--config-env\S*|--output\S*|-o|--work-tree\S*|--git-dir\S*|checkout\S*|restore|reset"
+    r"|stash|apply|rm|mv|clean|merge|pull|switch|rebase|cherry-pick|am|read-tree|worktree|update-index|archive)(?=[\s\"'=]|$)"
+    r"|\b[gnm]?awk\b[^|;&\n]*?(?:[\s\"']-\w*i|--in\S*|inplace|@include|@load)"
+    r"|\bsort\b[^|;&\n]*?[\s\"'](?:-\w*o|--o\S*|--co\S*)|\buniq\b|\bxxd\b[^|;&\n]*?-\w*r|\btree\b[^|;&\n]*?-\w*o"
+    r"|\bgh\b[^|;&\n]*?(?:download|checkout|clone|[\s\"']-O)"
+    r"|\b(?:xargs|shred|unlink|patch|rsync|tar|unzip|curl|wget|rename|mklink|robocopy|xcopy)\b"
+    r"|(?:^|[\s\"'])(?:-o|-O|--out\S*|--write\S*|--save\S*|--dest\S*|--target\S*)(?=[\s\"'=]|$)")
 
 
 # -- reading the command ------------------------------------------------------------------------------------------
@@ -578,7 +491,7 @@ def _assignment(word: Word) -> tuple[str, Word] | None:
 
 
 def _flag(word: Word) -> bool:
-    return not word.quoted and word.text.startswith("-")
+    return word.text.startswith("-")                        # `"-t" dir` is the option it spells, quoted or not
 
 
 def _program_at(words: list[Word]) -> int:
@@ -673,25 +586,33 @@ def _installed_runner(text: str) -> bool:
 
 
 def judge(commands: list[Simple]) -> str:
-    """Is the command built only from what this module reads exactly: known programs (``PROGRAMS``, or one the project
-    installed) named by a literal or a known variable, no here-document that runs a substitution, no input fed to an
-    interpreter or a package tool, no ``find`` that acts, and no variable that moves the home or folder lookups? A command
-    or process substitution may only read (``$(pwd)``, ``$(mktemp -d)``): its value is not known, so a word that holds it
-    and is written to makes the whole command the target.
+    """How exactly the command can be read.
 
-    ``PLAIN`` (an empty text) when it is; ``WRITES`` when it is not because of something that writes (an option or a
-    command of a known program that writes a file, an installed shell); ``OTHER`` otherwise."""
+    ``PLAIN`` (an empty text): it is built only from known programs (``PROGRAMS``, or one the project installed, given
+    only paths and flags) named by a literal or a known variable, with no prefix option, no variable that steers a
+    program or the folders, no here-document that runs a substitution, no input fed to an interpreter or a package tool,
+    and substitutions that only read (``$(pwd)``, ``$(mktemp -d)``). Its writes are read off its words exactly.
+
+    ``OTHER``: the same, except that some programs are not known (``sed``, ``git``, ``awk`` ...). Their options are not
+    modelled: every word they are given counts as written (``every``).
+
+    ``UNREAD``: something this reading does not follow (a prefix option, a substituting here-document); ``WRITES``:
+    something that may write or run code that no word shows (an installed shell, a program word with no known value, a
+    variable that steers what runs, a substitution that runs more than a reader, input fed to an interpreter). Both are
+    judged whole by the old rule; ``WRITES`` even when no write word shows."""
     known = _known_values(commands)
+    verdicts = {PLAIN}
     for simple in commands:
-        if simple.expands:
-            return OTHER
         if not _reads_only(simple.nested):
             return WRITES                                      # `echo $(git checkout x)`: what runs inside is not read here
+        if simple.expands:
+            verdicts.add(UNREAD)
         words = simple.words
         for word in words:
             found = _assignment(word)
-            if found and found[0].upper() in STEERS_FOLDERS:
-                return OTHER
+            if (found and found[0] not in HARMLESS_VARIABLES and (STEERS.fullmatch(found[0]) or found[0] in os.environ)
+                    and not re.fullmatch(r"\$\{?" + found[0] + r"\}?", found[1].text)):
+                return WRITES                                  # `PATH=x:$PATH cat`, `NODE_OPTIONS=--require x node`
         if words and all(_assignment(w) for w in words):
             continue
         start = _program_at(words)
@@ -702,44 +623,29 @@ def judge(commands: list[Simple]) -> str:
         for word in words[:start]:
             if not word.quoted and word.name() in PREFIXES:
                 prefix = word.name()
-            elif _flag(word) and (prefix, word.text) not in PREFIX_FLAGS:
-                return OTHER                                   # `env -S 'rm x'`, `env --chdir=x`, `sudo -u x`
+            elif not (_assignment(word) or word.text.isdigit() or (prefix, word.text) in PREFIX_FLAGS):
+                verdicts.add(UNREAD)                           # `env -S 'rm x'`, `env --chdir=x`, `timeout -s KILL 5`
         if not rest:
             continue
         name = _program(rest, known)
-        if name not in PROGRAMS and not (_installed_runner(rest[0].text) and not any(w.partly_quoted for w in rest)
-                                         and name not in INSTALLED_SHELLS):
-            return WRITES if rest and _installed_runner(rest[0].text) else OTHER   # an installed tool given only paths and flags
+        if name is None:
+            return WRITES                                      # `$X args`, `$(echo rm) x`: the program is not known
+        installed = _installed_runner(rest[0].text) and name not in PROGRAMS
+        if installed and (name in INSTALLED_SHELLS or any(w.partly_quoted for w in rest)):
+            return WRITES                                      # `.venv/bin/bash -c ...`, an installed tool given code
         if name in INTERPRETERS | PACKAGE_TOOLS and simple.inputs:
             return WRITES                                      # `python < script.py`
         if name in PACKAGE_TOOLS and any(w.name() in RUN_BY_TOOLS for w in rest[1:]):
-            return WRITES                                       # `uv run python -c ...`, `npx --no-install tsx -e ...`
-        if name == "find" and any(w.text in FIND_ACTIONS for w in rest):
-            return WRITES
-        if any(WRITING_OPTIONS.match(w.text) for w in rest[1:] if not w.quoted):
-            return WRITES                                       # `git diff --output=x`, `rg --pre cmd`
-        if name == "sed" and _sed_writes(rest[1:]):
-            return WRITES                                       # `sed 's/a/b/w out'`
-        if name in ("awk", "gawk") and any(w.text.startswith(("-i", "--include")) for w in rest[1:] if not w.quoted):
-            return WRITES                                      # `awk -i inplace`
-        if name == "sort" and any(re.match(r"-[a-zA-Z]*o|--output", w.text) for w in rest[1:] if not w.quoted):
-            return WRITES                                       # `sort -o file`
-        if name == "uniq" and len([w for w in rest[1:] if not _flag(w)]) > 1:
-            return WRITES                                       # `uniq input output`
-        if name == "git" and any(w.text == "-c" or w.text.startswith("-c") and len(w.text) > 2 and "=" in w.text
-                                 or w.text.startswith("--config-env") for w in rest[1:] if not w.quoted):
-            return WRITES                                      # `git -c alias.x='!rm ...'`, `-c core.fsmonitor=...` run programs
-        if name == "gh" and any(w.text in GH_WRITES for w in rest[1:]):
-            return WRITES                                       # `gh pr checkout`, `gh run download`
-
-        if name == "for" and len(rest) > 1:
-            continue
-    return PLAIN
+            return WRITES                                      # `uv run python -c ...`, `npx --no-install tsx -e ...`
+        if name not in PROGRAMS and not installed:
+            verdicts.add(OTHER)
+    return next(v for v in (UNREAD, OTHER, PLAIN) if v in verdicts)
 
 
-
-PLAIN, WRITES, OTHER = "", "writes", "other"
+PLAIN, WRITES, OTHER, UNREAD = "", "writes", "other", "unread"
 INSTALLED_SHELLS = {"sh", "bash", "zsh", "dash", "pwsh", "powershell", "cmd"}
+HARMLESS_VARIABLES = {"PYTHONIOENCODING", "PYTHONUTF8", "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE", "NO_COLOR",
+                      "FORCE_COLOR", "CI", "TZ", "LANG", "LC_ALL", "NODE_ENV"}
 
 
 def plain(commands: list[Simple]) -> bool:
@@ -752,7 +658,20 @@ def _reads_only(commands: list[Simple]) -> bool:
         words = simple.words[_program_at(simple.words):]
         if simple.nested or simple.redirects or simple.bodies or (words and _program(words, {}) not in PURE_READERS):
             return False
+        if words and _program(words, {}) == "mktemp" and any(w.text not in MKTEMP_FLAGS for w in words[1:]):
+            return False
     return True
+
+
+def _unknown_program(simple: Simple, known: dict[str, str | None]) -> bool:
+    """Does this simple command run a program that is not read exactly?"""
+    words = simple.words
+    start = _program_at(words)
+    while start < len(words) and _assignment(words[start]):
+        start += 1
+    if start >= len(words) or all(_assignment(w) for w in words):
+        return False
+    return _program(words[start:], known) not in PROGRAMS and not _installed_runner(words[start].text)
 
 
 # -- what the commands write ---------------------------------------------------------------------------------------
@@ -777,6 +696,54 @@ class _Reader:
             self.read_simple(simple)
             chained = simple.joiner == "&&"
             self.after = simple.joiner
+
+    def every(self, commands: list[Simple]) -> None:
+        """``read`` for a command some programs of which are not known. A known one is read as in ``read``, unless it
+        feeds an unknown one through a pipe (``echo x | xargs rm``: its words may become that one's). For an unknown one
+        every word counts as written, and so does each word inside each other word (``ln -t folder file``), each
+        here-document and each script the command wrote; after it the folder is not known (``pushd``, a function,
+        ``source`` may move it)."""
+        self.found.every = True
+        known = _known_values(commands)
+        unknown = [_unknown_program(simple, known) for simple in commands]
+        piped, group = [False] * len(commands), []
+        for at, simple in enumerate(commands):
+            group.append(at)
+            if simple.joiner not in ("|", "|&"):
+                for member in group:
+                    piped[member] = any(unknown[m] for m in group if m > member)   # what it prints, the other reads
+                group = []
+        chained = False
+        for at, simple in enumerate(commands):
+            if not chained:
+                self.chain = None
+            self.dirs = self.chain if self.chain is not None else self.union
+            if unknown[at] or piped[at]:
+                self.every_word(simple)
+            else:
+                self.read_simple(simple)
+            chained = simple.joiner == "&&"
+            self.after = simple.joiner
+
+    def every_word(self, simple: Simple) -> None:
+        self.remember_script(simple, simple.words)
+        for word in simple.redirects:
+            self.target(word)
+        for data in [*simple.bodies, *self.scripts.values()]:
+            self.found.targets.append(Target(data, data.replace("\\", "/"), "", tuple(self.dirs), code=True, source=data))
+        words = [w for w in simple.words if w.quoted or not (w.text in GROUPING or w.name() in PREFIXES)]
+        names_only = any(w.text.startswith(("-C", *FOLDER_FLAGS)) for w in words)
+        for word in words[1:]:
+            self.target(word, names_only)
+        operands = [w for w in words[1:] if not _flag(w) or "=" in w.text]
+        if len(operands) > MAX_JOINED:
+            self.found.whole = True                            # too many words to join each to each: the old rule
+        else:
+            for folder in operands:
+                for source in operands:
+                    if source is not folder:
+                        self.target(_inside(folder, source), names_only)
+        self.moved_to(None)
 
     def target(self, word: Word, names_only: bool = False) -> None:
         try:
@@ -833,21 +800,13 @@ class _Reader:
         if program in MOVES:
             self.move(words[1:])
             return
-        names_only = any(not w.quoted and (w.text == "-C" or w.text.startswith(FOLDER_FLAGS)) for w in words)
+        names_only = any(w.text == "-C" or w.text.startswith(FOLDER_FLAGS) for w in words)
         if program == "mkdir":
             self.make(words[1:])
         if program in INTERPRETERS:
-            self.code(words, simple.bodies, AWK_WRITES if program in ("awk", "gawk") else CODE_WRITES)
+            self.code(words, simple.bodies)
         if program in WRITE_VERBS:
             self.verb(program, words[1:], names_only)
-        if program == "git" and any(w.name().startswith(tuple(GIT_WRITES)) for w in words[1:] if not w.quoted and not _flag(w)):
-            for body in simple.bodies:                         # `git apply <<EOF` names what it writes
-                self.found.targets.append(Target(body, body.replace("\\", "/"), "", tuple(self.dirs), code=True, source=body))
-            self.verb(program, words[1:], names_only)
-        if program == "sed" and any(_flag(w) and (re.fullmatch(r"-\w*i\S*", w.text) or w.text.startswith("--in-place"))
-                                    for w in words[1:]):
-            for word in words[1:]:
-                self.target(word, names_only)
 
     def loop(self, words: list[Word]) -> None:
         """``for NAME in w1 w2 ...``: NAME holds each word in turn, so a place it is written into names every one of them."""
@@ -917,18 +876,18 @@ class _Reader:
                     self.found.made.add(place)
                     place = place.parent
 
-    def code(self, words: list[Word], bodies: list[str], writing: re.Pattern | _AwkWrites) -> None:
+    def code(self, words: list[Word], bodies: list[str]) -> None:
         """An interpreter's code: its quoted and partly quoted arguments (variables put in), its here-documents, and a
         script this command wrote and runs."""
         try:
             [_expand(w, self.assigned, strict=True) for w in _code_words(words) if "$" in w.text]
         except _Unknown:
-            self.found.whole = True                                # `python -c "$C"`: the code is not known
+            self.found.whole = self.found.opaque = True             # `python -c "$C"`: the code is not known
             return
         written = [self.scripts[_basename(w.text)] for w in words[1:] if not w.quoted and _basename(w.text) in self.scripts]
         quoted = [_expand(w, self.assigned, strict=False)[0] for w in words[1:] if w.partly_quoted or "$" in w.text]
         code = "\n".join([*quoted, *bodies, *written])
-        if not writing.search(code):
+        if not CODE_WRITES.search(code):
             return
         dirs = (None,) if re.search(r"\bchdir\b", code) else tuple(self.dirs)
         self.found.targets.append(Target(code, code.replace("\\", "/"), "", dirs, code=True, source=code))
@@ -982,15 +941,17 @@ class _Reader:
         return any(place is None or place.is_dir() or place in self.found.made for place in places)
 
 
-CODE_FLAGS = {"-c", "-e", "-p", "--eval", "--print", "-pe", "-ne"}
-
-
 def _code_words(words: list[Word]) -> list[Word]:
-    """The words an interpreter runs as code: the argument of ``-c``/``-e``/``--eval``, and awk's program (its first
-    word that is not an option, when no ``-f`` names a file). A script's path and its arguments are not code."""
-    found = [words[at + 1] for at in range(1, len(words) - 1) if not words[at].quoted and words[at].text in CODE_FLAGS]
-    if program_name(words[0].text) in ("awk", "gawk") and not any(w.text.startswith("-f") for w in words[1:]):
-        found += [w for w in words[1:] if not _flag(w)][:1]
+    """The words an interpreter runs as code: the one after ``-c``, ``-e``, ``-p``, ``--eval`` or ``--print`` (on its own
+    or ending a cluster such as ``-Ic``), and such an option with its code attached (``-c'...'``, ``--eval=...``), quoted
+    or not. A script's path and its arguments are not code."""
+    found = []
+    for at, word in enumerate(words[1:], 1):
+        text = word.text
+        if re.fullmatch(r"-[A-Za-z]*[cep]|--(?:eval|print)", text) and at + 1 < len(words):
+            found.append(words[at + 1])
+        elif re.match(r"-[A-Za-z]*[cep].|--(?:eval|print)=", text):
+            found.append(word)
     return found
 
 
@@ -1032,13 +993,13 @@ def writes(command: str, cwd: Path | None) -> Writes | None:
     except Unreadable:
         return Writes(whole=True)
     verdict = judge(commands)
-    if verdict != PLAIN:
-        known = _known_values(commands)
-        opaque = verdict == WRITES or any(_program(simple.words[_program_at(simple.words):], known) is None
-                                          for simple in _all_simple(commands) if not all(_assignment(w) for w in simple.words))
-        return Writes(whole=True, opaque=opaque)
+    if verdict in (WRITES, UNREAD):
+        return Writes(whole=True, opaque=verdict == WRITES)
     reader = _Reader(cwd, _stable(commands))
-    reader.read(commands)
+    if verdict == OTHER:
+        reader.every(commands)
+    else:
+        reader.read(commands)
     found = reader.found
     return found if found.targets or found.whole else None
 

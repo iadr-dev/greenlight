@@ -1039,8 +1039,10 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     found = shellwrites.writes(command, cwd)
     looks_like_a_write = (found is not None and (found.opaque or _SHELL_WRITES.search(scrubbed) or _FIND_ACTS.search(scrubbed)
                                                  or shellwrites.CODE_WRITES.search(scrubbed) or shellwrites.OTHER_CODE.search(scrubbed)))
-    if found is None or (found.whole and not looks_like_a_write):
-        return None                                    # a command read whole is judged as before: only if it looks like a write
+    if found is not None and found.every and not found.whole:
+        looks_like_a_write = looks_like_a_write or shellwrites.WRITE_HINTS.search(command)
+    if found is None or ((found.whole or found.every) and not looks_like_a_write):
+        return None                                    # a command not read exactly is judged as before: if it looks like a write
     return check_writes(project, spelled(command, found), agent, cwd)
 
 
