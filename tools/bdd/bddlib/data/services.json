@@ -1,0 +1,1018 @@
+{
+ "schema": 1,
+ "services": [
+  {
+   "id": "supabase",
+   "name": "Supabase",
+   "kind": "service",
+   "docs": "https://supabase.com/docs",
+   "cli": "supabase",
+   "plugin": "supabase@claude-plugins-official",
+   "surfaces": [],
+   "files": [
+    "supabase/config.toml",
+    "supabase/migrations"
+   ],
+   "packages": {
+    "npm": [
+     "@supabase/supabase-js",
+     "@supabase/ssr"
+    ],
+    "pypi": [
+     "supabase"
+    ],
+    "pub": [
+     "supabase",
+     "supabase_flutter"
+    ],
+    "go": [
+     "github.com/supabase-community/supabase-go"
+    ]
+   }
+  },
+  {
+   "id": "stripe",
+   "name": "Stripe",
+   "kind": "service",
+   "docs": "https://docs.stripe.com",
+   "cli": "stripe",
+   "plugin": "stripe@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "stripe",
+     "@stripe/stripe-js",
+     "@stripe/react-stripe-js",
+     "@stripe/stripe-react-native"
+    ],
+    "pypi": [
+     "stripe"
+    ],
+    "go": [
+     "github.com/stripe/stripe-go/*"
+    ],
+    "maven": [
+     "com.stripe:stripe-java"
+    ],
+    "nuget": [
+     "Stripe.net"
+    ],
+    "pub": [
+     "flutter_stripe"
+    ],
+    "gem": [
+     "stripe"
+    ]
+   }
+  },
+  {
+   "id": "line",
+   "name": "LINE",
+   "kind": "service",
+   "docs": "https://developers.line.biz/en/docs/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@line/bot-sdk",
+     "@line/liff"
+    ],
+    "pypi": [
+     "line-bot-sdk"
+    ],
+    "go": [
+     "github.com/line/line-bot-sdk-go/*"
+    ],
+    "maven": [
+     "com.linecorp.bot:*"
+    ],
+    "pub": [
+     "flutter_line_sdk"
+    ]
+   }
+  },
+  {
+   "id": "google",
+   "name": "Google sign-in and APIs",
+   "kind": "service",
+   "docs": "https://developers.google.com/identity",
+   "cli": "gcloud",
+   "plugin": "",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "google-auth-library",
+     "googleapis",
+     "@react-oauth/google",
+     "@react-native-google-signin/google-signin",
+     "passport-google-oauth20"
+    ],
+    "pypi": [
+     "google-auth",
+     "google-auth-oauthlib",
+     "google-api-python-client"
+    ],
+    "go": [
+     "golang.org/x/oauth2/google",
+     "google.golang.org/api"
+    ],
+    "pub": [
+     "google_sign_in",
+     "googleapis"
+    ],
+    "maven": [
+     "com.google.api-client:*",
+     "com.google.android.gms:play-services-auth"
+    ]
+   }
+  },
+  {
+   "id": "apple",
+   "name": "Sign in with Apple",
+   "kind": "service",
+   "docs": "https://developer.apple.com/documentation/sign_in_with_apple",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "expo-apple-authentication",
+     "apple-signin-auth",
+     "@invertase/react-native-apple-authentication",
+     "passport-apple"
+    ],
+    "pypi": [
+     "apple-signin"
+    ],
+    "pub": [
+     "sign_in_with_apple"
+    ]
+   }
+  },
+  {
+   "id": "firebase",
+   "name": "Firebase",
+   "kind": "service",
+   "docs": "https://firebase.google.com/docs",
+   "cli": "firebase",
+   "plugin": "firebase@claude-plugins-official",
+   "surfaces": [],
+   "files": [
+    "firebase.json"
+   ],
+   "packages": {
+    "npm": [
+     "firebase",
+     "firebase-admin",
+     "firebase-functions",
+     "@react-native-firebase/*"
+    ],
+    "pypi": [
+     "firebase-admin"
+    ],
+    "pub": [
+     "firebase_core",
+     "firebase_auth",
+     "cloud_firestore",
+     "firebase_messaging"
+    ],
+    "maven": [
+     "com.google.firebase:*"
+    ],
+    "go": [
+     "firebase.google.com/go/*"
+    ]
+   }
+  },
+  {
+   "id": "sentry",
+   "name": "Sentry",
+   "kind": "service",
+   "docs": "https://docs.sentry.io",
+   "cli": "sentry-cli",
+   "plugin": "sentry@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@sentry/*",
+     "sentry-expo"
+    ],
+    "pypi": [
+     "sentry-sdk"
+    ],
+    "go": [
+     "github.com/getsentry/sentry-go"
+    ],
+    "maven": [
+     "io.sentry:*"
+    ],
+    "pub": [
+     "sentry_flutter",
+     "sentry"
+    ],
+    "nuget": [
+     "Sentry",
+     "Sentry.*"
+    ],
+    "gem": [
+     "sentry-ruby",
+     "sentry-rails"
+    ],
+    "cargo": [
+     "sentry"
+    ]
+   }
+  },
+  {
+   "id": "cloudflare",
+   "name": "Cloudflare",
+   "kind": "service",
+   "docs": "https://developers.cloudflare.com",
+   "cli": "wrangler",
+   "plugin": "cloudflare@claude-plugins-official",
+   "surfaces": [],
+   "files": [
+    "wrangler.toml",
+    "wrangler.json",
+    "wrangler.jsonc"
+   ],
+   "packages": {
+    "npm": [
+     "wrangler",
+     "@cloudflare/*"
+    ],
+    "pypi": [
+     "cloudflare"
+    ],
+    "go": [
+     "github.com/cloudflare/cloudflare-go*"
+    ]
+   }
+  },
+  {
+   "id": "aws",
+   "name": "AWS",
+   "kind": "service",
+   "docs": "https://docs.aws.amazon.com",
+   "cli": "aws",
+   "plugin": "aws-serverless@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@aws-sdk/*",
+     "aws-sdk",
+     "aws-cdk-lib",
+     "aws-lambda"
+    ],
+    "pypi": [
+     "boto3",
+     "botocore",
+     "aws-cdk-lib"
+    ],
+    "go": [
+     "github.com/aws/aws-sdk-go*",
+     "github.com/aws/aws-lambda-go"
+    ],
+    "maven": [
+     "software.amazon.awssdk:*",
+     "com.amazonaws:*"
+    ],
+    "nuget": [
+     "AWSSDK.*"
+    ],
+    "pub": [
+     "amplify_flutter"
+    ],
+    "cargo": [
+     "aws-sdk-*",
+     "aws-config"
+    ],
+    "gem": [
+     "aws-sdk-*"
+    ]
+   }
+  },
+  {
+   "id": "resend",
+   "name": "Resend",
+   "kind": "service",
+   "docs": "https://resend.com/docs",
+   "cli": "resend",
+   "plugin": "resend@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "resend",
+     "@react-email/components"
+    ],
+    "pypi": [
+     "resend"
+    ],
+    "go": [
+     "github.com/resend/resend-go/*"
+    ],
+    "gem": [
+     "resend"
+    ],
+    "cargo": [
+     "resend-rs"
+    ]
+   }
+  },
+  {
+   "id": "twilio",
+   "name": "Twilio",
+   "kind": "service",
+   "docs": "https://www.twilio.com/docs",
+   "cli": "twilio",
+   "plugin": "twilio-developer-kit@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "twilio"
+    ],
+    "pypi": [
+     "twilio"
+    ],
+    "go": [
+     "github.com/twilio/twilio-go"
+    ],
+    "maven": [
+     "com.twilio.sdk:twilio"
+    ],
+    "nuget": [
+     "Twilio"
+    ],
+    "gem": [
+     "twilio-ruby"
+    ]
+   }
+  },
+  {
+   "id": "revenuecat",
+   "name": "RevenueCat",
+   "kind": "service",
+   "docs": "https://www.revenuecat.com/docs",
+   "cli": "",
+   "plugin": "revenuecat@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "react-native-purchases",
+     "@revenuecat/*"
+    ],
+    "pub": [
+     "purchases_flutter"
+    ],
+    "maven": [
+     "com.revenuecat.purchases:*"
+    ]
+   }
+  },
+  {
+   "id": "mongodb",
+   "name": "MongoDB",
+   "kind": "service",
+   "docs": "https://www.mongodb.com/docs",
+   "cli": "mongosh",
+   "plugin": "mongodb@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "mongodb",
+     "mongoose"
+    ],
+    "pypi": [
+     "pymongo",
+     "motor",
+     "mongoengine"
+    ],
+    "go": [
+     "go.mongodb.org/mongo-driver*"
+    ],
+    "maven": [
+     "org.mongodb:*"
+    ],
+    "nuget": [
+     "MongoDB.Driver"
+    ],
+    "gem": [
+     "mongo",
+     "mongoid"
+    ],
+    "cargo": [
+     "mongodb"
+    ]
+   }
+  },
+  {
+   "id": "redis",
+   "name": "Redis",
+   "kind": "service",
+   "docs": "https://redis.io/docs",
+   "cli": "redis-cli",
+   "plugin": "redis-development@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "redis",
+     "ioredis"
+    ],
+    "pypi": [
+     "redis"
+    ],
+    "go": [
+     "github.com/redis/go-redis/*",
+     "github.com/go-redis/redis/*"
+    ],
+    "maven": [
+     "io.lettuce:lettuce-core",
+     "redis.clients:jedis"
+    ],
+    "nuget": [
+     "StackExchange.Redis"
+    ],
+    "gem": [
+     "redis"
+    ],
+    "cargo": [
+     "redis"
+    ]
+   }
+  },
+  {
+   "id": "postgres",
+   "name": "PostgreSQL",
+   "kind": "service",
+   "docs": "https://www.postgresql.org/docs/",
+   "cli": "psql",
+   "plugin": "",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "pg",
+     "postgres"
+    ],
+    "pypi": [
+     "psycopg",
+     "psycopg2",
+     "psycopg2-binary",
+     "asyncpg"
+    ],
+    "go": [
+     "github.com/jackc/pgx/*",
+     "github.com/lib/pq"
+    ],
+    "maven": [
+     "org.postgresql:postgresql"
+    ],
+    "nuget": [
+     "Npgsql"
+    ],
+    "gem": [
+     "pg"
+    ],
+    "cargo": [
+     "tokio-postgres",
+     "postgres"
+    ]
+   }
+  },
+  {
+   "id": "prisma",
+   "name": "Prisma",
+   "kind": "service",
+   "docs": "https://www.prisma.io/docs",
+   "cli": "prisma",
+   "plugin": "prisma@claude-plugins-official",
+   "surfaces": [],
+   "files": [
+    "prisma/schema.prisma"
+   ],
+   "packages": {
+    "npm": [
+     "prisma",
+     "@prisma/client"
+    ]
+   }
+  },
+  {
+   "id": "vercel",
+   "name": "Vercel",
+   "kind": "service",
+   "docs": "https://vercel.com/docs",
+   "cli": "vercel",
+   "plugin": "vercel@claude-plugins-official",
+   "surfaces": [],
+   "files": [
+    "vercel.json"
+   ],
+   "packages": {
+    "npm": [
+     "vercel",
+     "@vercel/*"
+    ]
+   }
+  },
+  {
+   "id": "neon",
+   "name": "Neon",
+   "kind": "service",
+   "docs": "https://neon.com/docs",
+   "cli": "neonctl",
+   "plugin": "neon@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@neondatabase/serverless"
+    ]
+   }
+  },
+  {
+   "id": "posthog",
+   "name": "PostHog",
+   "kind": "service",
+   "docs": "https://posthog.com/docs",
+   "cli": "",
+   "plugin": "posthog@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "posthog-js",
+     "posthog-node",
+     "posthog-react-native"
+    ],
+    "pypi": [
+     "posthog"
+    ],
+    "pub": [
+     "posthog_flutter"
+    ]
+   }
+  },
+  {
+   "id": "paypal",
+   "name": "PayPal",
+   "kind": "service",
+   "docs": "https://developer.paypal.com/docs/",
+   "cli": "",
+   "plugin": "paypal@claude-plugins-official",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@paypal/*"
+    ],
+    "pypi": [
+     "paypalrestsdk",
+     "paypal-server-sdk"
+    ]
+   }
+  },
+  {
+   "id": "expo",
+   "name": "Expo",
+   "kind": "framework",
+   "docs": "https://docs.expo.dev",
+   "cli": "eas",
+   "plugin": "expo@claude-plugins-official",
+   "surfaces": [
+    "ios",
+    "android"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "expo"
+    ]
+   }
+  },
+  {
+   "id": "react-native",
+   "name": "React Native",
+   "kind": "framework",
+   "docs": "https://reactnative.dev/docs/getting-started",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "ios",
+    "android"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "react-native"
+    ]
+   }
+  },
+  {
+   "id": "flutter",
+   "name": "Flutter",
+   "kind": "framework",
+   "docs": "https://docs.flutter.dev",
+   "cli": "flutter",
+   "plugin": "",
+   "surfaces": [
+    "ios",
+    "android"
+   ],
+   "files": [],
+   "packages": {
+    "pub": [
+     "flutter"
+    ]
+   }
+  },
+  {
+   "id": "next",
+   "name": "Next.js",
+   "kind": "framework",
+   "docs": "https://nextjs.org/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "next"
+    ]
+   }
+  },
+  {
+   "id": "react",
+   "name": "React",
+   "kind": "framework",
+   "docs": "https://react.dev",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "react-dom"
+    ]
+   }
+  },
+  {
+   "id": "vue",
+   "name": "Vue",
+   "kind": "framework",
+   "docs": "https://vuejs.org/guide/introduction.html",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "vue",
+     "nuxt"
+    ]
+   }
+  },
+  {
+   "id": "angular",
+   "name": "Angular",
+   "kind": "framework",
+   "docs": "https://angular.dev",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@angular/core"
+    ]
+   }
+  },
+  {
+   "id": "svelte",
+   "name": "Svelte",
+   "kind": "framework",
+   "docs": "https://svelte.dev/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "svelte",
+     "@sveltejs/kit"
+    ]
+   }
+  },
+  {
+   "id": "astro",
+   "name": "Astro",
+   "kind": "framework",
+   "docs": "https://docs.astro.build",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "astro"
+    ]
+   }
+  },
+  {
+   "id": "tailwind",
+   "name": "Tailwind CSS",
+   "kind": "framework",
+   "docs": "https://tailwindcss.com/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [],
+   "files": [],
+   "packages": {
+    "npm": [
+     "tailwindcss"
+    ]
+   }
+  },
+  {
+   "id": "fastify",
+   "name": "Fastify",
+   "kind": "framework",
+   "docs": "https://fastify.dev/docs/latest/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "fastify"
+    ]
+   }
+  },
+  {
+   "id": "express",
+   "name": "Express",
+   "kind": "framework",
+   "docs": "https://expressjs.com/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "express"
+    ]
+   }
+  },
+  {
+   "id": "nestjs",
+   "name": "NestJS",
+   "kind": "framework",
+   "docs": "https://docs.nestjs.com",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "@nestjs/core"
+    ]
+   }
+  },
+  {
+   "id": "hono",
+   "name": "Hono",
+   "kind": "framework",
+   "docs": "https://hono.dev/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "npm": [
+     "hono"
+    ]
+   }
+  },
+  {
+   "id": "django",
+   "name": "Django",
+   "kind": "framework",
+   "docs": "https://docs.djangoproject.com",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web",
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "pypi": [
+     "django"
+    ]
+   }
+  },
+  {
+   "id": "flask",
+   "name": "Flask",
+   "kind": "framework",
+   "docs": "https://flask.palletsprojects.com",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "pypi": [
+     "flask"
+    ]
+   }
+  },
+  {
+   "id": "fastapi",
+   "name": "FastAPI",
+   "kind": "framework",
+   "docs": "https://fastapi.tiangolo.com",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "pypi": [
+     "fastapi"
+    ]
+   }
+  },
+  {
+   "id": "spring",
+   "name": "Spring Boot",
+   "kind": "framework",
+   "docs": "https://docs.spring.io/spring-boot/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "maven": [
+     "org.springframework.boot:*"
+    ]
+   }
+  },
+  {
+   "id": "ktor",
+   "name": "Ktor",
+   "kind": "framework",
+   "docs": "https://ktor.io/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "maven": [
+     "io.ktor:*"
+    ]
+   }
+  },
+  {
+   "id": "gin",
+   "name": "Gin",
+   "kind": "framework",
+   "docs": "https://gin-gonic.com/docs/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "go": [
+     "github.com/gin-gonic/gin"
+    ]
+   }
+  },
+  {
+   "id": "echo",
+   "name": "Echo",
+   "kind": "framework",
+   "docs": "https://echo.labstack.com/docs",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "go": [
+     "github.com/labstack/echo/*"
+    ]
+   }
+  },
+  {
+   "id": "rails",
+   "name": "Ruby on Rails",
+   "kind": "framework",
+   "docs": "https://guides.rubyonrails.org",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "web",
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "gem": [
+     "rails"
+    ]
+   }
+  },
+  {
+   "id": "aspnet",
+   "name": "ASP.NET Core",
+   "kind": "framework",
+   "docs": "https://learn.microsoft.com/aspnet/core",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "nuget": [
+     "Microsoft.AspNetCore.*"
+    ]
+   }
+  },
+  {
+   "id": "axum",
+   "name": "Axum",
+   "kind": "framework",
+   "docs": "https://docs.rs/axum",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "cargo": [
+     "axum"
+    ]
+   }
+  },
+  {
+   "id": "actix",
+   "name": "Actix Web",
+   "kind": "framework",
+   "docs": "https://actix.rs/docs/",
+   "cli": "",
+   "plugin": "",
+   "surfaces": [
+    "api"
+   ],
+   "files": [],
+   "packages": {
+    "cargo": [
+     "actix-web"
+    ]
+   }
+  }
+ ]
+}
