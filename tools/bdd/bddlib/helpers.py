@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -139,30 +141,55 @@ def own_marketplace_lines(plugins: dict[str, str] | None) -> list[str]:
             for h in CATALOG if h.marketplace and h.id not in (plugins or {})]
 
 
+PLUGIN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def printable(text: str) -> str:
+    """Text read from a project file, safe to show: no control characters or escape sequences, and short."""
+    return "".join(ch for ch in text if ch.isprintable())[:60]
+
+
 @dataclass(frozen=True)
 class VendorPlugin:
+    """The plugin of a service the project uses. ``plugin`` comes only from greenlight's own catalog and is the only thing an
+    install line is made of; ``declared`` is what the project's own sources.toml says, shown as information and never run."""
     service: str
     plugin: str
     installed: bool
+    declared: str = ""
 
 
 def vendor_plugins(root: Path | None, plugins: dict[str, str] | None) -> list[VendorPlugin]:
     """The vendor plugins of the services in .bdd/sources.toml. Nothing is claimed when the plugin list could not be read."""
     if root is None or plugins is None:
         return []
-    entries, _ = sources.load(root)
-    return [VendorPlugin(str(e.get("name", key)), e["plugin"], e["plugin"] in plugins)
-            for key, e in entries.items() if isinstance(e.get("plugin"), str) and e["plugin"]]
+    known = {s.id: s for s in sources.catalog()}
+    found = []
+    for key, entry in sources.load(root)[0].items():
+        named = entry.get("plugin")
+        declared = named if isinstance(named, str) and PLUGIN_ID.fullmatch(named) else ""
+        service = known.get(key)
+        if service and PLUGIN_ID.fullmatch(service.plugin):
+            found.append(VendorPlugin(service.name, service.plugin, service.plugin in plugins,
+                                      declared if declared != service.plugin else ""))
+        elif declared:
+            found.append(VendorPlugin(printable(str(entry.get("name", key))), "", declared in plugins, declared))
+    return found
 
 
 def vendor_lines(found: list[VendorPlugin]) -> list[str]:
-    absent = [v for v in found if not v.installed]
-    if not absent:
-        return []
-    lines = ["Plugins of the services this project uses (from .bdd/sources.toml), not installed:"]
-    lines += [f"  {v.plugin}  ({v.service})" for v in absent]
-    return lines + ["To add one, type this yourself (the leading ! runs it in your own shell); greenlight never installs it:",
-                    f"  ! claude plugin install {absent[0].plugin}"]
+    absent = [v for v in found if v.plugin and not v.installed]
+    named = [v for v in found if v.declared and v.declared != v.plugin and v.declared not in {w.plugin for w in found}]
+    lines = []
+    if absent:
+        lines += ["Plugins of the services this project uses (from .bdd/sources.toml), not installed:"]
+        lines += [f"  {v.plugin}  ({v.service})" for v in absent]
+        lines += ["To add one, type its line yourself (the leading ! runs it in your own shell); greenlight never installs it:"]
+        lines += [f"  ! claude plugin install {shlex.quote(v.plugin)}" for v in absent]
+    if named:
+        lines += ["Named in .bdd/sources.toml and not offered here, because only plugins greenlight lists get an install line: "
+                  + ", ".join(f"{v.declared} ({v.service})" for v in named)]
+    return lines
 
 
 def report(plugins: dict[str, str] | None, root: Path | None) -> str:

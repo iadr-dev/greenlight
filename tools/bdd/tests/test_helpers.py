@@ -198,6 +198,43 @@ class OtherMarketplacesAndVendorsTest(unittest.TestCase):
         self.assertNotIn("Plugins of the services", helpers.report(None, self.root))
         self.assertNotIn("Plugins of the services", helpers.report({}, None))
 
+    def write_sources(self, text: str) -> None:
+        (self.root / ".bdd" / "sources.toml").write_text(text, encoding="utf-8")
+
+    def test_an_install_line_is_made_only_of_the_catalogs_own_plugin_ids(self):
+        for bad in ("evil plugin@x", "a;b@x", "a@x; rm -rf ~", "$(id)@x", "a`id`@x", "a\\nb@x", "a@x\\nb", "@x", "a@", "a|b@x", "a&b@x",
+                    "../a@x", "a@x/../b"):
+            with self.subTest(bad=bad):
+                self.write_sources(f'[supabase]\nname = "Supabase"\nplugin = "{bad}"\n[mine]\nname = "Mine"\nplugin = "{bad}"\n')
+                text = helpers.report({}, self.root)
+                self.assertNotIn(bad, text)
+                self.assertNotIn(bad.replace("\\n", "\n"), text)
+                self.assertIn("! claude plugin install supabase@claude-plugins-official", text,
+                              "the service the catalog knows still gets the catalog's own id")
+                self.assertNotIn("Mine", text)
+                self.assertTrue(all(v["plugin"] in ("", "supabase@claude-plugins-official")
+                                    for v in json.loads(helpers.as_json({}, self.root))["vendor"]))
+
+    def test_every_catalog_plugin_id_passes_and_needs_no_quoting(self):
+        import shlex
+        for service in helpers.sources.catalog():
+            if service.plugin:
+                with self.subTest(service=service.id):
+                    self.assertTrue(helpers.PLUGIN_ID.fullmatch(service.plugin))
+                    self.assertEqual(shlex.quote(service.plugin), service.plugin)
+
+    def test_a_plugin_the_project_names_that_greenlight_does_not_list_is_information_and_never_a_command(self):
+        self.write_sources('[mine]\nname = "Mine \\u001b[31mred"\nplugin = "mine@elsewhere"\n'
+                          '[supabase]\nname = "Supabase"\nplugin = "other@elsewhere"\n')
+        text = helpers.report({}, self.root)
+        self.assertIn("Named in .bdd/sources.toml and not offered here", text)
+        self.assertIn("mine@elsewhere (Mine [31mred)", text)
+        self.assertIn("other@elsewhere (Supabase)", text)
+        self.assertNotIn("\\x1b", text)
+        self.assertNotIn("install mine@elsewhere", text)
+        self.assertNotIn("install other@elsewhere", text)
+        self.assertIn("! claude plugin install supabase@claude-plugins-official", text)
+
     def test_json_lists_the_vendor_plugins_with_whether_they_are_installed(self):
         data = json.loads(helpers.as_json({"stripe@claude-plugins-official": "1"}, self.root))
         self.assertEqual([(v["service"], v["installed"]) for v in data["vendor"]], [("Supabase", False), ("Stripe", True)])
