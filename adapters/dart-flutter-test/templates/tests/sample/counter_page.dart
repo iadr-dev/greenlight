@@ -1,7 +1,7 @@
 /// The screen the sample feature drives. Delete it together with tests/features/sample.feature.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class CounterApp extends StatelessWidget {
   const CounterApp({super.key, this.start = 0});
