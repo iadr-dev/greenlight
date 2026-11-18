@@ -33,6 +33,7 @@ READERS = {"cat", "grep", "egrep", "fgrep", "ls", "head", "tail", "wc", "cut", "
            "mkdir", "bdd"}
 KEYWORDS = {"for", "do", "done", "if", "then", "else", "elif", "fi", "while", "until", "{", "}", "!", "time"}
 PREFIXES = {"env", "time", "nice", "timeout", "do", "then", "else", "elif", "if", "while", "until", "{", "}", "!"}
+RUNNERS = {"env", "time", "nice", "timeout"}            # they run the program after them: it is not read exactly
 PROGRAMS = READERS | WRITE_VERBS | INTERPRETERS | PACKAGE_TOOLS | KEYWORDS | {"cd", "export"}
 RUN_BY_TOOLS = INTERPRETERS | WRITE_VERBS | {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "eval", "make", "awk",
                                              "gawk"}
@@ -67,11 +68,6 @@ CODE_WRITES = re.compile(
     r"symlinkSync|chmodSync|mkdirSync)\w*\s*\("
     r"|\bunlink\b|subprocess|\bos\.(?:system|popen|exec\w*|spawn\w*)|\bPopen\b|child_process|\bexec\w*\b|\bspawn\w*\b"
     r"|\bsystem\b|\bgetattr\b|__import__|\bimportlib\b|\beval\b|\bcompile\s*\(")
-# Other interpreters' writes, for a command read whole: it is checked if it looks like a write in any of these spellings.
-OTHER_CODE = re.compile(r"(?:^|[\s;&|(`])(?:ruby|php|perl|lua|luajit|pypy\w*|ipython|jython|groovy|julia|rscript|osascript|"
-                        r"wscript|cscript)(?:\.exe)?\s|\bFile\.(?:write|open|delete|binwrite|rename|unlink)|file_put_contents|"
-                        r"\bfopen\b|FileUtils|\bqx\b|\bmklink\b|Deno\.\w*[Ww]rite|Bun\.write|"
-                        r"\bopen\s*\(?\s*\w+\s*,\s*[\"']?\s*[>+]", re.IGNORECASE)
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+)|(\{[^}]*\}|[@*#?$!\-]))")
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(\+?)=")
 _SUFFIX = re.compile(r"\.(?:exe|cmd|bat|ps1)$")
@@ -149,6 +145,7 @@ class Target:
     names_only: bool = False                               # its paths are names (a find pattern, a -C folder)
     certain: bool = False                                  # every folder in ``dirs`` came from a `cd` to a known place
     source: str = ""                                       # the word as written, variables not put in
+    tree: bool = False                                     # a folder here writes everything under it (`rm -r`, unknown)
 
 
 @dataclass
@@ -159,22 +156,6 @@ class Writes:
     opaque: bool = False                                   # a program word is a variable or a pattern with no known value
     made: set[Path] = field(default_factory=set)           # the folders a `mkdir` in the command creates
     every: bool = False                                    # every word of a program not known counts as written
-
-
-# Write forms of programs that are not read exactly, matched in the command's text whatever its quoting: sed's `w`, `W`
-# and `e` commands, `-i` and `-f`; git's `-c` and `--config-env`; awk's in-place, include and load; sort's output and
-# compress program; uniq's output operand; `xxd -r`; tree's and gh's output and download; any output option. They only
-# decide that the words such a program is given are checked; a false match refuses only a command that is also given a
-# protected path.
-WRITE_HINTS = re.compile(
-    r"\bsed\b[^|;&\n]*?(?:[\s\"'/;:{}!$,\d](?:[wWe])(?=[\s\"';}]|$)|[\s\"'](?:-\w*[if]|--in\S*|--f\S*))"
-    r"|\bgit\b[^|;&\n]*?[\s\"'](?:-c|-C|--config-env\S*|--output\S*|-o|--work-tree\S*|--git-dir\S*|checkout\S*|restore|reset"
-    r"|stash|apply|rm|mv|clean|merge|pull|switch|rebase|cherry-pick|am|read-tree|worktree|update-index|archive)(?=[\s\"'=]|$)"
-    r"|\b[gnm]?awk\b[^|;&\n]*?(?:[\s\"']-\w*i|--in\S*|inplace|@include|@load)"
-    r"|\bsort\b[^|;&\n]*?[\s\"'](?:-\w*o|--o\S*|--co\S*)|\buniq\b|\bxxd\b[^|;&\n]*?-\w*r|\btree\b[^|;&\n]*?-\w*o"
-    r"|\bgh\b[^|;&\n]*?(?:download|checkout|clone|[\s\"']-O)"
-    r"|\b(?:xargs|shred|unlink|patch|rsync|tar|unzip|curl|wget|rename|mklink|robocopy|xcopy)\b"
-    r"|(?:^|[\s\"'])(?:-o|-O|--out\S*|--write\S*|--save\S*|--dest\S*|--target\S*)(?=[\s\"'=]|$)")
 
 
 # -- reading the command ------------------------------------------------------------------------------------------
@@ -637,7 +618,7 @@ def judge(commands: list[Simple]) -> str:
             return WRITES                                      # `python < script.py`
         if name in PACKAGE_TOOLS and any(w.name() in RUN_BY_TOOLS for w in rest[1:]):
             return WRITES                                      # `uv run python -c ...`, `npx --no-install tsx -e ...`
-        if name not in PROGRAMS and not installed:
+        if _unknown_program(simple, known):
             verdicts.add(OTHER)
     return next(v for v in (UNREAD, OTHER, PLAIN) if v in verdicts)
 
@@ -671,7 +652,70 @@ def _unknown_program(simple: Simple, known: dict[str, str | None]) -> bool:
         start += 1
     if start >= len(words) or all(_assignment(w) for w in words):
         return False
+    if any(not w.quoted and w.name() in RUNNERS for w in words[:start]):
+        return True
     return _program(words[start:], known) not in PROGRAMS and not _installed_runner(words[start].text)
+
+
+READ_ONLY_GIT = {"status", "diff", "log", "show", "add", "commit", "push", "fetch", "branch", "tag", "rev-parse",
+                 "ls-files", "blame", "grep", "remote", "describe", "shortlog", "reflog", "ls-tree", "cat-file",
+                 "show-ref", "for-each-ref", "merge-base", "rev-list", "name-rev", "version", "help", "init", "clone",
+                 "checkout", "switch", "restore", "reset", "stash", "merge", "rebase", "pull", "cherry-pick", "revert",
+                 "rm", "mv", "clean", "apply", "am", "worktree", "config", "notes", "bisect", "range-diff", "format-patch",
+                 "submodule", "gc", "fsck", "archive", "update-index", "read-tree", "checkout-index", "symbolic-ref"}
+_SED_ADDRESS = r"(?:[\d$~+]+|/(?:\\.|[^/\n])*/[IM]*)"
+SED_RUNS = re.compile(rf"(?:^|[;\n{{}}])\s*(?:{_SED_ADDRESS}(?:\s*,\s*{_SED_ADDRESS})?)?\s*!?\s*"   # after an address
+                      r"(?:e(?:\s|;|}|$)|s([^\w\s\\])(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1[gpIiMm\d]*e)")
+AWK_RUNS = re.compile(r"\bsystem\s*\(|\|\s*[\"$\w]|[\"\w)]\s*\|\s*getline|@include|@load|\bexec\b", re.IGNORECASE)
+
+
+def runs_unread(command: str) -> str | None:
+    """Does the command make a program run another one the guard cannot read: ``rg --pre``, ``find -exec``/``fd -x``,
+    ``xargs``, ``parallel`` or ``watch`` running anything but a reader, awk's ``system()``, pipes and includes, sed's
+    ``e``, ``git -c``/``--config-env`` or a git command that may be an alias, ``sort --compress-program``? The program it
+    names, or None. Such a command may write anything, so no word it is given can clear it."""
+    try:
+        commands = lex(command)
+    except Unreadable:
+        return None
+    known = _known_values(commands)
+    for simple in _all_simple(commands):
+        words = simple.words[_program_at(simple.words):]
+        while words and _assignment(words[0]):
+            words = words[1:]
+        name = _program(words, known) if words else ""
+        args = words[1:]
+        texts = [w.text for w in args]
+        if name in ("rg", "ripgrep") and any(t.startswith("--pre") for t in texts):
+            return "rg --pre"
+        if name in ("find", "fd", "fdfind", "xargs", "parallel", "watch"):
+            starts = {"find": ("-exec", "-execdir", "-ok", "-okdir"), "fd": ("-x", "-X", "--exec", "--exec-batch"),
+                      "fdfind": ("-x", "-X", "--exec", "--exec-batch")}.get(name)
+            for at, text in enumerate(texts):
+                if starts is None or text in starts:
+                    rest = [w for w in args[at + (0 if starts is None else 1):] if not _flag(w) and not w.text.isdigit()]
+                    if name in ("xargs", "parallel", "watch") and at > 0:
+                        break
+                    run = _program(rest, known) if rest else "echo"
+                    if run not in READERS - {"mkdir"}:
+                        return f"{name} running {run or 'a program'}"
+                    if starts is None:
+                        break
+        if name in ("awk", "gawk", "mawk", "nawk") and any(AWK_RUNS.search(t) for t in texts):
+            return name
+        if name == "sed" and any(SED_RUNS.search(t) or t.startswith(("-f", "--file")) for t in texts):
+            return "sed"
+        if name == "git":
+            if any(t == "-c" or t.startswith(("-c", "--config-env", "--exec-path")) for t in texts):
+                return "git -c"
+            at = 0
+            while at < len(texts) and texts[at].startswith("-"):
+                at += 2 if texts[at] in ("-C", "--git-dir", "--work-tree", "--namespace") else 1
+            if at < len(texts) and texts[at] not in READ_ONLY_GIT:
+                return f"git {texts[at]}"                      # an alias may run anything
+        if name == "sort" and any(t.startswith("--co") for t in texts):
+            return "sort --compress-program"
+    return None
 
 
 # -- what the commands write ---------------------------------------------------------------------------------------
@@ -684,6 +728,7 @@ class _Reader:
         self.dirs = self.union
         self.found = Writes()
         self.scripts: dict[str, str] = {}                # the scripts the command writes, by file name
+        self.tree = False                                # the targets now written with everything under them
         self.exact: set[Path] = set()                    # folders a `cd` reached for sure (from an absolute path)
         self.after = ""                                  # the operator before the command being read
 
@@ -733,8 +778,13 @@ class _Reader:
             self.found.targets.append(Target(data, data.replace("\\", "/"), "", tuple(self.dirs), code=True, source=data))
         words = [w for w in simple.words if w.quoted or not (w.text in GROUPING or w.name() in PREFIXES)]
         names_only = any(w.text.startswith(("-C", *FOLDER_FLAGS)) for w in words)
+        self.tree = True
         for word in words[1:]:
             self.target(word, names_only)
+            value = re.match(r"-[A-Za-z]([^-=].*)|--?[\w-]+=(.+)", word.text) if _flag(word) else None
+            if value:                                          # `-otests/drivers`, `--dest=tests/drivers`
+                rest = value.group(1) or value.group(2)
+                self.target(Word([(rest, "plain")], list(word.substitutions), [rest]), names_only)
         operands = [w for w in words[1:] if not _flag(w) or "=" in w.text]
         if len(operands) > MAX_JOINED:
             self.found.whole = True                            # too many words to join each to each: the old rule
@@ -743,6 +793,7 @@ class _Reader:
                 for source in operands:
                     if source is not folder:
                         self.target(_inside(folder, source), names_only)
+        self.tree = False
         self.moved_to(None)
 
     def target(self, word: Word, names_only: bool = False) -> None:
@@ -755,7 +806,7 @@ class _Reader:
             return
         certain = bool(self.dirs) and all(folder in self.exact for folder in self.dirs)
         self.found.targets.append(Target(text, raw, pattern, tuple(self.dirs), names_only=names_only, certain=certain,
-                                         source=word.text))
+                                         source=word.text, tree=self.tree))
 
     def remember_script(self, simple: Simple, words: list[Word]) -> None:
         """A file the command writes may be run by it next: its here-document, or what ``echo`` or ``printf`` print
@@ -898,8 +949,10 @@ class _Reader:
     def verb(self, name: str, args: list[Word], names_only: bool) -> None:
         if name == "cp" and self.copy(args, names_only):
             return
+        self.tree = name in ("rm", "mv")
         for word in args:
             self.target(word, names_only)
+        self.tree = False
         if name in COPY_VERBS:                                 # any argument may be the folder the others go into
             folders = [w for w in args if not _flag(w) or "=" in w.text]          # `--target-directory=DIR` included
             for folder in folders:
@@ -1031,8 +1084,19 @@ def programs(command: str) -> Programs:
         words = simple.words[_program_at(simple.words):]
         if words and (words[0].substitutions or "$" in words[0].text) and _program_value(words[0], known) is None:
             unknown = unknown or any(w.text.casefold() in PACKAGE_WORDS for w in words[1:] if not _flag(w))
-    view = "\n".join(_view(commands, known)) if plain(commands) else command
+    verdict = judge(commands)
+    runner_only = verdict == OTHER and all(_runs_known(simple, known) for simple in _all_simple(commands)
+                                           if _unknown_program(simple, known))
+    view = "\n".join(_view(commands, known)) if verdict == PLAIN or runner_only else command
     return Programs(view, unknown)
+
+
+def _runs_known(simple: Simple, known: dict[str, str | None]) -> bool:
+    """Is this command a runner prefix (``timeout 20``, ``env X=1``) in front of a known program?"""
+    words = simple.words[_program_at(simple.words):]
+    while words and _assignment(words[0]):
+        words = words[1:]
+    return bool(words) and _program(words, known) in PROGRAMS
 
 
 def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
@@ -1042,7 +1106,8 @@ def _view(commands: list[Simple], known: dict[str, str | None]) -> list[str]:
         if words and words[0].name() == "for":
             continue
         program = _program_at(words)
-        runs = _program(words[program:], known) in PACKAGE_TOOLS | INTERPRETERS | {"bdd"}   # their quoted words are not data
+        runs = (_program(words[program:], known) in PACKAGE_TOOLS | INTERPRETERS | {"bdd"}   # their quoted words are not data,
+                or _unknown_program(simple, known))                                       # nor an unknown program's
         shown = []
         for at, word in enumerate(words):
             assignment = _assignment(word)

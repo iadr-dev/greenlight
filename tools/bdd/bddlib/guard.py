@@ -413,7 +413,9 @@ _PLUMBING = re.compile(r"\b(?:un)?lock\b[^;&|\n]*--plumbing\b", re.IGNORECASE)
 PLUMBING_MESSAGE = ("greenlight: the shared test plumbing is every feature's, so the person or the orchestrator releases it "
                     "(`bdd unlock --plumbing`) and locks it again (`bdd lock --plumbing`), not an agent. Say in your report "
                     "which file has to change and why.")
-_FIND_ACTS = re.compile(r"(?<![\w-])-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b")
+RUNS_UNREAD_MESSAGE = ("greenlight: this shell command runs a program the guard cannot read ({}), which may write any "
+                       "file, a protected one included. Run the program it runs directly, or a reader (`grep`, `cat`, "
+                       "`head` ...) in its place.")
 _PR_WRITE = re.compile(r"\bbdd\b[^;&|\n]*\bpr\b[^;&|\n]*--write\b", re.IGNORECASE)
 PR_FILE = "PULL_REQUEST.md"
 
@@ -627,7 +629,7 @@ def segment_glob_reaches(text: str, name: str) -> bool:
 
     Decided by matching the glob against the real name: `.b*`, `.?dd`, `.[^a]dd` and `.*` reach `.bdd`; `.gitignore*` and
     `src/*` do not."""
-    for token in _TOKEN_BREAKS.split(text):
+    for token in set(_TOKEN_BREAKS.split(text)):
         if any(_GLOB.search(segment) and glob_matches(name, segment) for segment in token.split("/")):
             return True
     return False
@@ -641,7 +643,7 @@ _ROLLOUT_SAMPLE = "rollout-2026-01-01t00-00-00-00000000-0000-0000-0000-000000000
 def glob_reaches_rollout(text: str) -> bool:
     """Could a glob in the command expand to one of Codex's session files (`rollout-<time>-<id>.jsonl`)? Only a glob that
     spells the start of that name counts (`r*.jsonl`, `rollout-?*`, `ro[l]lout*`): `*.jsonl` alone is anybody's file."""
-    for token in _TOKEN_BREAKS.split(text):
+    for token in set(_TOKEN_BREAKS.split(text)):
         for segment in token.split("/"):
             match = _GLOB.search(segment)
             if not match:
@@ -759,7 +761,7 @@ def written_tokens(spelled_: Spelled):
     """Each path-like token of each written target, with its target."""
     for target in spelled_.found.targets if spelled_.found else ():
         for spelling in spellings(target):
-            for token in _PATH_TOKENS.split(spelling):
+            for token in dict.fromkeys(_PATH_TOKENS.split(spelling)):
                 if token:
                     yield token, target
 
@@ -1044,13 +1046,9 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     if refused:
         return refused
     found = shellwrites.writes(command, cwd)
-    looks_like_a_write = (found is not None and (found.opaque or _SHELL_WRITES.search(scrubbed) or _FIND_ACTS.search(scrubbed)
-                                                 or shellwrites.CODE_WRITES.search(scrubbed) or shellwrites.OTHER_CODE.search(scrubbed)))
-    if found is not None and found.every and not found.whole:
-        looks_like_a_write = looks_like_a_write or shellwrites.WRITE_HINTS.search(command)
-    if found is None or ((found.whole or found.every) and not looks_like_a_write):
-        return None                                    # a command not read exactly is judged as before: if it looks like a write
-    return check_writes(project, spelled(command, found), agent, cwd)
+    refused = check_writes(project, spelled(command, found), agent, cwd) if found is not None else None
+    runs = None if refused else shellwrites.runs_unread(command)
+    return refused or (RUNS_UNREAD_MESSAGE.format(runs) if runs else None)
 
 
 def check_writes(project: Project, written: Spelled, agent: str | None, cwd: Path | None) -> str | None:

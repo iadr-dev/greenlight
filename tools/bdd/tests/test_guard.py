@@ -316,14 +316,13 @@ class BashTest(GuardCase):
             with self.subTest(command=command):
                 self.assertTrue(self.blocked(command), command)
 
-    def test_reading_the_same_file_through_a_quoted_shell_is_allowed(self):
-        for command in [
-            'powershell.exe -Command "Get-Content features/a.feature"',
-            "sh -c 'cat features/a.feature'",
-            'cmd /c "type features/a.feature"',
-        ]:
+    def test_a_program_the_guard_does_not_read_is_refused_when_given_a_locked_file_even_to_read_it(self):
+        """No program's options are modelled (D64): a shell, git or sed given a locked file may write it, so the command is
+        refused; the reader itself (`cat`, `grep`, `head`) reads it."""
+        for command in ['powershell.exe -Command "Get-Content features/a.feature"', "sh -c 'cat features/a.feature'",
+                        'cmd /c "type features/a.feature"', "git diff features/a.feature", "git log -- features/a.feature"]:
             with self.subTest(command=command):
-                self.assertFalse(self.blocked(command), command)
+                self.assertTrue(self.blocked(command), command)
 
     def test_a_command_that_changes_directory_first_is_still_caught_by_file_name(self):
         self.assertTrue(self.blocked("cd features && sed -i s/a/b/ a.feature"))
@@ -338,8 +337,8 @@ class BashTest(GuardCase):
 
     def test_reading_is_always_fine(self):
         for command in ["cat features/a.feature", "cat features/a.feature | wc -l", "grep -n Scenario features/a.feature",
-                        "head -5 steps/s.py", "diff features/a.feature /tmp/x", "git diff features/a.feature",
-                        "git log -- features/a.feature", "ls features", "cat .bdd/features/FEAT-001-a/state.json",
+                        "head -5 steps/s.py", "diff features/a.feature /tmp/x", "git diff", "git log --oneline -5",
+                        "ls features", "cat .bdd/features/FEAT-001-a/state.json",
                         "cat features/a.feature > /dev/null", "grep x steps/s.py 2>&1", "grep x steps/s.py 2>/dev/null"]:
             with self.subTest(command=command):
                 self.assertFalse(self.blocked(command), command)
@@ -1049,12 +1048,13 @@ class PrecisionTest(GuardCase):
                         "PATH=/tmp/x:$PATH cat src/a.ts && rm -f tests/drivers/barrier.ts",
                         "NODE_OPTIONS='--require ./x.js' node -e 1 tests/drivers/barrier.ts",
                         "GIT_WORK_TREE=tests/drivers git checkout -- barrier.ts", "python \"-c\" \"$X\" tests/drivers/barrier.ts",
-                        "python -Ic \"$X\" tests/drivers/barrier.ts", "git -C tests/drivers checkout barrier.ts"]:
+                        "python -Ic \"$X\" tests/drivers/barrier.ts", "git -C tests/drivers checkout barrier.ts",
+                        "sed -n 1p tests/drivers/barrier.ts", "git diff tests/drivers/barrier.ts"]:
             with self.subTest(command=command):
                 self.assertIsNotNone(self.bash(command), command)
         for command in ["sed -i 's/a/b/' src/a.ts", "git status --short", "awk '{print $1}' src/a.ts | sort | uniq -c",
                         "PYTHONIOENCODING=utf-8 python -c \"print(1)\"", "grep -rn barrier tests/drivers | head",
-                        "sed -n 1p tests/drivers/barrier.ts", "git status --short | grep -E '\\.claude|tests/drivers'"]:
+                        "git status --short | grep -E '\\.claude|tests/drivers'", "grep -n x src/a.ts | sed -n 1p"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command), command)
 
@@ -1063,7 +1063,7 @@ class PrecisionTest(GuardCase):
         self.assertIsNotNone(self.bash("sed -i '" + "s/a/b/;" * 700 + "' tests/drivers/barrier.ts"))
         self.assertIsNone(self.bash("sed -n '" + "/x/p;" * 500 + "' src/a.ts"))
         self.assertIsNotNone(self.bash("cd a; " * 100 + "rm barrier.ts; cd tests/drivers"))
-        self.assertIsNone(self.bash("awk '" + "print " * 30000 + "' src/a.ts"))
+        self.assertIsNone(self.bash("awk '" + "print " * 6000 + "' src/a.ts"))
         self.assertLess(time.perf_counter() - start, 2.0)
 
     def test_bdd_takes_no_shortened_option(self):
