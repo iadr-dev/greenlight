@@ -29,9 +29,8 @@ jobs:
           python-version: "3.15"     # runs the bdd command line only
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
         with:
-          channel: stable
+          flutter-version: "3.50.0"      # must match tests/pubspec.lock: the SDK pins test_api, listen and others
           cache: true
-          cache-dependency-path: tests/pubspec.lock
       - name: Get greenlight
         run: git clone --depth 1 --branch "$GREENLIGHT_REF" https://github.com/iadr-dev/greenlight "$RUNNER_TEMP/greenlight"
       - name: Fetch the pinned packages from the lock file
