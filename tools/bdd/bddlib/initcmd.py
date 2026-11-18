@@ -187,10 +187,13 @@ def record_project(root: Path) -> None:
     added, problem = sources.write_missing(root, detected)
     if added and not had_sources:
         print(f"  + {cfg.BDD_DIR}/{sources.SOURCES_FILE}")
-    quality_line, quality_text = quality_record(data, toolchain.proposed_checks(root, found, toolchain.owned_folders(data)))
+    owned = toolchain.owned_folders(data)
+    checks = toolchain.proposed_checks(root, found, owned)
+    quality_line, quality_text = quality_record(data, checks)
     design_line, design_text = design_record(root, data)
     surface_lines, surfaces_text = surfaces_record(root, data, found, detected)
-    print("\n".join([*sources_lines(detected, problem), design_line, quality_line, *surface_lines]))
+    notes = toolchain.overlap_notes(root, checks, owned) if quality_text else []
+    print("\n".join([*sources_lines(detected, problem), design_line, quality_line, *surface_lines, *notes]))
     extra = quality_text + design_text + surfaces_text
     if extra:
         new = text.rstrip("\n") + "\n" + extra

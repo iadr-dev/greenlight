@@ -138,6 +138,23 @@ def node_runner(project: Project, root_files: frozenset[str]) -> str:
     return "npx --no-install"
 
 
+def overlap_notes(root: Path, checks: list[Check], owned: tuple[str, ...]) -> list[str]:
+    """A TypeScript check cannot leave a folder out on its command line: it reads the project's tsconfig.json. Say so when that
+    file does not name the adapter's own test folder, because tsc would then type-check greenlight's plumbing too."""
+    notes = []
+    for check in checks:
+        if not check.name.startswith("tsc"):
+            continue
+        for inside in left_out(check.cwd, owned):
+            config = root / check.cwd / "tsconfig.json"
+            text = config.read_text(encoding="utf-8", errors="replace") if config.is_file() else ""
+            if f'"{inside}' not in text:
+                where = f"{check.cwd}/" if check.cwd else ""
+                notes.append(f"note: {where}tsconfig.json does not leave out {inside}/ (greenlight's locked plumbing); if {check.name} "
+                             f'reports errors there, add "{inside}" to its exclude')
+    return notes
+
+
 def _label(folder: str) -> str:
     return re.sub(r"[^a-z0-9_-]+", "-", folder.casefold()).strip("-")[:20]
 

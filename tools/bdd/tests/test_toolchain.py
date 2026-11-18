@@ -50,6 +50,16 @@ class QualityTest(ProjectCase):
                 (check,) = toolchain.proposed_checks(self.root, sources.manifests(self.root), owned)
                 self.assertEqual(check.command, expected)
 
+    def test_a_tsconfig_that_does_not_leave_the_adapters_folder_out_is_said(self):
+        self.write("package.json", json.dumps({"devDependencies": {"typescript": "5"}}))
+        self.write("tsconfig.json", '{"compilerOptions": {"strict": true}}')
+        checks = list(self.checks().values())
+        (note,) = toolchain.overlap_notes(self.root, checks, ("tests",))
+        self.assertIn('add "tests" to its exclude', note)
+        self.write("tsconfig.json", '{"exclude": ["tests", "node_modules"]}')
+        self.assertEqual(toolchain.overlap_notes(self.root, checks, ("tests",)), [])
+        self.assertEqual(toolchain.overlap_notes(self.root, checks, ()), [])
+
     def test_the_folder_of_each_adapters_own_tests_is_the_one_its_files_share(self):
         adapters = {"adapters": [{"features": "tests/features", "steps": "tests/steps", "drivers": "tests/drivers"},
                                  {"root": "web", "features": "tests/features", "steps": "tests/steps"},
