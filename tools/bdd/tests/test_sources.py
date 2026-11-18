@@ -200,7 +200,7 @@ class CatalogTest(unittest.TestCase):
                 self.assertRegex(s.docs, r"^https://")
                 self.assertIn(s.kind, ("service", "framework"))
                 self.assertTrue(s.packages and set(s.packages) <= set(sources.ECOSYSTEMS))
-                self.assertTrue(set(s.surfaces) <= {"web", "ios", "android", "api", "cli"})
+                self.assertLessEqual(set(s.surfaces), {"web", "ios", "android", "api", "cli"})
                 if s.plugin:
                     self.assertRegex(s.plugin, r"^[a-z0-9-]+@claude-plugins-official$")
 

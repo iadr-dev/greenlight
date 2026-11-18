@@ -280,22 +280,23 @@ def _quality_rules(adapter: dict, path: Path) -> QualityRules | None:
         return None
     if not isinstance(table, dict) or not table:
         raise ConfigError(f"{path}: [adapters.quality] needs at least one named check, such as [adapters.quality.lint]")
-    checks = []
-    for name, body in table.items():
-        if not _CHECK_NAME.fullmatch(name) or not isinstance(body, dict):
-            raise ConfigError(f"{path}: [adapters.quality.{name}]: a check is a table named in lower case, such as lint")
-        command = body.get("command")
-        if not isinstance(command, str) or not command.strip():
-            raise ConfigError(f"{path}: [adapters.quality.{name}] needs command, the command words as one string")
-        timeout = body.get("timeout", 600)
-        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
-            raise ConfigError(f"{path}: [adapters.quality.{name}] timeout must be a whole number of seconds")
-        cwd = body.get("cwd", "")
-        fail_on_output = body.get("fail_on_output", False)
-        if not isinstance(cwd, str) or not isinstance(fail_on_output, bool):
-            raise ConfigError(f"{path}: [adapters.quality.{name}] cwd is a folder name and fail_on_output is true or false")
-        checks.append(QualityCheck(name, command, timeout, adapter_base({"root": cwd}, path), fail_on_output))
-    return QualityRules(str(adapter.get("name", "")), tuple(checks))
+    return QualityRules(str(adapter.get("name", "")), tuple(_quality_check(name, body, path) for name, body in table.items()))
+
+
+def _quality_check(name: str, body: object, path: Path) -> QualityCheck:
+    if not _CHECK_NAME.fullmatch(name) or not isinstance(body, dict):
+        raise ConfigError(f"{path}: [adapters.quality.{name}]: a check is a table named in lower case, such as lint")
+    command = body.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ConfigError(f"{path}: [adapters.quality.{name}] needs command, the command words as one string")
+    timeout = body.get("timeout", 600)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+        raise ConfigError(f"{path}: [adapters.quality.{name}] timeout must be a whole number of seconds")
+    cwd = body.get("cwd", "")
+    fail_on_output = body.get("fail_on_output", False)
+    if not isinstance(cwd, str) or not isinstance(fail_on_output, bool):
+        raise ConfigError(f"{path}: [adapters.quality.{name}] cwd is a folder name and fail_on_output is true or false")
+    return QualityCheck(name, command, timeout, adapter_base({"root": cwd}, path), fail_on_output)
 
 
 def _support(root: Path, data: dict, path: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:

@@ -53,18 +53,19 @@ class Tool:
 
 
 PY = "{project_python} -m"
+EXCLUDE = "--extend-exclude {dir}"
 TOOLS = (
     Tool("npm", "tsc", "{node} tsc --noEmit", ("typescript",), needs=("tsconfig.json",)),
     Tool("npm", "eslint", "{node} eslint .", ("eslint",), needs=ESLINT_CONFIGS, exclude="--ignore-pattern {dir}"),
     Tool("npm", "prettier", "{node} prettier --check .", ("prettier",), whole_folder=True),
     Tool("npm", "biome", "{node} biome check .", ("@biomejs/biome",), needs=("biome.json", "biome.jsonc")),
     Tool("npm", "dependency-cruiser", "{node} depcruise {src}", ("dependency-cruiser",), needs=DEPCRUISE_CONFIGS),
-    Tool("pypi", "ruff", f"{PY} ruff check .", ("ruff",), exclude="--extend-exclude {dir}"),
-    Tool("pypi", "ruff-format", f"{PY} ruff format --check .", ("ruff",), exclude="--extend-exclude {dir}"),
+    Tool("pypi", "ruff", f"{PY} ruff check .", ("ruff",), exclude=EXCLUDE),
+    Tool("pypi", "ruff-format", f"{PY} ruff format --check .", ("ruff",), exclude=EXCLUDE),
     Tool("pypi", "black", f"{PY} black --check .", ("black",), exclude="--extend-exclude /{dir}/"),
     Tool("pypi", "mypy", f"{PY} mypy .", ("mypy",), exclude="--exclude ^{dir}/"),
     Tool("pypi", "pyright", f"{PY} pyright", ("pyright",), whole_folder=True),
-    Tool("pypi", "flake8", f"{PY} flake8 .", ("flake8",), exclude="--extend-exclude {dir}"),
+    Tool("pypi", "flake8", f"{PY} flake8 .", ("flake8",), exclude=EXCLUDE),
     Tool("pypi", "import-linter", '{project_python} -c "from importlinter.cli import lint_imports_command; lint_imports_command()"',
          ("import-linter",), needs=("tool:importlinter", ".importlinter")),
     Tool("go", "gofmt", "gofmt -l .", toolchain=True, fail_on_output=True),
@@ -187,20 +188,8 @@ def proposed_checks(root: Path, found: list[Manifest], owned: tuple[str, ...] = 
     the folder's name as a suffix. ``owned`` are the folders of the adapter's own tests: a tool that can leave a folder out
     does."""
     root_files = frozenset(os.listdir(root))
-    chosen: list[tuple[Tool, Project, str]] = []
-    for project in projects(found):
-        if not _folder_ok(project.folder):
-            continue
-        here = set()
-        for tool in TOOLS:
-            if tool.ecosystem == project.ecosystem and tool.name not in here and usable(tool, project) \
-                    and not (tool.whole_folder and left_out(project.folder, owned)):
-                here.add(tool.name)
-                src = "src" if (root / project.folder / "src").is_dir() else "."
-                command = tool.command.replace("{node}", node_runner(project, root_files)).replace("{src}", src)
-                if tool.exclude:
-                    command = " ".join([command, *(tool.exclude.format(dir=d) for d in left_out(project.folder, owned))])
-                chosen.append((tool, project, command))
+    chosen = [(tool, project, _command(tool, project, root, root_files, owned))
+              for project in projects(found) if _folder_ok(project.folder) for tool in _tools_of(project, owned)]
     taken: dict[str, int] = {}
     for tool, _, _ in chosen:
         taken[tool.name] = taken.get(tool.name, 0) + 1
@@ -213,7 +202,25 @@ def proposed_checks(root: Path, found: list[Manifest], owned: tuple[str, ...] = 
     return checks
 
 
-def skipped_for_overlap(root: Path, found: list[Manifest], owned: tuple[str, ...]) -> list[str]:
+def _tools_of(project: Project, owned: tuple[str, ...]) -> list[Tool]:
+    """The tools to propose for one folder: the first row of each name that can work there."""
+    chosen: dict[str, Tool] = {}
+    for tool in TOOLS:
+        if (tool.ecosystem == project.ecosystem and tool.name not in chosen and usable(tool, project)
+                and not (tool.whole_folder and left_out(project.folder, owned))):
+            chosen[tool.name] = tool
+    return list(chosen.values())
+
+
+def _command(tool: Tool, project: Project, root: Path, root_files: frozenset[str], owned: tuple[str, ...]) -> str:
+    src = "src" if (root / project.folder / "src").is_dir() else "."
+    command = tool.command.replace("{node}", node_runner(project, root_files)).replace("{src}", src)
+    if tool.exclude:
+        command = " ".join([command, *(tool.exclude.format(dir=d) for d in left_out(project.folder, owned))])
+    return command
+
+
+def skipped_for_overlap(found: list[Manifest], owned: tuple[str, ...]) -> list[str]:
     """The tools that were left out because they check a whole folder and the adapter's locked tests sit inside it."""
     notes = []
     for project in projects(found):
@@ -339,15 +346,18 @@ def unverified_lines(assessed: list[Surface], configured: list[str]) -> list[str
     if len(mobile) == 2:
         lines.append("mobile screens: no adapter, recorded as unverified")
         pending = [s for s in pending if s not in mobile]
-    for s in pending:
-        label = f"{s.name} screens" if s.name in ("web", "ios", "android") else s.name
-        if s.could_be:
-            by = f"not checked by {', '.join(configured)}" if configured else "not checked, no adapter is set up yet"
-            target = " --into web" if s.name == "web" else ""
-            lines.append(f"{label}: {by}; {', '.join(s.could_be)} {'covers' if len(s.could_be) == 1 else 'cover'} {s.name} (add it with `bdd adapter apply {s.could_be[0]}{target}`)")
-        else:
-            lines.append(f"{label}: no adapter, recorded as unverified")
-    return lines
+    return lines + [_unverified_line(s, configured) for s in pending]
+
+
+def _unverified_line(surface: Surface, configured: list[str]) -> str:
+    label = f"{surface.name} screens" if surface.name in ("web", "ios", "android") else surface.name
+    if not surface.could_be:
+        return f"{label}: no adapter, recorded as unverified"
+    by = f"not checked by {', '.join(configured)}" if configured else "not checked, no adapter is set up yet"
+    verb = "covers" if len(surface.could_be) == 1 else "cover"
+    target = " --into web" if surface.name == "web" else ""
+    return (f"{label}: {by}; {', '.join(surface.could_be)} {verb} {surface.name} "
+            f"(add it with `bdd adapter apply {surface.could_be[0]}{target}`)")
 
 
 def recorded(root: Path, config: cfg.Config) -> dict:

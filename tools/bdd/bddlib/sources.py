@@ -121,46 +121,50 @@ def _package_json(text: str) -> tuple[dict[str, str], frozenset[str]]:
     return deps, frozenset(flags)
 
 
+def _version_of(spec: object) -> str:
+    return spec if isinstance(spec, str) else str((spec or {}).get("version", ""))
+
+
+def _poetry(poetry: dict) -> dict[str, str]:
+    tables = (poetry.get("dependencies"), poetry.get("dev-dependencies"),
+              *(group.get("dependencies") for group in (poetry.get("group") or {}).values()))
+    return {name: _version_of(spec) for table in tables for name, spec in (table or {}).items()}
+
+
 def _pyproject(text: str) -> tuple[dict[str, str], frozenset[str]]:
     data = tomllib.loads(text)
-    project = data.get("project", {})
-    deps = _requirements(project.get("dependencies", []))
-    for group in (project.get("optional-dependencies") or {}).values():
-        deps.update(_requirements(group))
-    for group in (data.get("dependency-groups") or {}).values():
-        deps.update(_requirements(group))
-    poetry = data.get("tool", {}).get("poetry", {})
-    for table in (poetry.get("dependencies"), poetry.get("dev-dependencies"),
-                  *(g.get("dependencies") for g in (poetry.get("group") or {}).values())):
-        for name, spec in (table or {}).items():
-            deps.setdefault(name, spec if isinstance(spec, str) else str((spec or {}).get("version", "")))
-    deps.update(_requirements(data.get("tool", {}).get("uv", {}).get("dev-dependencies", [])))
-    flags = {f"tool:{name}" for name in data.get("tool", {})}
+    project, tool = data.get("project", {}), data.get("tool", {})
+    groups = [project.get("dependencies", []), tool.get("uv", {}).get("dev-dependencies", []),
+              *(project.get("optional-dependencies") or {}).values(), *(data.get("dependency-groups") or {}).values()]
+    deps = _poetry(tool.get("poetry", {}))
+    for group in groups:
+        for name, version in _requirements(group).items():
+            deps[name] = version
+    flags = {f"tool:{name}" for name in tool}
     if project.get("scripts"):
         flags.add("scripts")
     return deps, frozenset(flags)
 
 
-_GO_REQUIRE = re.compile(r"^\s*(?:require\s+|tool\s+)?(\S+\.\S+)\s+(v\S+)\s*(//.*)?$")
-_GO_TOOL = re.compile(r"^\s*tool\s+(\S+\.\S+)\s*$")
-
-
 def _go_mod(text: str) -> dict[str, str]:
+    """The modules a go.mod requires (not the indirect ones) and the tools it lists, line by line."""
     deps: dict[str, str] = {}
-    in_tools = False
+    block = ""
     for line in _lines(text):
-        if in_tools:
-            in_tools = line.strip() != ")"
-            if line.strip() not in ("", ")") and not line.strip().startswith("//"):
-                deps.setdefault(line.split("//")[0].strip(), "")
+        words = line.split("//")[0].split()
+        if not words:
             continue
-        found = _GO_REQUIRE.match(line)
-        if found and "indirect" not in (found.group(3) or ""):
-            deps.setdefault(found.group(1), found.group(2))
-        elif tool := _GO_TOOL.match(line):
-            deps.setdefault(tool.group(1), "")
-        elif re.fullmatch(r"\s*tool\s*\(\s*", line):
-            in_tools = True
+        if block:
+            if words[0] == ")":
+                block = ""
+            elif not (block == "require" and "indirect" in line):
+                deps.setdefault(words[0], words[1] if block == "require" and len(words) > 1 else "")
+        elif words[0] in ("require", "tool") and words[-1] == "(":
+            block = words[0]
+        elif words[0] == "tool" and len(words) == 2:
+            deps.setdefault(words[1], "")
+        elif words[0] == "require" and len(words) == 3 and "indirect" not in line:
+            deps.setdefault(words[1], words[2])
     return deps
 
 
@@ -168,7 +172,7 @@ _POM = re.compile(r"<(?:dependency|parent|plugin)>\s*<groupId>\s*([^<\s]+)\s*</g
                   r"(?:\s*<version>\s*([^<\s]+)\s*</version>)?")
 _POM_PLUGIN = re.compile(r"<plugin>\s*<artifactId>\s*([^<\s]+)\s*</artifactId>")
 _GRADLE_COORD = re.compile(r"""["']([\w.\-]+):([\w.\-]+)(?::([\w.\-${}]+))?["']""")
-_GRADLE_PLUGIN = re.compile(r"""(?:\bid\s*\(?\s*|\bkotlin\s*\(\s*)["']([\w.\-]+)["']""")
+_GRADLE_PLUGIN = re.compile(r"""\b(?:id|kotlin)[\s(]*["']([\w.\-]+)["']""")
 
 
 def _pom(text: str) -> dict[str, str]:
@@ -178,32 +182,36 @@ def _pom(text: str) -> dict[str, str]:
     return deps
 
 
+def _version_catalog(folder: Path) -> dict[str, str]:
+    """The libraries and plugins of gradle/libs.versions.toml, by module or plugin id."""
+    path = folder / "gradle" / "libs.versions.toml"
+    if not path.is_file():
+        return {}
+    try:
+        data = tomllib.loads(_read(path))
+    except tomllib.TOMLDecodeError:
+        return {}
+    found = {}
+    for lib in (data.get("libraries") or {}).values():
+        module = lib.get("module") if isinstance(lib, dict) else ":".join(str(lib).split(":")[:2])
+        if isinstance(module, str):
+            found[module] = ""
+    found.update({plugin["id"]: "" for plugin in (data.get("plugins") or {}).values()
+                  if isinstance(plugin, dict) and isinstance(plugin.get("id"), str)})
+    return found
+
+
 def _gradle(text: str, folder: Path) -> tuple[dict[str, str], frozenset[str]]:
-    deps = {f"{g}:{a}": v for g, a, v in _GRADLE_COORD.findall(text)}
-    deps.update({plugin: "" for plugin in _GRADLE_PLUGIN.findall(text)})
-    catalog_file = folder / "gradle" / "libs.versions.toml"
-    if catalog_file.is_file():
-        try:
-            data = tomllib.loads(_read(catalog_file))
-        except tomllib.TOMLDecodeError:
-            data = {}
-        for lib in (data.get("libraries") or {}).values():
-            module = lib.get("module") if isinstance(lib, dict) else None
-            if isinstance(lib, str):
-                module = ":".join(lib.split(":")[:2])
-            if isinstance(module, str):
-                deps.setdefault(module, "")
-        for plugin in (data.get("plugins") or {}).values():
-            if isinstance(plugin, dict) and isinstance(plugin.get("id"), str):
-                deps.setdefault(plugin["id"], "")
-    return deps, frozenset({"android"} if "com.android.application" in deps or "com.android.application" in text else ())
+    deps = {**_version_catalog(folder), **{f"{g}:{a}": v for g, a, v in _GRADLE_COORD.findall(text)},
+            **dict.fromkeys(_GRADLE_PLUGIN.findall(text), "")}
+    return deps, frozenset({"android"} if "com.android.application" in text else ())
 
 
 _CSPROJ = re.compile(r"""<PackageReference\s+[^>]{0,300}?Include\s*=\s*"([^"]{1,200})"(?:[^>]{0,300}?Version\s*=\s*"([^"]{0,100})")?""")
 
 
 def _csproj(text: str) -> dict[str, str]:
-    deps = {name: version for name, version in _CSPROJ.findall(text)}
+    deps = dict(_CSPROJ.findall(text))
     if re.search(r'<Project\s+Sdk\s*=\s*"Microsoft\.NET\.Sdk\.Web"', text):
         deps.setdefault("Microsoft.AspNetCore.App", "")
     return deps
@@ -213,15 +221,14 @@ def _pubspec(text: str) -> dict[str, str]:
     deps: dict[str, str] = {}
     section = ""
     for line in _lines(text):
-        if line.strip().startswith("#") or not line.strip():
+        if not line.strip() or line.lstrip().startswith("#"):
             continue
-        top = re.match(r"^([A-Za-z_]+):\s*$", line)
-        if top:
-            section = top.group(1)
-            continue
-        item = re.match(r"^ {2}([A-Za-z0-9_]+):\s*(.*?)\s*(#.*)?$", line)
-        if item and section in ("dependencies", "dev_dependencies"):
-            deps.setdefault(item.group(1), item.group(2))
+        if not line.startswith(" ") and line.rstrip().endswith(":"):
+            section = line.rstrip()[:-1]
+        elif line.startswith("  ") and not line.startswith("   ") and section in ("dependencies", "dev_dependencies"):
+            name, colon, rest = line.strip().partition(":")
+            if colon and name.replace("_", "a").isalnum():
+                deps.setdefault(name, rest.split("#")[0].strip())
     return deps
 
 
@@ -239,43 +246,50 @@ def _cargo(text: str, folder: Path) -> tuple[dict[str, str], frozenset[str]]:
 _GEM = re.compile(r"""^\s*gem\s+["']([\w\-.]+)["'](?:\s*,\s*["']([^"']+)["'])?""", re.MULTILINE)
 
 
+def _deps_only(parse):
+    """A parser of a manifest whose only facts are its dependencies: (text, folder) -> (deps, flags)."""
+    return lambda text, folder: (parse(text), frozenset())
+
+
+_PARSERS = {
+    "package.json": ("npm", lambda text, folder: _package_json(text)),
+    "pyproject.toml": ("pypi", lambda text, folder: _pyproject(text)),
+    "go.mod": ("go", _deps_only(_go_mod)),
+    "pom.xml": ("maven", _deps_only(_pom)),
+    "build.gradle": ("maven", lambda text, folder: _gradle(text, folder)),
+    "build.gradle.kts": ("maven", lambda text, folder: _gradle(text, folder)),
+    "pubspec.yaml": ("pub", _deps_only(_pubspec)),
+    "Cargo.toml": ("cargo", lambda text, folder: _cargo(text, folder)),
+    "Gemfile": ("gem", _deps_only(lambda text: {name: version or "" for name, version in _GEM.findall(text)})),
+}
+_REQUIREMENTS = re.compile(r"requirements[\w.\-]*\.txt")
+
+
+def _parser_of(name: str):
+    """(ecosystem, parser) of a manifest file name, or None."""
+    if name.endswith(".csproj"):
+        return "nuget", _deps_only(_csproj)
+    if _REQUIREMENTS.fullmatch(name):
+        return "pypi", _deps_only(lambda text: _requirements(_lines(text)))
+    return _PARSERS.get(name)
+
+
 def _manifest(root: Path, folder: Path, name: str, names: frozenset[str]) -> Manifest | None:
-    """One manifest file read, or None when the file is not one or cannot be read. An unreadable file is a project that
-    cannot be described, not a failure of setup."""
-    text = _read(folder / name)
+    """One manifest file read, or None when the file is not one. An unreadable or odd file is a project that cannot be
+    described, not a failure of setup."""
+    known = _parser_of(name)
+    if known is None:
+        return None
+    ecosystem, parse = known
     rel_folder = folder.relative_to(root).as_posix() if folder != root else ""
     path = f"{rel_folder}/{name}" if rel_folder else name
-    flags: frozenset[str] = frozenset()
     try:
-        if name == "package.json":
-            ecosystem, (deps, flags) = "npm", _package_json(text)
-        elif name == "pyproject.toml":
-            ecosystem, (deps, flags) = "pypi", _pyproject(text)
-        elif re.fullmatch(r"requirements[\w.\-]*\.txt", name):
-            ecosystem, deps = "pypi", _requirements(_lines(text))
-        elif name == "go.mod":
-            ecosystem, deps = "go", _go_mod(text)
-        elif name == "pom.xml":
-            ecosystem, deps = "maven", _pom(text)
-        elif name in ("build.gradle", "build.gradle.kts"):
-            ecosystem, (deps, flags) = "maven", _gradle(text, folder)
-        elif name.endswith(".csproj"):
-            ecosystem, deps = "nuget", _csproj(text)
-        elif name == "pubspec.yaml":
-            ecosystem, deps = "pub", _pubspec(text)
-        elif name == "Cargo.toml":
-            ecosystem, (deps, flags) = "cargo", _cargo(text, folder)
-        elif name == "Gemfile":
-            ecosystem, deps = "gem", {n: v or "" for n, v in _GEM.findall(text)}
-        else:
-            return None
+        deps, flags = parse(_read(folder / name), folder)
     except (ValueError, TypeError, AttributeError, RecursionError):    # JSON, TOML, unexpected shapes and absurd nesting
-        ecosystem, deps = ECOSYSTEM_OF.get(name, "npm"), {}
+        deps, flags = {}, frozenset()
     return Manifest(path, rel_folder, ecosystem, deps, flags, names)
 
 
-ECOSYSTEM_OF = {"package.json": "npm", "pyproject.toml": "pypi", "go.mod": "go", "pom.xml": "maven", "pubspec.yaml": "pub",
-                "Cargo.toml": "cargo", "Gemfile": "gem", "build.gradle": "maven", "build.gradle.kts": "maven"}
 _MANIFEST_NAME = re.compile(r"package\.json|pyproject\.toml|requirements[\w.\-]*\.txt|go\.mod|pom\.xml|build\.gradle(\.kts)?|"
                             r".*\.csproj|pubspec\.yaml|Cargo\.toml|Gemfile")
 
@@ -382,6 +396,8 @@ def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | N
     """Add the sources the file does not have yet. Returns (the ids added, a problem or None). An entry that is there, even
     one the person changed or marked ``ignore``, is left exactly as it is."""
     path = path_of(root)
+    if root.resolve() not in path.resolve().parents:
+        return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} leads outside the project; nothing was added"
     try:
         text = path.read_text(encoding="utf-8") if path.is_file() else ""
         present = set(tomllib.loads(text)) if text else set()

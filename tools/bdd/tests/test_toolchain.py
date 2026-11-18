@@ -21,11 +21,11 @@ class ProjectCase(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8", newline="\n")
 
+
+class QualityTest(ProjectCase):
     def checks(self) -> dict[str, toolchain.Check]:
         return {c.name: c for c in toolchain.proposed_checks(self.root, sources.manifests(self.root))}
 
-
-class QualityTest(ProjectCase):
     def test_a_python_project_gets_only_the_tools_it_declares(self):
         self.write("pyproject.toml", '[project]\nname = "x"\ndependencies = []\n[dependency-groups]\ndev = ["ruff", "mypy"]\n')
         found = self.checks()
@@ -118,9 +118,9 @@ class QualityTest(ProjectCase):
         found = sources.manifests(self.root)
         self.assertEqual(list(self.checks()), ["prettier"])
         self.assertEqual(toolchain.proposed_checks(self.root, found, ("tests",)), [])
-        (note,) = toolchain.skipped_for_overlap(self.root, found, ("tests",))
+        (note,) = toolchain.skipped_for_overlap(found, ("tests",))
         self.assertIn("prettier is not recorded for the project", note)
-        self.assertEqual(toolchain.skipped_for_overlap(self.root, found, ()), [])
+        self.assertEqual(toolchain.skipped_for_overlap(found, ()), [])
 
     def test_a_check_for_a_tool_that_leaves_a_folder_out_never_has_a_word_the_windows_launchers_refuse(self):
         from bddlib import runner
@@ -292,7 +292,7 @@ class SurfaceTest(ProjectCase):
         from bddlib import adapter
         for name in adapter.available():
             with self.subTest(adapter=name):
-                self.assertTrue(set(toolchain.adapter_surfaces(name)) <= set(cfg.SURFACES))
+                self.assertLessEqual(set(toolchain.adapter_surfaces(name)), set(cfg.SURFACES))
         self.assertEqual(toolchain.adapter_surfaces("ts-playwright-bdd"), ("web",))
 
     def test_a_recorded_surface_stays_unverified_until_an_adapter_covers_it(self):

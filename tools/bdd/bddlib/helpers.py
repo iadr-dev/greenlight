@@ -123,13 +123,17 @@ def install_line() -> str:
     return f'! sh "{wrapper.as_posix()}" helpers install --yes'
 
 
+def optional_note(helper: Helper) -> str:
+    return f"  (optional, from github.com/{helper.marketplace})" if helper.marketplace else "  (optional)"
+
+
 def table(plugins: dict[str, str] | None) -> str:
     width = max(len(h.name) for h in CATALOG)
     rows = []
     for h in CATALOG:
         state = "unknown  " if plugins is None else ("installed" if h.id in plugins else "missing  ")
         extra = f"  [{h.needs}]" if h.needs else ""
-        optional = "" if h.recommended else (f"  (optional, from github.com/{h.marketplace})" if h.marketplace else "  (optional)")
+        optional = "" if h.recommended else optional_note(h)
         rows.append(f"  {state}  {h.name:<{width}}  {h.adds} ({h.used_by}){extra}{optional}")
     return "\n".join(rows)
 
@@ -242,19 +246,27 @@ def run_install(chosen: list[Helper], run=subprocess.run) -> int:
     for helper in chosen:
         try:
             if helper.marketplace:
-                added = run([program, "plugin", "marketplace", "add", helper.marketplace], capture_output=True, text=True,
-                            encoding="utf-8", errors="replace", timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL)
-                if added.returncode != 0:
-                    said = ((added.stderr or added.stdout or "").strip().splitlines() or ["no message"])[-1]
-                    raise OSError(f"could not add the marketplace {helper.marketplace}: {said}")
-            done = run([program, "plugin", "install", helper.id], capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL)
+                add_marketplace(program, helper.marketplace, run)
+            done = claude(run, program, "plugin", "install", helper.id)
             ok, said = done.returncode == 0, (done.stdout or done.stderr or "").strip().splitlines()
         except (OSError, subprocess.SubprocessError) as exc:
             ok, said = False, [str(exc)]
         failed += not ok
         print(f"{'installed' if ok else 'FAILED   '}  {helper.name}" + (f": {said[-1]}" if said else ""))
     return 1 if failed else 0
+
+
+def claude(run, program: str, *words: str):
+    return run([program, *words], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL)
+
+
+def add_marketplace(program: str, marketplace: str, run) -> None:
+    """Add the marketplace a helper comes from. Only reached for a helper the person named, with --yes."""
+    added = claude(run, program, "plugin", "marketplace", "add", marketplace)
+    if added.returncode != 0:
+        said = ((added.stderr or added.stdout or "").strip().splitlines() or ["no message"])[-1]
+        raise OSError(f"could not add the marketplace {marketplace}: {said}")
 
 
 def run(argv: list[str]) -> int:

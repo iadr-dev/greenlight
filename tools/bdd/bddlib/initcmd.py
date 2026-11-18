@@ -208,7 +208,7 @@ def record_project(root: Path) -> None:
     quality_line, quality_text = quality_record(data, checks)
     design_line, design_text = design_record(root, data)
     surface_lines, surfaces_text = surfaces_record(root, data, found, detected)
-    notes = [*toolchain.overlap_notes(root, checks, owned), *toolchain.skipped_for_overlap(root, found, owned)] if quality_text else []
+    notes = [*toolchain.overlap_notes(root, checks, owned), *toolchain.skipped_for_overlap(found, owned)] if quality_text else []
     print("\n".join([*sources_lines(detected, problem), design_line, quality_line, *surface_lines, *notes]))
     extra = quality_text + design_text + surfaces_text
     if extra:
