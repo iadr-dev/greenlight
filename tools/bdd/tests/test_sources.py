@@ -223,6 +223,19 @@ class FileTest(ProjectCase):
         entries, bad = sources.load(self.root)
         self.assertEqual((entries, bool(bad)), ({}, True))
 
+    def test_no_string_a_manifest_can_hold_ends_the_toml_string_or_adds_a_key(self):
+        for value in ('a"b', "a\\b", "line\nbreak", "tab\there", "del\x7fchar", 'x"\nevil = 1\n[other]', "nul\x00", "\x1b[0m",
+                      "bad\udcff", "日本語", " "):
+            with self.subTest(value=value):
+                (read,) = tomllib.loads("v = " + sources.toml_string(value) + "\n").values()
+                self.assertEqual(read, value.replace("\udcff", "�"))
+
+    def test_a_package_name_with_control_characters_is_written_and_reads_back(self):
+        source = sources.Source(sources.catalog()[0], "pkg\x7f\x1b", "1\n2", "package.json")
+        added, problem = sources.write_missing(self.root, [source])
+        self.assertEqual((added, problem), (["supabase"], None))
+        self.assertEqual(sources.load(self.root)[0]["supabase"]["package"], "pkg\x7f\x1b")
+
     def test_a_value_with_a_quote_cannot_break_the_file(self):
         source = sources.Source(sources.catalog()[0], 'pkg"\nx = 1', 'v"1', "package.json")
         self.assertEqual(tomllib.loads(sources.entry_text(source))[source.service.id]["package"], 'pkg"\nx = 1')

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import adapter
 from . import config as cfg
-from .sources import Manifest, Source
+from .sources import Manifest, Source, toml_string
 
 ESLINT_CONFIGS = tuple(f"eslint.config.{ext}" for ext in ("js", "mjs", "cjs", "ts", "mts")) + (
     ".eslintrc", ".eslintrc.json", ".eslintrc.js", ".eslintrc.cjs", ".eslintrc.yml", ".eslintrc.yaml")
@@ -188,16 +188,12 @@ def proposed_checks(root: Path, found: list[Manifest], owned: tuple[str, ...] = 
     return checks
 
 
-def _quote(value: str) -> str:
-    return "'" + value + "'" if "'" not in value else '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
 def quality_text(checks: list[Check]) -> str:
     lines = ["", "# Quality checks found in this project's own files by `bdd init`; `bdd check FEAT-n` runs them. Edit or delete freely."]
     for check in checks:
-        lines += ["", f"[adapters.quality.{check.name}]", f"command = {_quote(check.command)}"]
+        lines += ["", f"[adapters.quality.{check.name}]", f"command = {toml_string(check.command)}"]
         if check.cwd:
-            lines.append(f'cwd = "{check.cwd}"')
+            lines.append(f"cwd = {toml_string(check.cwd)}")
         if check.fail_on_output:
             lines.append("fail_on_output = true")
     return "\n".join(lines) + "\n"
@@ -220,8 +216,8 @@ def find_design(root: Path) -> cfg.Design | None:
 
 def design_text(design: cfg.Design) -> str:
     lines = ["", "[design]"]
-    lines += [f'{key} = "{value}"' for key, value in (("system", design.system), ("screens", design.screens),
-                                                    ("inventory", design.inventory)) if value]
+    lines += [f"{key} = {toml_string(value)}" for key, value in (("system", design.system), ("screens", design.screens),
+                                                               ("inventory", design.inventory)) if value]
     return "\n".join(lines) + "\n"
 
 
@@ -271,7 +267,7 @@ def assess(detected: list[str], configured: list[str], fitting: list[str]) -> li
 
 
 def surfaces_text(assessed: list[Surface]) -> str:
-    return "\n[surfaces]\n" + "".join(f'{s.name} = "{s.verified_by}"\n' for s in assessed)
+    return "\n[surfaces]\n" + "".join(f"{s.name} = {toml_string(s.verified_by)}\n" for s in assessed)
 
 
 def unverified_lines(assessed: list[Surface], configured: list[str]) -> list[str]:

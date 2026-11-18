@@ -312,21 +312,31 @@ def detect(root: Path, found: list[Manifest]) -> list[Source]:
     return sources
 
 
-def _toml(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
+def toml_string(value: str) -> str:
+    """``value`` as a TOML basic string, whatever it holds: a name read from a manifest or a folder can carry a quote, a
+    backslash, a line break, a control character or bytes that are not text, and none of them may end the string or add a key."""
+    out = []
+    for ch in value:
+        if ch in '"\\':
+            out.append("\\" + ch)
+        elif ch < " " or ch == "\x7f":
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append("�" if "\ud800" <= ch <= "\udfff" else ch)
+    return '"' + "".join(out) + '"'
 
 
 def entry_text(source: Source) -> str:
     s = source.service
-    lines = [f"[{s.id}]", f"name = {_toml(s.name)}", f"docs = {_toml(s.docs)}"]
+    lines = [f"[{s.id}]", f"name = {toml_string(s.name)}", f"docs = {toml_string(s.docs)}"]
     if source.package:
-        lines.append(f"package = {_toml(source.package)}")
+        lines.append(f"package = {toml_string(source.package)}")
     if source.version:
-        lines.append(f"version = {_toml(source.version)}")
+        lines.append(f"version = {toml_string(source.version)}")
     for key, value in (("cli", s.cli), ("plugin", s.plugin), ("mcp", source.mcp)):
         if value:
-            lines.append(f"{key} = {_toml(value)}")
-    lines += [f"kind = {_toml(s.kind)}", f"found_in = {_toml(source.found_in)}"]
+            lines.append(f"{key} = {toml_string(value)}")
+    lines += [f"kind = {toml_string(s.kind)}", f"found_in = {toml_string(source.found_in)}"]
     return "\n".join(lines) + "\n"
 
 
@@ -360,6 +370,11 @@ def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | N
     if not new:
         return [], None
     body = text.rstrip("\n") + "\n\n" if text.strip() else HEADER + "\n"
+    written = body + "\n".join(entry_text(s) for s in new)
+    try:
+        tomllib.loads(written)
+    except tomllib.TOMLDecodeError as exc:
+        return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} was not changed: the new entries would not read back ({exc})"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body + "\n".join(entry_text(s) for s in new), encoding="utf-8", newline="\n")
+    path.write_text(written, encoding="utf-8", newline="\n")
     return [s.service.id for s in new], None
