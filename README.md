@@ -49,8 +49,8 @@ request ─▶ rules ─▶ test design ─▶ examples ─▶ system map + desi
   service and framework it recognises (Supabase, Stripe, LINE, Expo, Firebase, Sentry, Cloudflare, AWS, Next.js, Django
   and more) with its official documentation, its command-line tool and its plugin, so the writers read the
   vendor's own pages and not a guess. It records your `design/` folder as `[design]` and lists the surfaces you ship (web,
-  iOS, Android, API, command line) with the adapter that verifies each; a surface no adapter covers is shown by
-  `bdd status` as unverified, so nobody mistakes a tested API for tested screens.
+  iOS, Android, API, command line) with the adapter that verifies each. `bdd status` lists what was recorded and shows
+  a surface no adapter covers as unverified, so nobody mistakes a tested API for tested screens.
 - **Mistakes are caught early, not by the auditor at the end.** `bdd lint` refuses two record tables of one entity with
   different columns. `bdd classify` refuses a red in which a scenario tagged `@existing` fails. The test-design gate asks
   for the edge examples a `boundary-value` rule needs. Where the hooks run, the implement gate refuses a review older

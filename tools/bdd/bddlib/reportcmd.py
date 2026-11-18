@@ -181,18 +181,21 @@ def do_status(root: Path, as_json: bool) -> int:
     config = cfg.load(root)                       # a config that cannot be read stops every command before this one
     chosen = config.models
     unverified = toolchain.unverified(config)
+    facts = toolchain.recorded(root, config)
     violations = open_violation_count(root)
     plumbing = plumbing_status(root)
     if as_json:
         print(json.dumps({"features": rows, "costs": costs, "models": [vars(c) for c in models.choices(chosen)],
                           "model_problems": models.problems(chosen), "open_violations": violations, "plumbing": plumbing,
-                          "unverified_surfaces": unverified, "config_warnings": list(config.warnings)},
+                          "unverified_surfaces": unverified, "config_warnings": list(config.warnings), "recorded": facts},
                          indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
     if plumbing is not None:
         print(plumbing_line(plumbing))
     print(models.render(chosen))
+    for line in toolchain.recorded_lines(facts):
+        print(line)
     if unverified:
         print(f"unverified surfaces: {', '.join(unverified)} (no adapter checks them; see `bdd init --detect` and docs/adapters.md)")
     for warning in config.warnings:

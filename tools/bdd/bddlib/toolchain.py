@@ -20,6 +20,7 @@ from pathlib import Path
 
 from . import adapter
 from . import config as cfg
+from . import sources
 from .sources import Manifest, Source, toml_string
 
 ESLINT_CONFIGS = tuple(f"eslint.config.{ext}" for ext in ("js", "mjs", "cjs", "ts", "mts")) + (
@@ -303,6 +304,26 @@ def unverified_lines(assessed: list[Surface], configured: list[str]) -> list[str
             lines.append(f"{label}: {by}; {', '.join(s.could_be)} {'covers' if len(s.could_be) == 1 else 'cover'} {s.name} (add it with `bdd adapter apply {s.could_be[0]}{target}`)")
         else:
             lines.append(f"{label}: no adapter, recorded as unverified")
+    return lines
+
+
+def recorded(root: Path, config: cfg.Config) -> dict:
+    """What setup recorded, as `bdd status` shows it: the sources, the quality checks and the design files."""
+    entries, problem = sources.load(root)
+    return {"sources": list(entries), "quality_checks": [c.name for c in config.quality.checks] if config.quality else [],
+            "design": vars(config.design) if config.design else None, "sources_problem": problem}
+
+
+def recorded_lines(facts: dict) -> list[str]:
+    lines = []
+    if facts["sources"]:
+        lines.append("sources: " + ", ".join(facts["sources"]))
+    if facts["quality_checks"]:
+        lines.append("quality checks: " + ", ".join(facts["quality_checks"]))
+    if facts["design"]:
+        lines.append("design: " + design_summary(cfg.Design(**facts["design"])))
+    if facts["sources_problem"]:
+        lines.append(f"warning: {facts['sources_problem']}")
     return lines
 
 
