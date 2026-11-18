@@ -977,8 +977,17 @@ class PrecisionTest(GuardCase):
             with self.subTest(command=command):
                 self.assertIn("install", self.bash(command) or "", command)
         for command in ['git commit -m "Add bdd doctor --add-deny-rules"', 'git commit -m "document bdd unlock --plumbing"']:
+            with self.subTest(command=command):                 # git is not read exactly, so its quoted words may run
+                self.assertIsNotNone(self.bash(command), command)
+        for command in ['grep -rn -- "--add-deny-rules" docs', "grep -rn plumbing docs"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command), command)
+
+    def test_bdds_own_refusals_read_the_command_without_its_quotes(self):
+        for command, said in [('bdd "un"lock --plumb\\ing --reason x', "releases it"), ("bdd 'cost' FEAT-001 --am''end", "cost corrections"),
+                              ('echo "bdd unlock --plumbing" | sh', "releases it"), ("bdd do'ctor' --add-deny-rules", "deny rules")]:
+            with self.subTest(command=command):
+                self.assertIn(said, self.bash(command) or "", command)
 
     def test_the_fourth_review_found_these_and_they_are_refused(self):
         for command, said in [('bdd cost FEAT-001 "--amend" implement --tokens 1 --seconds 1 --reason x', "cost corrections"),
@@ -996,7 +1005,8 @@ class PrecisionTest(GuardCase):
                               (".venv/bin/bash -c 'rm tests/drivers/barrier.ts'", "greenlight:")]:
             with self.subTest(command=command):
                 self.assertIn(said, self.bash(command) or "", command)
-        self.assertIsNone(self.bash('git commit -m "Add bdd doctor --add-deny-rules and bdd cost --amend"', agent=None))
+        self.assertIsNotNone(self.bash('git commit -m "Add bdd doctor --add-deny-rules and bdd cost --amend"', agent=None))
+        self.assertIsNone(self.bash("git commit -F msg.txt", agent=None))     # git is not read exactly: its message from a file
         self.assertIn("additionalDirectories", self.call("Write", file_path=str(self.root / ".claude" / "settings.json"),
                                                          content='{"permissions": {"additionalDirectories": ["/x"]}}') or "")
 
@@ -1026,6 +1036,25 @@ class PrecisionTest(GuardCase):
                 self.assertIn(said, self.bash(command) or "", command)
         for command in ["echo $(pwd)", "node /tmp/probe.cjs \"$(pwd)\"", "sed -i 's/{ a }/{ b }/; s/x;y/z/' src/a.ts",
                         "sed -n '125,196p' package.json", "git -C api status", "git log --oneline -3"]:
+            with self.subTest(command=command):
+                self.assertIsNone(self.bash(command), command)
+
+    def test_a_program_whose_options_are_not_modelled_is_judged_by_every_word_it_is_given(self):
+        for command in ['sed ":a;w tests/drivers/barrier.ts" x', "sed \"-e\" 'w tests/drivers/barrier.ts' x",
+                        "sed --expr='w tests/drivers/barrier.ts' x", 'git "-c" core.x=y checkout -- tests/drivers/barrier.ts',
+                        "git --config-env=alias.x=X x tests/drivers/barrier.ts", "awk \"-i\" inplace '{print}' tests/drivers/barrier.ts",
+                        "awk '@include \"x\"' tests/drivers/barrier.ts", 'sort "-o" tests/drivers/barrier.ts src/a.ts',
+                        "sort --compress-program=x tests/drivers/barrier.ts", "echo tests/drivers/barrier.ts | xargs shred",
+                        "cp \"-t\" tests/drivers src/barrier.ts", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x git x barrier.ts",
+                        "PATH=/tmp/x:$PATH cat src/a.ts && rm -f tests/drivers/barrier.ts",
+                        "NODE_OPTIONS='--require ./x.js' node -e 1 tests/drivers/barrier.ts",
+                        "GIT_WORK_TREE=tests/drivers git checkout -- barrier.ts", "python \"-c\" \"$X\" tests/drivers/barrier.ts",
+                        "python -Ic \"$X\" tests/drivers/barrier.ts", "git -C tests/drivers checkout barrier.ts"]:
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.bash(command), command)
+        for command in ["sed -i 's/a/b/' src/a.ts", "git status --short", "awk '{print $1}' src/a.ts | sort | uniq -c",
+                        "PYTHONIOENCODING=utf-8 python -c \"print(1)\"", "grep -rn barrier tests/drivers | head",
+                        "sed -n 1p tests/drivers/barrier.ts", "git status --short | grep -E '\\.claude|tests/drivers'"]:
             with self.subTest(command=command):
                 self.assertIsNone(self.bash(command), command)
 

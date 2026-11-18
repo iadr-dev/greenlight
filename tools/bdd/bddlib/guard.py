@@ -988,6 +988,13 @@ NESTED_SESSION_MESSAGE = (
     "`claude plugin list`, `claude mcp list` and `claude --version` are fine.")
 
 
+def bdd_texts(scrubbed: str) -> list[str]:
+    """The texts the refusals of bdd's own commands (``cost --amend``, ``--plumbing``, ``--add-deny-rules``) look in: the
+    programs a command runs (``shellwrites.programs``) and the command with every quote and backslash taken out, so that
+    ``bdd "un"lock --plumb\\ing`` is the command it spells."""
+    return [shellwrites.programs(scrubbed).view, re.sub(r"[\"'\\]", "", scrubbed)]
+
+
 def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | None:
     """What only an agent is refused: writing the pull-request description outside its write matrix, correcting a cost,
     releasing the shared test plumbing, installing packages. Installs are looked for in every reading of the programs the
@@ -999,9 +1006,9 @@ def check_agent_command(project: Project, scrubbed: str, agent: str) -> str | No
         if written:
             return written
     found = shellwrites.programs(scrubbed)
-    if _COST_AMEND.search(found.view):
+    if any(_COST_AMEND.search(text) for text in bdd_texts(scrubbed)):
         return COST_AMEND_MESSAGE
-    if _PLUMBING.search(found.view):
+    if any(_PLUMBING.search(text) for text in bdd_texts(scrubbed)):
         return PLUMBING_MESSAGE
     readings = [found.view.replace('"', "").replace("'", ""), *shell_readings(shellwrites.without_data(found.view))]
     if any(_INSTALL.search(reading) for reading in readings):
@@ -1031,7 +1038,7 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
         return PIN_MESSAGE
     if _HELPERS_INSTALL.search(scrubbed):
         return HELPERS_MESSAGE
-    if _DENY_RULES.search(shellwrites.programs(scrubbed).view):     # not `git commit -m "... --add-deny-rules"`
+    if any(_DENY_RULES.search(text) for text in bdd_texts(scrubbed)):
         return DENY_RULES_MESSAGE
     refused = check_agent_command(project, scrubbed, agent) if agent else None
     if refused:
@@ -1039,8 +1046,10 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
     found = shellwrites.writes(command, cwd)
     looks_like_a_write = (found is not None and (found.opaque or _SHELL_WRITES.search(scrubbed) or _FIND_ACTS.search(scrubbed)
                                                  or shellwrites.CODE_WRITES.search(scrubbed) or shellwrites.OTHER_CODE.search(scrubbed)))
-    if found is None or (found.whole and not looks_like_a_write):
-        return None                                    # a command read whole is judged as before: only if it looks like a write
+    if found is not None and found.every and not found.whole:
+        looks_like_a_write = looks_like_a_write or shellwrites.WRITE_HINTS.search(command)
+    if found is None or ((found.whole or found.every) and not looks_like_a_write):
+        return None                                    # a command not read exactly is judged as before: if it looks like a write
     return check_writes(project, spelled(command, found), agent, cwd)
 
 
