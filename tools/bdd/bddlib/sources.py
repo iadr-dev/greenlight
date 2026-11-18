@@ -155,10 +155,7 @@ def _go_mod(text: str) -> dict[str, str]:
         if not words:
             continue
         if block:
-            if words[0] == ")":
-                block = ""
-            elif not (block == "require" and "indirect" in line):
-                deps.setdefault(words[0], words[1] if block == "require" and len(words) > 1 else "")
+            block = _go_block_line(block, words, "indirect" in line, deps)
         elif words[0] in ("require", "tool") and words[-1] == "(":
             block = words[0]
         elif words[0] == "tool" and len(words) == 2:
@@ -166,6 +163,15 @@ def _go_mod(text: str) -> dict[str, str]:
         elif words[0] == "require" and len(words) == 3 and "indirect" not in line:
             deps.setdefault(words[1], words[2])
     return deps
+
+
+def _go_block_line(block: str, words: list[str], indirect: bool, deps: dict[str, str]) -> str:
+    """One line inside ``require (`` or ``tool (``. Returns the block still open ("" after the closing parenthesis)."""
+    if words[0] == ")":
+        return ""
+    if not (block == "require" and indirect):
+        deps.setdefault(words[0], words[1] if block == "require" and len(words) > 1 else "")
+    return block
 
 
 _POM = re.compile(r"<(?:dependency|parent|plugin)>\s*<groupId>\s*([^<\s]+)\s*</groupId>\s*<artifactId>\s*([^<\s]+)\s*</artifactId>"
@@ -303,12 +309,8 @@ def manifests(root: Path, skip: frozenset[str] = frozenset()) -> list[Manifest]:
         depth = len(folder.relative_to(root).parts)
         dirnames[:] = sorted(d for d in dirnames if d not in SKIPPED_DIRS and not d.startswith(".")) if depth < MAX_DEPTH else []
         names = frozenset(filenames) | frozenset(dirnames)
-        for name in sorted(filenames):
-            if _MANIFEST_NAME.fullmatch(name):
-                rel = (folder / name).relative_to(root).as_posix()
-                manifest = None if rel in skip else _manifest(root, folder, name, names)
-                if manifest is not None:
-                    found.append(manifest)
+        wanted = [n for n in sorted(filenames) if _MANIFEST_NAME.fullmatch(n) and (folder / n).relative_to(root).as_posix() not in skip]
+        found += [m for m in (_manifest(root, folder, n, names) for n in wanted) if m is not None]
     return sorted(found, key=lambda m: (len(Path(m.path).parts), m.path))
 
 
@@ -395,11 +397,10 @@ def load(root: Path) -> tuple[dict[str, dict], str | None]:
 def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | None]:
     """Add the sources the file does not have yet. Returns (the ids added, a problem or None). An entry that is there, even
     one the person changed or marked ``ignore``, is left exactly as it is."""
-    path = path_of(root)
-    if root.resolve() not in path.resolve().parents:
+    if root.resolve() not in path_of(root).resolve().parents:
         return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} leads outside the project; nothing was added"
     try:
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        text = current_text(root)
         present = set(tomllib.loads(text)) if text else set()
     except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError, RecursionError) as exc:
         return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} could not be read ({exc}); nothing was added"
@@ -412,6 +413,16 @@ def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | N
         tomllib.loads(written)
     except tomllib.TOMLDecodeError as exc:
         return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} was not changed: the new entries would not read back ({exc})"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(written, encoding="utf-8", newline="\n")
+    store_text(root, written)
     return [s.service.id for s in new], None
+
+
+def current_text(root: Path) -> str:
+    path = path_of(root)
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def store_text(root: Path, text: str) -> None:
+    target = path_of(root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8", newline="\n")
