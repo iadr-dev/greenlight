@@ -167,9 +167,27 @@ pass from the start and no production code is touched. You still approve the rul
 `bdd init` also creates `.bdd/standards.md` (in an existing project: `bdd init --standards`) with greenlight's default
 engineering standards. They are in force at once and need no approval; a placeholder you leave means what the project
 already uses. If you want, edit them to describe your language and toolchain version, style, quality rules and
-deprecation policy; agents cannot. `bdd check` runs your formatter, linter and type checker only once you name them in
-`[adapters.quality.NAME]` tables in `.bdd/config.toml` (`bdd init` writes none, and `bdd check` says so); see
-[adapters](adapters.md).
+deprecation policy; agents cannot. `bdd check` runs your formatter, linter and type checker as
+`[adapters.quality.NAME]` tables in `.bdd/config.toml`. `bdd init` writes one for each tool your project itself
+declares in its dependency files (never one it does not), and says which; edit or delete them there, or add your own (see
+[adapters](adapters.md)).
+
+## What setup records
+
+Beside the standards, `bdd init` reads your dependency files (package.json, pyproject.toml, requirements*.txt, go.mod,
+pom.xml, build.gradle*, *.csproj, pubspec.yaml, Cargo.toml, Gemfile) and prints one line for each record:
+
+```text
+sources: supabase, stripe          # in .bdd/sources.toml, with each service's official documentation and vendor tools
+frameworks: fastify
+quality: tsc                       # the checks written to .bdd/config.toml, run by `bdd check`
+design: design/DESIGN.md, design/screens/*, design/inventory.md
+surfaces: api (ts-cucumber-js), web (unverified)
+```
+
+A surface no adapter covers is recorded as unverified and `bdd status` shows it. A package greenlight does not know is
+not guessed. Run `bdd init --refresh` after you add a dependency, a design folder or an adapter: it adds what is new and
+leaves everything you wrote as it is.
 
 ## 6. Change your mind later
 

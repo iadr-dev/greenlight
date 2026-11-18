@@ -34,7 +34,7 @@ Do not change anything on the machine without asking first.
    (`guided` reviews every gate, `standard` asks only for rules and examples; `auto` and `autopilot` are for
    trusted or hands-off work). Wait for the answer.
 
-3. **Set the repository up.**
+3. **Set the repository up and record what the project already has.**
 
    ```sh
    "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" init --adapter NAME --autonomy LEVEL
@@ -42,6 +42,29 @@ Do not change anything on the machine without asking first.
 
    It creates `.bdd/` (configuration, glossary, an ignore file for machine-local data) and copies the adapter's
    files into the project without overwriting anything. List what it created.
+
+   It then reads the project's own files and records what they show, and prints one line for each record. Show these
+   lines unchanged and say in plain words what each one means for the person:
+
+   - `sources:` and `frameworks:` are the services and frameworks the dependency files name, recorded with their official
+     documentation, vendor command-line tool and plugin in `.bdd/sources.toml`. The writers read that documentation
+     instead of guessing. A package that is not in greenlight's catalog is not guessed at; the person can add an entry.
+   - `vendor tools:` says whether each vendor CLI is on this machine. Never install one. If it is missing, say what it is for
+     and leave it to the person.
+   - `quality:` are the formatter, linter, type checker and architecture checker the project itself declares, now written
+     as `[adapters.quality.NAME]` checks that `bdd check` runs and that the implement and verify gates ask for. They are in
+     force from now on. Say which ones, say that the person can edit or delete them in `.bdd/config.toml`, and do not
+     ask for approval of the commands. A tool the project does not declare is never added.
+   - `design:` is the `design/` folder that was found (DESIGN.md, screens, inventory), recorded as `[design]` for the design
+     and design-review stages. Nothing in it is read yet.
+   - `surfaces:` are the web, iOS, Android, API and command-line surfaces the project ships and the adapter that verifies
+     each. For each `unverified` surface say plainly that greenlight will build and test the logic behind it but cannot
+     check its screens, and name the adapter the line offers (for web, `ts-playwright-bdd`). Do not add an adapter without
+     the person's yes.
+
+   A line that says `none` is a fact, not an error. Run `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" init --refresh` later,
+   when the project gains a dependency, a design folder or an adapter: it adds what is new and never rewrites what the
+   person wrote.
 
 4. **Install the adapter's requirements** if its guide says so (for `python-pytest-bdd`: `pytest` and
    `pytest-bdd`). Show the command and ask before running it; prefer the project's own tool (`uv`, `pip`,
@@ -65,6 +88,13 @@ Do not change anything on the machine without asking first.
      try to run it.
    - *Not now*: go on. Nothing is recorded, so the question comes again at the next `/greenlight:init`.
    - *Do not ask again*: run `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" helpers --decline`.
+
+   Two more kinds of line can follow, and each is only a suggestion. `vendor` in the JSON lists the plugins of the services in
+   `.bdd/sources.toml` (Supabase, Stripe, Expo, Sentry, Cloudflare, AWS, Firebase and the like); show those with `installed`
+   false and give the person the `! claude plugin install ...` line from `bdd helpers`, as it is. The optional helpers
+   `impeccable`, `pstack` and `open-code-review` come from their authors' own marketplaces, not Anthropic's: name that
+   marketplace (the `marketplace` field) before offering one, and give the line `bdd helpers` prints for it. Never run
+   either line.
 
    Never describe a missing helper as required. A project without any of them is fine.
 
