@@ -5,8 +5,12 @@
                                             create .bdd/ (config, glossary, ignore file) and apply the adapter
     bdd init --smoke                        prove the adapter's sample feature runs green, leaving nothing behind
     bdd init --standards                    add .bdd/standards.md (greenlight's default engineering standards) to a project that has none
+    bdd init --refresh                      read the project's files again and record what is new (sources, quality checks, design, surfaces)
 
-Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none).
+Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none). Setup also
+records what the project's own files show: ``.bdd/sources.toml`` (the services and frameworks its dependencies name),
+``[adapters.quality.NAME]`` checks for the tools it declares, ``[design]`` and ``[surfaces]``. Each is added only when the
+project has none of it yet, so a run never changes what the person wrote.
 """
 from __future__ import annotations
 
@@ -15,9 +19,10 @@ import fnmatch
 import json
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
-from . import adapter, classify, runner, sharedvocab, state
+from . import adapter, classify, runner, sharedvocab, sources, state, toolchain
 from . import config as cfg
 from .errors import UsageError
 from .statecmd import guarded
@@ -115,6 +120,88 @@ def write_project(root: Path, autonomy: str, profiles: list[str] | None, python:
     return created
 
 
+def relative_files(root: Path, files: tuple[Path, ...]) -> frozenset[str]:
+    names = set()
+    for path in files:
+        try:
+            names.add(path.relative_to(root).as_posix())
+        except ValueError:
+            continue
+    return frozenset(names)
+
+
+def sources_lines(detected: list[sources.Source], problem: str | None) -> list[str]:
+    services = [s for s in detected if s.service.kind == "service"]
+    frameworks = [s for s in detected if s.service.kind == "framework"]
+    lines = ["sources: " + (", ".join(s.service.id for s in services) or "none recognised")]
+    if frameworks:
+        lines.append("frameworks: " + ", ".join(s.service.id for s in frameworks))
+    tools = [(s.service.cli, bool(shutil.which(s.service.cli))) for s in services if s.service.cli]
+    if tools:
+        lines.append("vendor tools: " + ", ".join(f"{cli} ({'found' if there else 'not installed'})" for cli, there in tools))
+    plugins = [s.service.plugin.split("@", 1)[0] for s in detected if s.service.plugin]
+    if plugins:
+        lines.append("vendor plugins: " + ", ".join(plugins) + " (`bdd helpers` shows which are installed)")
+    return lines + ([f"note: {problem}"] if problem else [])
+
+
+def quality_record(data: dict, checks: list[toolchain.Check]) -> tuple[str, str]:
+    """(the line to print, the text to add to config.toml)."""
+    if any("quality" in a for a in data.get("adapters", [])):
+        return "quality: the checks already in .bdd/config.toml are kept", ""
+    if not data.get("adapters"):
+        return ("quality: none recorded yet; add an adapter (bdd init --adapter NAME), then run bdd init --refresh"
+                if checks else "quality: none declared by the project's files"), ""
+    if not checks:
+        return "quality: none declared by the project's files", ""
+    return "quality: " + ", ".join(c.name for c in checks), toolchain.quality_text(checks)
+
+
+def design_record(root: Path, data: dict) -> tuple[str, str]:
+    if "design" in data:
+        return "design: already in .bdd/config.toml", ""
+    design = toolchain.find_design(root)
+    return "design: " + toolchain.design_summary(design), toolchain.design_text(design) if design else ""
+
+
+def surfaces_record(root: Path, data: dict, found: list[sources.Manifest], detected: list[sources.Source]) -> tuple[list[str], str]:
+    if "surfaces" in data:
+        return ["surfaces: already in .bdd/config.toml"], ""
+    configured = [str(a.get("name")) for a in data.get("adapters", []) if a.get("name")]
+    assessed = toolchain.assess(toolchain.detect_surfaces(root, found, detected), configured, [n for n, _ in detect(root)])
+    if not assessed:
+        return ["surfaces: none detected"], ""
+    line = "surfaces: " + ", ".join(f"{s.name} ({s.verified_by})" for s in assessed)
+    return [line, *toolchain.unverified_lines(assessed, configured)], toolchain.surfaces_text(assessed)
+
+
+def record_project(root: Path) -> None:
+    """Read the project's own files and record what they show, adding only what the project does not have yet. Prints one
+    line for each record."""
+    config_path = root / cfg.BDD_DIR / "config.toml"
+    text = config_path.read_text(encoding="utf-8")
+    data = tomllib.loads(text)
+    found = sources.manifests(root, relative_files(root, cfg.load(root).support_files))
+    detected = sources.detect(root, found)
+    had_sources = sources.path_of(root).is_file()
+    added, problem = sources.write_missing(root, detected)
+    if added and not had_sources:
+        print(f"  + {cfg.BDD_DIR}/{sources.SOURCES_FILE}")
+    quality_line, quality_text = quality_record(data, toolchain.proposed_checks(root, found, toolchain.owned_folders(data)))
+    design_line, design_text = design_record(root, data)
+    surface_lines, surfaces_text = surfaces_record(root, data, found, detected)
+    print("\n".join([*sources_lines(detected, problem), design_line, quality_line, *surface_lines]))
+    extra = quality_text + design_text + surfaces_text
+    if extra:
+        new = text.rstrip("\n") + "\n" + extra
+        try:
+            tomllib.loads(new)
+        except tomllib.TOMLDecodeError as exc:
+            print(f"note: the records were not written because they would not read back as TOML ({exc})")
+        else:
+            config_path.write_text(new, encoding="utf-8", newline="\n")
+
+
 def do_init(root: Path, name: str | None, autonomy: str, python: str | None = None) -> int:
     existing = root / cfg.BDD_DIR / "config.toml"
     created: list[str] = []
@@ -129,6 +216,7 @@ def do_init(root: Path, name: str | None, autonomy: str, python: str | None = No
         created += files
         print(f"adapter {name} added" + (f" ({len(kept)} existing file(s) left alone)" if kept else ""))
     print("\n".join(f"  + {path}" for path in created))
+    record_project(root)
     print("next: bdd init --smoke   (proves the sample feature runs green)" if name else
           "next: bdd init --detect, then bdd init --adapter NAME")
     return 0
@@ -161,6 +249,8 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--smoke", action="store_true", help="run the adapter's sample feature and clean up")
     ap.add_argument("--shared-vocabulary", action="append", metavar="FILE",
                     help="include a shared vocabulary file (inside the project) in .bdd/vocabulary.toml and pin it; repeatable")
+    ap.add_argument("--refresh", action="store_true",
+                    help="read the project's files again and add the sources, quality checks, design and surfaces it lacks")
     ap.add_argument("--standards", action="store_true",
                     help="add .bdd/standards.md (greenlight's default engineering standards) to a project that has none")
     args = ap.parse_args(argv)
@@ -178,6 +268,9 @@ def run(argv: list[str]) -> int:
         if args.standards:
             made = add_standards(require_project(here))
             print(f"  + {made}" if made else f"{cfg.BDD_DIR}/standards.md already exists; nothing changed")
+            return 0
+        if args.refresh:
+            record_project(require_project(here).resolve())
             return 0
         if args.smoke:
             return do_smoke(require_project(here))

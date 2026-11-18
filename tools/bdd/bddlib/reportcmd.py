@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import agentcost, approvals, enforcement, integrityack, lockfile, models, runner, scan, state, store, trace, tripwire
+from . import agentcost, approvals, enforcement, integrityack, lockfile, models, runner, scan, state, store, toolchain, trace, tripwire
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -178,18 +178,25 @@ def cost_line(cost: dict) -> str:
 def do_status(root: Path, as_json: bool) -> int:
     rows = [feature_row(root, d) for d in feature_dirs(root)]
     costs = cost_figures(root, feature_dirs(root))
-    chosen = cfg.load(root).models               # a config that cannot be read stops every command before this one
+    config = cfg.load(root)                       # a config that cannot be read stops every command before this one
+    chosen = config.models
+    unverified = toolchain.unverified(config)
     violations = open_violation_count(root)
     plumbing = plumbing_status(root)
     if as_json:
         print(json.dumps({"features": rows, "costs": costs, "models": [vars(c) for c in models.choices(chosen)],
-                          "model_problems": models.problems(chosen), "open_violations": violations, "plumbing": plumbing},
+                          "model_problems": models.problems(chosen), "open_violations": violations, "plumbing": plumbing,
+                          "unverified_surfaces": unverified, "config_warnings": list(config.warnings)},
                          indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
     if plumbing is not None:
         print(plumbing_line(plumbing))
     print(models.render(chosen))
+    if unverified:
+        print(f"unverified surfaces: {', '.join(unverified)} (no adapter checks them; see `bdd init --detect` and docs/adapters.md)")
+    for warning in config.warnings:
+        print(f"warning: {warning}")
     for cost in costs:
         if cost["tokens"] or cost["corrections"]:
             print(cost_line(cost))

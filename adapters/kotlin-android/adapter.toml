@@ -1,6 +1,7 @@
 name = "kotlin-android"
 version = 1
 profiles = ["base", "lib", "data", "ui"]      # bound in src/test/kotlin/greenlight/steps/CoreSteps.kt; the ui ones, which need a device, in src/device-ui/kotlin/greenlight/steps/UiSteps.kt
+surfaces = ["android"]
 
 [detect]                                      # `init` suggests this adapter when a file matches and contains a word
 files = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]

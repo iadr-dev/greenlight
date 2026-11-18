@@ -50,6 +50,14 @@ class TableTest(StatusCase):
         self.rules.write_text("# changed\n", encoding="utf-8", newline="\n")
         self.assertIn("rules: approved but not valid", self.run_status()[1])
 
+    def test_unverified_surfaces_and_ignored_tables_are_shown(self):
+        self.write(".bdd/config.toml", '[surfaces]\nweb = "unverified"\nios = "unverified"\napi = "ts-cucumber-js"\n\n[design]\nsystem = 3\n')
+        _, out, _ = self.run_status()
+        self.assertIn("unverified surfaces: web, ios", out)
+        self.assertIn("warning: ", out)
+        data = json.loads(self.run_status("--json")[1])
+        self.assertEqual((data["unverified_surfaces"], len(data["config_warnings"])), (["web", "ios"], 1))
+
     def test_json_and_empty_project(self):
         _, out, _ = self.run_status("--json")
         data = json.loads(out)
