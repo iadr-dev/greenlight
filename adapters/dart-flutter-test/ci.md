@@ -6,7 +6,7 @@ same way `bdd run` does. Pin the actions you use to a commit (the version is in 
 ```yaml
 - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
   with:
-    channel: stable
+    flutter-version: "3.50.0"      # must match tests/pubspec.lock: the SDK pins test_api, listen and others
     cache: true
 - run: flutter pub get --enforce-lockfile
   working-directory: tests

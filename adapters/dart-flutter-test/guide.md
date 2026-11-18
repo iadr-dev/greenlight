@@ -48,6 +48,11 @@ To test your own application, add it to `tests/pubspec.yaml` as a path dependenc
 pinned versions. The run uses `--no-pub`, so a changed `pubspec.yaml` that was not followed by `pub get` is an error and not a
 silent update.
 
+The Flutter version is pinned together with the lock: `flutter-version` in the CI job and `tests/pubspec.lock` name the same
+SDK, because the SDK pins `test_api`, `listen` and other packages, and `--enforce-lockfile` fails when a newer SDK wants other
+versions. To move to a new Flutter, set `flutter-version`, run `flutter pub get` (without `--enforce-lockfile`) in `tests/` under
+that version, and commit the new `pubspec.lock` in the same change.
+
 ## The red phase
 
 A scenario must fail for the right reason before any production code exists:

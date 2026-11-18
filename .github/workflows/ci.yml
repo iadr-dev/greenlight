@@ -212,9 +212,8 @@ jobs:
           python-version: "3.15"
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
         with:
-          channel: stable
+          flutter-version: "3.50.0"      # must match templates/tests/pubspec.lock: the SDK pins test_api, listen and others
           cache: true
-          cache-dependency-path: adapters/dart-flutter-test/templates/tests/pubspec.lock
       - name: Fresh scaffold runs green in the widget-test environment, every core step works, red looks like red
         run: python -m unittest discover -s tools/bdd/tests -t tools/bdd -p "test_adapter_flutter.py" -v
 
