@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import config as cfg
+from . import store
 
 SOURCES_FILE = "sources.toml"
 ECOSYSTEMS = ("npm", "pypi", "go", "maven", "nuget", "pub", "cargo", "gem")
@@ -413,16 +414,10 @@ def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | N
         tomllib.loads(written)
     except tomllib.TOMLDecodeError as exc:
         return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} was not changed: the new entries would not read back ({exc})"
-    store_text(root, written)
+    store.write_text(path_of(root), written)
     return [s.service.id for s in new], None
 
 
 def current_text(root: Path) -> str:
     path = path_of(root)
     return path.read_text(encoding="utf-8") if path.is_file() else ""
-
-
-def store_text(root: Path, text: str) -> None:
-    target = path_of(root)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8", newline="\n")
