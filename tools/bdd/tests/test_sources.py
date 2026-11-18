@@ -98,6 +98,31 @@ class ManifestTest(ProjectCase):
         self.write("Cargo.toml", "= =")
         self.assertEqual([m.deps for m in sources.manifests(self.root)], [{}, {}, {}])
 
+    def test_hostile_files_are_empty_projects_and_cannot_hold_setup_up(self):
+        import time
+        self.write("package.json", "[" * 100000)
+        self.write("pyproject.toml", "a = " + "[" * 100000)
+        self.write("go.mod", "require " + "a." * 50000 + " v1\n")
+        self.write("App.csproj", "<PackageReference " * 20000)
+        self.write("pubspec.yaml", "dependencies:\n  a:" + " " * 100000 + "x\n")
+        self.write("pom.xml", "<dependency>" * 20000)
+        (self.root / ".mcp.json").write_text("[" * 100000, encoding="utf-8")
+        started = time.perf_counter()
+        found = sources.manifests(self.root)
+        self.assertEqual(sources.project_mcp_servers(self.root), [])
+        self.assertLess(time.perf_counter() - started, 5)
+        self.assertEqual({m.path for m in found}, {"package.json", "pyproject.toml", "go.mod", "App.csproj", "pubspec.yaml", "pom.xml"})
+        self.assertEqual({k: v for m in found if m.path in ("package.json", "pyproject.toml", "go.mod") for k, v in m.deps.items()}, {})
+
+    def test_a_directory_named_like_a_manifest_and_a_file_that_is_too_big_are_not_read(self):
+        (self.root / "package.json").mkdir()
+        self.write("go.mod", "require github.com/stripe/stripe-go v1.0.0\n" + "x" * (sources.MAX_FILE_BYTES + 1))
+        self.assertEqual([(m.path, m.deps) for m in sources.manifests(self.root)], [("go.mod", {})])
+
+    def test_go_mod_tool_blocks_are_read(self):
+        self.write("go.mod", "module x\n\ntool (\n\tgithub.com/a/b // note\n\t// comment\n\n\tgithub.com/c/d\n)\n\nrequire github.com/e/f v1.0.0\n")
+        self.assertEqual(self.deps("go.mod"), {"github.com/a/b": "", "github.com/c/d": "", "github.com/e/f": "v1.0.0"})
+
     def test_folders_are_read_two_levels_down_and_dependency_folders_never(self):
         self.write("package.json", "{}")
         self.write("api/package.json", "{}")
@@ -235,6 +260,15 @@ class FileTest(ProjectCase):
         added, problem = sources.write_missing(self.root, [source])
         self.assertEqual((added, problem), (["supabase"], None))
         self.assertEqual(sources.load(self.root)[0]["supabase"]["package"], "pkg\x7f\x1b")
+
+    def test_a_sources_file_in_another_encoding_is_left_alone_and_said(self):
+        path = sources.path_of(self.root)
+        path.parent.mkdir()
+        path.write_bytes('[stripe]\nname = "Caf\xe9"\n'.encode("cp1252"))
+        added, problem = sources.write_missing(self.root, self.detected(resend="4"))
+        self.assertEqual(added, [])
+        self.assertIn("could not be read", problem)
+        self.assertEqual(sources.load(self.root)[0], {})
 
     def test_a_value_with_a_quote_cannot_break_the_file(self):
         source = sources.Source(sources.catalog()[0], 'pkg"\nx = 1', 'v"1', "package.json")

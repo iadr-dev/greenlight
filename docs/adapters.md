@@ -136,9 +136,10 @@ Run commands in a member with `bdd --in web run FEAT-007`, or in all of them wit
 ## Quality checks (optional)
 
 The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does
-not choose them. `bdd init` writes a table for each tool the project itself declares (a dependency of its manifest, its
-own config file, or the toolchain its manifest implies, such as `gofmt` and `go vet` for a Go module) and none for a tool
-it does not declare; without any table `bdd check` reports that no quality check is configured. One table per check, in
+not choose them. `bdd init` writes a table for each tool the project itself declares (a dependency of its manifest, or the
+toolchain its manifest implies, such as `gofmt` and `go vet` for a Go module) and none for a tool it does not declare; a
+config file alone does not say a Python or Ruby tool is installed. The adapter's own `tests/` folder holds locked files, so
+the checks leave it out where the tool lets them; without any table `bdd check` reports that no quality check is configured. One table per check, in
 the order they should run. Two optional keys help a project that is not at the top: `cwd = "api"` runs the command in
 that folder, and `fail_on_output = true` fails a tool that lists what is wrong and still exits 0, such as `gofmt -l`:
 

@@ -21,6 +21,7 @@ from pathlib import Path
 from . import adapter
 from . import config as cfg
 from . import sources
+from .errors import UsageError
 from .sources import Manifest, Source, toml_string
 
 ESLINT_CONFIGS = tuple(f"eslint.config.{ext}" for ext in ("js", "mjs", "cjs", "ts", "mts")) + (
@@ -34,9 +35,10 @@ class Tool:
     """One check ``bdd init`` may propose, and what makes the project's own files declare the tool.
 
     A project declares a tool when one of ``declared_by`` (dependency names, ``*`` allowed) is in its manifest, one of
-    ``declared_by_files`` (file names, or ``tool:NAME`` for a ``[tool.NAME]`` table of pyproject.toml) is in its folder, or
-    the tool is part of the ``toolchain`` its manifest implies. ``needs`` lists files without one of which the command
-    would only fail (a TypeScript project without tsconfig.json): then the tool is not proposed."""
+    ``declared_by_files`` (file names, for a tool that is a program on the PATH, such as golangci-lint) is in its folder, or
+    the tool is part of the ``toolchain`` its manifest implies. A configuration file alone does not say a Python or Ruby tool
+    is installed, so those need the dependency. ``needs`` lists files (or ``tool:NAME`` for a ``[tool.NAME]`` table of
+    pyproject.toml), one of which the command needs or it would only fail (a TypeScript project without tsconfig.json)."""
     ecosystem: str
     name: str
     command: str
@@ -47,29 +49,30 @@ class Tool:
     unless: tuple[str, ...] = ()
     fail_on_output: bool = False
     exclude: str = ""          # words that leave a folder out ({dir}): the adapter's own test folder is not the project's code
+    whole_folder: bool = False  # checks everything below the folder and cannot leave one out: not proposed where tests sit inside
 
 
 PY = "{project_python} -m"
 TOOLS = (
     Tool("npm", "tsc", "{node} tsc --noEmit", ("typescript",), needs=("tsconfig.json",)),
     Tool("npm", "eslint", "{node} eslint .", ("eslint",), needs=ESLINT_CONFIGS, exclude="--ignore-pattern {dir}"),
-    Tool("npm", "prettier", "{node} prettier --check .", ("prettier",), exclude="!{dir}"),
+    Tool("npm", "prettier", "{node} prettier --check .", ("prettier",), whole_folder=True),
     Tool("npm", "biome", "{node} biome check .", ("@biomejs/biome",), needs=("biome.json", "biome.jsonc")),
     Tool("npm", "dependency-cruiser", "{node} depcruise {src}", ("dependency-cruiser",), needs=DEPCRUISE_CONFIGS),
-    Tool("pypi", "ruff", f"{PY} ruff check .", ("ruff",), ("tool:ruff", "ruff.toml", ".ruff.toml"), exclude="--extend-exclude {dir}"),
-    Tool("pypi", "ruff-format", f"{PY} ruff format --check .", ("ruff",), ("tool:ruff", "ruff.toml", ".ruff.toml"),
-         exclude="--extend-exclude {dir}"),
-    Tool("pypi", "black", f"{PY} black --check .", ("black",), ("tool:black",), exclude="--extend-exclude /{dir}/"),
-    Tool("pypi", "mypy", f"{PY} mypy .", ("mypy",), ("tool:mypy", "mypy.ini", ".mypy.ini"), exclude="--exclude ^{dir}/"),
-    Tool("pypi", "pyright", f"{PY} pyright", ("pyright",), ("tool:pyright", "pyrightconfig.json")),
-    Tool("pypi", "flake8", f"{PY} flake8 .", ("flake8",), (".flake8",), exclude="--extend-exclude {dir}"),
+    Tool("pypi", "ruff", f"{PY} ruff check .", ("ruff",), exclude="--extend-exclude {dir}"),
+    Tool("pypi", "ruff-format", f"{PY} ruff format --check .", ("ruff",), exclude="--extend-exclude {dir}"),
+    Tool("pypi", "black", f"{PY} black --check .", ("black",), exclude="--extend-exclude /{dir}/"),
+    Tool("pypi", "mypy", f"{PY} mypy .", ("mypy",), exclude="--exclude ^{dir}/"),
+    Tool("pypi", "pyright", f"{PY} pyright", ("pyright",), whole_folder=True),
+    Tool("pypi", "flake8", f"{PY} flake8 .", ("flake8",), exclude="--extend-exclude {dir}"),
     Tool("pypi", "import-linter", '{project_python} -c "from importlinter.cli import lint_imports_command; lint_imports_command()"',
-         ("import-linter",), ("tool:importlinter", ".importlinter"), needs=("tool:importlinter", ".importlinter")),
+         ("import-linter",), needs=("tool:importlinter", ".importlinter")),
     Tool("go", "gofmt", "gofmt -l .", toolchain=True, fail_on_output=True),
     Tool("go", "go-vet", "go vet ./...", toolchain=True),
-    Tool("go", "golangci-lint", "golangci-lint run ./...", ("github.com/golangci/golangci-lint*",), GOLANGCI_CONFIGS),
-    Tool("maven", "ktlint", "./gradlew -q ktlintCheck", ("org.jlleitschuh.gradle.ktlint", "org.jmailen.kotlinter", "com.pinterest*:ktlint*"),
-         needs=("gradlew",)),
+    Tool("go", "golangci-lint", "go tool golangci-lint run ./...", ("github.com/golangci/golangci-lint*",)),
+    Tool("go", "golangci-lint", "golangci-lint run ./...", declared_by_files=GOLANGCI_CONFIGS),
+    Tool("maven", "ktlint", "./gradlew -q ktlintCheck", ("org.jlleitschuh.gradle.ktlint",), needs=("gradlew",)),
+    Tool("maven", "kotlinter", "./gradlew -q lintKotlin", ("org.jmailen.kotlinter",), needs=("gradlew",)),
     Tool("maven", "detekt", "./gradlew -q detekt", ("io.gitlab.arturbosch.detekt", "io.gitlab.arturbosch.detekt:*"), needs=("gradlew",)),
     Tool("maven", "spotless", "./gradlew -q spotlessCheck", ("com.diffplug.spotless",), needs=("gradlew",)),
     Tool("maven", "spotless", "mvn -B -ntp -q spotless:check", ("*:spotless-maven-plugin",), needs=("pom.xml",)),
@@ -80,7 +83,7 @@ TOOLS = (
     Tool("cargo", "cargo-fmt", "cargo fmt --check", toolchain=True),
     Tool("cargo", "clippy", "cargo clippy --all-targets -- -D warnings", toolchain=True),
     Tool("nuget", "dotnet-format", "dotnet format --verify-no-changes --no-restore", toolchain=True),
-    Tool("gem", "rubocop", "bundle exec rubocop", ("rubocop",), (".rubocop.yml",)),
+    Tool("gem", "rubocop", "bundle exec rubocop", ("rubocop",)),
 )
 
 
@@ -186,24 +189,59 @@ def proposed_checks(root: Path, found: list[Manifest], owned: tuple[str, ...] = 
     root_files = frozenset(os.listdir(root))
     chosen: list[tuple[Tool, Project, str]] = []
     for project in projects(found):
+        if not _folder_ok(project.folder):
+            continue
+        here = set()
         for tool in TOOLS:
-            if tool.ecosystem == project.ecosystem and usable(tool, project):
-                folder = project.folder
-                src = "src" if (root / folder / "src").is_dir() else "."
+            if tool.ecosystem == project.ecosystem and tool.name not in here and usable(tool, project) \
+                    and not (tool.whole_folder and left_out(project.folder, owned)):
+                here.add(tool.name)
+                src = "src" if (root / project.folder / "src").is_dir() else "."
                 command = tool.command.replace("{node}", node_runner(project, root_files)).replace("{src}", src)
                 if tool.exclude:
-                    command = " ".join([command, *(tool.exclude.format(dir=d) for d in left_out(folder, owned))])
+                    command = " ".join([command, *(tool.exclude.format(dir=d) for d in left_out(project.folder, owned))])
                 chosen.append((tool, project, command))
     taken: dict[str, int] = {}
     for tool, _, _ in chosen:
         taken[tool.name] = taken.get(tool.name, 0) + 1
-    checks, used = [], set()
+    checks: list[Check] = []
+    used: set[str] = set()
     for tool, project, command in chosen:
-        name = tool.name if taken[tool.name] == 1 else f"{tool.name}-{_label(project.folder) or 'root'}"
-        if name not in used:
-            used.add(name)
-            checks.append(Check(name, command, project.folder, tool.fail_on_output))
+        name = _unique(tool.name if taken[tool.name] == 1 else f"{tool.name}-{_label(project.folder) or 'root'}", used)
+        used.add(name)
+        checks.append(Check(name, command, project.folder, tool.fail_on_output))
     return checks
+
+
+def skipped_for_overlap(root: Path, found: list[Manifest], owned: tuple[str, ...]) -> list[str]:
+    """The tools that were left out because they check a whole folder and the adapter's locked tests sit inside it."""
+    notes = []
+    for project in projects(found):
+        for tool in TOOLS:
+            if tool.ecosystem == project.ecosystem and tool.whole_folder and usable(tool, project) and left_out(project.folder, owned):
+                where = f"{project.folder}/" if project.folder else ""
+                notes.append(f"note: {tool.name} is not recorded for {where or 'the project'}: it cannot leave {left_out(project.folder, owned)[0]}/ "
+                             "(greenlight's locked plumbing) out of its check; add it yourself to a folder that does not hold it")
+    return notes
+
+
+def _folder_ok(folder: str) -> bool:
+    try:
+        cfg.adapter_base({"root": folder}, Path("config.toml"))
+    except cfg.ConfigError:
+        return False
+    return True
+
+
+def _unique(name: str, used: set[str]) -> str:
+    """``name`` as a check's name (at most 31 characters, as the config reads them), different from every name in ``used``."""
+    name = name[:31].rstrip("-_")
+    candidate, number = name, 1
+    while candidate in used:
+        number += 1
+        tail = f"-{number}"
+        candidate = name[:31 - len(tail)].rstrip("-_") + tail
+    return candidate
 
 
 def quality_text(checks: list[Check]) -> str:
@@ -263,7 +301,12 @@ def detect_surfaces(root: Path, found: list[Manifest], sources: list[Source]) ->
 
 
 def adapter_surfaces(name: str) -> tuple[str, ...]:
-    return tuple(adapter.load(adapter.find(name)).get("surfaces", []))
+    """The surfaces the adapter called ``name`` verifies. An adapter that is not one of greenlight's (a project's own, or one
+    with no name) covers none that greenlight knows of."""
+    try:
+        return tuple(adapter.load(adapter.find(name)).get("surfaces", []))
+    except UsageError:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -330,6 +373,8 @@ def recorded_lines(facts: dict) -> list[str]:
 def unverified(config: cfg.Config) -> list[str]:
     """The recorded surfaces no adapter of the project covers now, in the fixed order. The record is what setup knew; an adapter
     added since counts."""
-    covered = {s for rules in config.runs for s in adapter_surfaces(rules.adapter)} if config.runs else set()
     pending = {surface for surface, value in config.surfaces if value == cfg.UNVERIFIED}
+    if not pending:
+        return []
+    covered = {s for rules in config.runs for s in adapter_surfaces(rules.adapter)}
     return [s for s in cfg.SURFACES if s in pending and s not in covered]

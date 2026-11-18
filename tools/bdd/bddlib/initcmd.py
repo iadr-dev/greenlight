@@ -19,6 +19,7 @@ import fnmatch
 import json
 import shutil
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -175,6 +176,21 @@ def surfaces_record(root: Path, data: dict, found: list[sources.Manifest], detec
     return [line, *toolchain.unverified_lines(assessed, configured)], toolchain.surfaces_text(assessed)
 
 
+def unreadable(extra: str, whole: str) -> str | None:
+    """Why the records ``extra`` would break the configuration ``whole``, or None. The config is read the way every command
+    reads it, so a table that fails here would make the guard refuse every call."""
+    try:
+        tomllib.loads(whole)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / cfg.BDD_DIR).mkdir()
+            (Path(tmp) / cfg.BDD_DIR / "config.toml").write_text('[[adapters]]\nname = "x"\nfeatures = "f"\n' + extra,
+                                                                encoding="utf-8", newline="\n")
+            cfg.load(Path(tmp))
+    except (tomllib.TOMLDecodeError, cfg.ConfigError) as exc:
+        return str(exc)
+    return None
+
+
 def record_project(root: Path) -> None:
     """Read the project's own files and record what they show, adding only what the project does not have yet. Prints one
     line for each record."""
@@ -192,15 +208,14 @@ def record_project(root: Path) -> None:
     quality_line, quality_text = quality_record(data, checks)
     design_line, design_text = design_record(root, data)
     surface_lines, surfaces_text = surfaces_record(root, data, found, detected)
-    notes = toolchain.overlap_notes(root, checks, owned) if quality_text else []
+    notes = [*toolchain.overlap_notes(root, checks, owned), *toolchain.skipped_for_overlap(root, found, owned)] if quality_text else []
     print("\n".join([*sources_lines(detected, problem), design_line, quality_line, *surface_lines, *notes]))
     extra = quality_text + design_text + surfaces_text
     if extra:
         new = text.rstrip("\n") + "\n" + extra
-        try:
-            tomllib.loads(new)
-        except tomllib.TOMLDecodeError as exc:
-            print(f"note: the records were not written because they would not read back as TOML ({exc})")
+        problem = unreadable(extra, new)
+        if problem:
+            print(f"note: the records were not written because they would not read back ({problem})")
         else:
             config_path.write_text(new, encoding="utf-8", newline="\n")
 

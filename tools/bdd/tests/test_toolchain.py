@@ -1,5 +1,6 @@
 """The quality checks, design table and surfaces `bdd init` records from a project's own files."""
 import json
+import re
 import tempfile
 import tomllib
 import unittest
@@ -68,10 +69,74 @@ class QualityTest(ProjectCase):
         self.assertEqual(toolchain.owned_folders(adapters), ("tests", "web/tests"))
         self.assertEqual(toolchain.owned_folders({}), ())
 
-    def test_a_tool_table_or_config_file_declares_the_tool_without_a_dependency(self):
-        self.write("pyproject.toml", "[tool.black]\nline-length = 100\n")
+    def test_a_python_tool_with_only_a_config_file_is_not_proposed_because_nothing_says_it_is_installed(self):
+        self.write("pyproject.toml", "[tool.black]\nline-length = 100\n[tool.ruff]\nline-length = 100\n")
         self.write("mypy.ini", "[mypy]\n")
-        self.assertEqual(list(self.checks()), ["black", "mypy"])
+        self.write("Gemfile", "source 'x'\n")
+        self.write(".rubocop.yml", "")
+        self.assertEqual(self.checks(), {})
+
+    def test_golangci_lint_declared_in_go_mod_runs_through_go_and_one_with_only_its_config_runs_from_the_path(self):
+        self.write("go.mod", "module x\n\ngo 1.24\n\ntool (\n\tgithub.com/golangci/golangci-lint/cmd/golangci-lint\n\texample.com/other/tool\n)\n")
+        self.write(".golangci.yml", "version: 2\n")
+        self.assertEqual(self.checks()["golangci-lint"].command, "go tool golangci-lint run ./...")
+        self.write("go.mod", "module x\n")
+        self.assertEqual(self.checks()["golangci-lint"].command, "golangci-lint run ./...")
+        (self.root / ".golangci.yml").unlink()
+        self.assertEqual(list(self.checks()), ["gofmt", "go-vet"])
+
+    def test_each_kotlin_plugin_gets_the_task_it_defines(self):
+        self.write("gradlew", "")
+        self.write("build.gradle.kts", 'plugins { id("org.jmailen.kotlinter") }\ndependencies { implementation("com.pinterest.ktlint:ktlint-core:1.0") }\n')
+        self.assertEqual({n: c.command for n, c in self.checks().items()}, {"kotlinter": "./gradlew -q lintKotlin"})
+        self.write("build.gradle.kts", 'plugins { id("org.jlleitschuh.gradle.ktlint") }\n')
+        self.assertEqual({n: c.command for n, c in self.checks().items()}, {"ktlint": "./gradlew -q ktlintCheck"})
+
+    def test_a_name_is_never_longer_than_the_config_allows_and_two_folders_never_share_one(self):
+        for folder in ("services/notifications-email", "services/notifications-sms", "services/billing"):
+            self.write(f"{folder}/pyproject.toml", '[project]\nname = "x"\n[dependency-groups]\ndev = ["ruff"]\n')
+        self.write("dart/pubspec.yaml", "name: a\n")
+        self.write("dotnet/App.csproj", "<Project />")
+        names = [c.name for c in toolchain.proposed_checks(self.root, sources.manifests(self.root))]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertTrue(all(re.fullmatch(r"[a-z][a-z0-9_-]{0,30}", n) for n in names), names)
+        self.assertEqual(len([n for n in names if n.startswith("ruff-format")]), 3, "no check is dropped for a long or equal name")
+        lines = "\n".join(f"[adapters.quality.{n}]\ncommand = 'x'\n" for n in names)
+        self.write(".bdd/config.toml", '[[adapters]]\nname = "x"\nfeatures = "f"\n' + lines)
+        self.assertEqual([c.name for c in cfg.load(self.root).quality.checks], names)
+
+    def test_a_folder_the_config_cannot_name_is_not_given_a_check(self):
+        for folder in ("a:b", "ok"):
+            try:
+                self.write(f"{folder}/go.mod", "module x\n")
+            except OSError:
+                self.skipTest("this file system has no folder called a:b")
+        self.assertEqual({c.cwd for c in self.checks().values()}, {"ok"})
+
+    def test_a_tool_that_checks_a_whole_folder_is_not_proposed_where_the_locked_tests_sit_inside_it(self):
+        self.write("package.json", json.dumps({"devDependencies": {"prettier": "3"}}))
+        found = sources.manifests(self.root)
+        self.assertEqual(list(self.checks()), ["prettier"])
+        self.assertEqual(toolchain.proposed_checks(self.root, found, ("tests",)), [])
+        (note,) = toolchain.skipped_for_overlap(self.root, found, ("tests",))
+        self.assertIn("prettier is not recorded for the project", note)
+        self.assertEqual(toolchain.skipped_for_overlap(self.root, found, ()), [])
+
+    def test_a_check_for_a_tool_that_leaves_a_folder_out_never_has_a_word_the_windows_launchers_refuse(self):
+        from bddlib import runner
+        self.write("package.json", json.dumps({"devDependencies": {"eslint": "9", "prettier": "3", "typescript": "5"}}))
+        self.write("eslint.config.js", "")
+        self.write("tsconfig.json", "{}")
+        for check in toolchain.proposed_checks(self.root, sources.manifests(self.root), ("tests",)):
+            for word in check.command.split():
+                self.assertFalse(set(word) & set(runner.CMD_METACHARACTERS), (check.name, word))
+
+    def test_a_tool_table_or_config_file_that_is_not_a_dependency_is_not_a_declaration(self):
+        self.write("requirements.txt", "import-linter\n")
+        self.write(".importlinter", "[importlinter]\nroot_package = x\n")
+        self.assertEqual(list(self.checks()), ["import-linter"])
+        (self.root / "requirements.txt").unlink()
+        self.assertEqual(self.checks(), {})
 
     def test_import_linter_needs_its_contracts_and_a_tool_without_them_is_not_proposed(self):
         self.write("requirements.txt", "import-linter\n")
@@ -216,6 +281,12 @@ class SurfaceTest(ProjectCase):
         self.assertEqual(len(lines), 2)
         (only_ios,) = toolchain.unverified_lines(toolchain.assess(["ios"], [], []), [])
         self.assertEqual(only_ios, "ios screens: no adapter, recorded as unverified")
+
+    def test_status_never_fails_for_an_adapter_greenlight_does_not_ship_or_one_without_a_name(self):
+        self.write(".bdd/config.toml", '[surfaces]\nios = "unverified"\n\n[[adapters]]\nfeatures = "f"\n[adapters.run]\nby_tag = "x"\n'
+                   'report = "y"\n\n[[adapters]]\nname = "our-own"\nfeatures = "g"\n[adapters.run]\nby_tag = "x"\nreport = "y"\n')
+        self.assertEqual(toolchain.unverified(cfg.load(self.root)), ["ios"])
+        self.assertEqual(toolchain.adapter_surfaces(""), ())
 
     def test_every_adapter_says_which_surfaces_it_covers(self):
         from bddlib import adapter

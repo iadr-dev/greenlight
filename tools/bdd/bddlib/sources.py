@@ -12,6 +12,7 @@ import fnmatch
 import json
 import os
 import re
+import stat
 import tomllib
 from dataclasses import dataclass
 from functools import lru_cache
@@ -69,13 +70,25 @@ def catalog() -> tuple[Service, ...]:
                          {k: tuple(v) for k, v in e["packages"].items()}, tuple(e.get("files", ()))) for e in entries)
 
 
+MAX_LINE = 400
+
+
 def _read(path: Path) -> str:
+    """The text of an ordinary file of a sensible size, else nothing. A pipe or a device named like a manifest is never
+    opened, so setup cannot wait on it."""
     try:
-        if path.stat().st_size > MAX_FILE_BYTES:
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
             return ""
-        return path.read_text(encoding="utf-8", errors="replace")
+        with path.open("rb") as handle:
+            return handle.read(MAX_FILE_BYTES + 1).decode("utf-8", errors="replace")
     except OSError:
         return ""
+
+
+def _lines(text: str):
+    """The lines of a manifest that can be one entry: a line of a few hundred characters is not a dependency."""
+    return (line for line in text.splitlines() if len(line) <= MAX_LINE)
 
 
 _PEP508 = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([^;#]*)")
@@ -134,12 +147,20 @@ _GO_TOOL = re.compile(r"^\s*tool\s+(\S+\.\S+)\s*$")
 
 def _go_mod(text: str) -> dict[str, str]:
     deps: dict[str, str] = {}
-    for line in text.splitlines():
+    in_tools = False
+    for line in _lines(text):
+        if in_tools:
+            in_tools = line.strip() != ")"
+            if line.strip() not in ("", ")") and not line.strip().startswith("//"):
+                deps.setdefault(line.split("//")[0].strip(), "")
+            continue
         found = _GO_REQUIRE.match(line)
         if found and "indirect" not in (found.group(3) or ""):
             deps.setdefault(found.group(1), found.group(2))
         elif tool := _GO_TOOL.match(line):
             deps.setdefault(tool.group(1), "")
+        elif re.fullmatch(r"\s*tool\s*\(\s*", line):
+            in_tools = True
     return deps
 
 
@@ -178,7 +199,7 @@ def _gradle(text: str, folder: Path) -> tuple[dict[str, str], frozenset[str]]:
     return deps, frozenset({"android"} if "com.android.application" in deps or "com.android.application" in text else ())
 
 
-_CSPROJ = re.compile(r"""<PackageReference\s+[^>]*?Include\s*=\s*"([^"]+)"(?:[^>]*?Version\s*=\s*"([^"]*)")?""")
+_CSPROJ = re.compile(r"""<PackageReference\s+[^>]{0,300}?Include\s*=\s*"([^"]{1,200})"(?:[^>]{0,300}?Version\s*=\s*"([^"]{0,100})")?""")
 
 
 def _csproj(text: str) -> dict[str, str]:
@@ -191,7 +212,7 @@ def _csproj(text: str) -> dict[str, str]:
 def _pubspec(text: str) -> dict[str, str]:
     deps: dict[str, str] = {}
     section = ""
-    for line in text.splitlines():
+    for line in _lines(text):
         if line.strip().startswith("#") or not line.strip():
             continue
         top = re.match(r"^([A-Za-z_]+):\s*$", line)
@@ -231,7 +252,7 @@ def _manifest(root: Path, folder: Path, name: str, names: frozenset[str]) -> Man
         elif name == "pyproject.toml":
             ecosystem, (deps, flags) = "pypi", _pyproject(text)
         elif re.fullmatch(r"requirements[\w.\-]*\.txt", name):
-            ecosystem, deps = "pypi", _requirements(text.splitlines())
+            ecosystem, deps = "pypi", _requirements(_lines(text))
         elif name == "go.mod":
             ecosystem, deps = "go", _go_mod(text)
         elif name == "pom.xml":
@@ -248,7 +269,7 @@ def _manifest(root: Path, folder: Path, name: str, names: frozenset[str]) -> Man
             ecosystem, deps = "gem", {n: v or "" for n, v in _GEM.findall(text)}
         else:
             return None
-    except (ValueError, TypeError, AttributeError):                 # JSON, TOML and unexpected shapes
+    except (ValueError, TypeError, AttributeError, RecursionError):    # JSON, TOML, unexpected shapes and absurd nesting
         ecosystem, deps = ECOSYSTEM_OF.get(name, "npm"), {}
     return Manifest(path, rel_folder, ecosystem, deps, flags, names)
 
@@ -291,7 +312,7 @@ def project_mcp_servers(root: Path) -> list[str]:
     try:
         data = json.loads(_read(root / ".mcp.json"))
         return [str(name) for name in data.get("mcpServers", {})]
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, RecursionError):
         return []
 
 
@@ -352,7 +373,7 @@ def load(root: Path) -> tuple[dict[str, dict], str | None]:
         return {}, None
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError) as exc:
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError, RecursionError) as exc:
         return {}, f"{cfg.BDD_DIR}/{SOURCES_FILE} could not be read ({exc}); fix it or delete it"
     return {k: v for k, v in data.items() if isinstance(v, dict) and not v.get("ignore")}, None
 
@@ -361,10 +382,10 @@ def write_missing(root: Path, sources: list[Source]) -> tuple[list[str], str | N
     """Add the sources the file does not have yet. Returns (the ids added, a problem or None). An entry that is there, even
     one the person changed or marked ``ignore``, is left exactly as it is."""
     path = path_of(root)
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
     try:
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
         present = set(tomllib.loads(text)) if text else set()
-    except tomllib.TOMLDecodeError as exc:
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError, RecursionError) as exc:
         return [], f"{cfg.BDD_DIR}/{SOURCES_FILE} could not be read ({exc}); nothing was added"
     new = [s for s in sources if s.service.id not in present]
     if not new:
