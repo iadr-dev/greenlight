@@ -124,6 +124,8 @@ class QualityCheck:
     name: str
     command: str
     timeout: int = 600
+    cwd: str = ""                            # the folder the command runs in, relative to the project ("" = the project)
+    fail_on_output: bool = False             # a tool that lists what is wrong and still exits 0 (gofmt -l) fails when it prints
 
 
 @dataclass(frozen=True)
@@ -141,8 +143,16 @@ class Member:
 
 
 @dataclass(frozen=True)
+class Design:
+    """The project's design files (``[design]``): paths relative to the project, blank when the project has none."""
+    system: str = ""                         # the design system file, such as design/DESIGN.md
+    screens: str = ""                        # a glob of the screen files, such as design/screens/*
+    inventory: str = ""                      # the inventory of screens and fields
+
+
+@dataclass(frozen=True)
 class Config:
-    root: Path | None = None                 # directory that contains .bdd/ (None outside a project)
+    root: Path | None = None                # directory that contains .bdd/ (None outside a project)
     profiles: tuple[str, ...] = ALL_PROFILES
     near_duplicate_similarity: float = DEFAULT_SIMILARITY
     feature_dirs: tuple[Path, ...] = ()
@@ -169,6 +179,9 @@ class Config:
     lint_ignore: tuple[str, ...] = ()        # [lint] ignore: style warnings (never errors) the project silences
     lint_projected_records: tuple[str, ...] = ()  # [lint] projected_records: entities (or "*") whose driver compares only the columns a table lists
     models: tuple[tuple[str, str], ...] = ()  # [models]: (agent, model) the person chose; checked by `bdd doctor`
+    design: Design | None = None             # [design]: where the project's design files are
+    surfaces: tuple[tuple[str, str], ...] = ()  # [surfaces]: (surface, the adapter that verifies it, or "unverified")
+    warnings: tuple[str, ...] = ()           # tables ignored because they were malformed; shown by `bdd status`
 
     @property
     def vocabulary_file(self) -> Path | None:
@@ -277,7 +290,11 @@ def _quality_rules(adapter: dict, path: Path) -> QualityRules | None:
         timeout = body.get("timeout", 600)
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
             raise ConfigError(f"{path}: [adapters.quality.{name}] timeout must be a whole number of seconds")
-        checks.append(QualityCheck(name, command, timeout))
+        cwd = body.get("cwd", "")
+        fail_on_output = body.get("fail_on_output", False)
+        if not isinstance(cwd, str) or not isinstance(fail_on_output, bool):
+            raise ConfigError(f"{path}: [adapters.quality.{name}] cwd is a folder name and fail_on_output is true or false")
+        checks.append(QualityCheck(name, command, timeout, adapter_base({"root": cwd}, path), fail_on_output))
     return QualityRules(str(adapter.get("name", "")), tuple(checks))
 
 
@@ -376,6 +393,54 @@ def _models(data: dict, path: Path) -> tuple[tuple[str, str], ...]:
     return tuple((str(agent), model.strip() if isinstance(model, str) else str(model)) for agent, model in table.items())
 
 
+DESIGN_KEYS = ("system", "screens", "inventory")
+SURFACES = ("web", "ios", "android", "api", "cli")
+UNVERIFIED = "unverified"
+
+
+def _inside_project(value: object) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    normal = value.replace("\\", "/")
+    return not (normal.startswith("/") or ":" in normal or ".." in normal.split("/"))
+
+
+def _design(data: dict, path: Path, warnings: list[str]) -> Design | None:
+    """The ``[design]`` table. A key that is not a path inside the project is dropped and said so. Nothing here is a config
+    error, because one stops the guard on every call."""
+    table = data.get("design")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        warnings.append(f"{path}: [design] is not a table of paths, so it is ignored")
+        return None
+    values = {}
+    for key, value in table.items():
+        if key in DESIGN_KEYS and _inside_project(value):
+            values[key] = value.replace("\\", "/")
+        else:
+            warnings.append(f"{path}: [design] {key} must be one of {', '.join(DESIGN_KEYS)} and name a path inside the "
+                            "project, so it is ignored")
+    return Design(**values) if values else None
+
+
+def _surfaces(data: dict, path: Path, warnings: list[str]) -> tuple[tuple[str, str], ...]:
+    table = data.get("surfaces")
+    if table is None:
+        return ()
+    if not isinstance(table, dict):
+        warnings.append(f"{path}: [surfaces] is not a table, so it is ignored")
+        return ()
+    kept = []
+    for surface, value in table.items():
+        if surface in SURFACES and isinstance(value, str) and value.strip():
+            kept.append((surface, value.strip()))
+        else:
+            warnings.append(f"{path}: [surfaces] {surface} must be web, ios, android, api or cli, set to the adapter that "
+                            f'verifies it or "{UNVERIFIED}", so it is ignored')
+    return tuple(kept)
+
+
 def _schema_version(data: dict, path: Path) -> int:
     version = data.get("version", 1)
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -443,6 +508,7 @@ def load(root: Path | str | None) -> Config:
     enforcement = data.get("enforcement", "auto")
     if enforcement not in ENFORCEMENT_MODES:
         raise ConfigError(f"{path}: enforcement must be one of {', '.join(ENFORCEMENT_MODES)}")
+    warnings: list[str] = []
     return Config(
         root=root,
         profiles=profiles,
@@ -473,4 +539,7 @@ def load(root: Path | str | None) -> Config:
         lint_ignore=_lint_ignore(data, path),
         lint_projected_records=_lint_projected_records(data, path),
         models=_models(data, path),
+        design=_design(data, path, warnings),
+        surfaces=_surfaces(data, path, warnings),
+        warnings=tuple(warnings),
     )

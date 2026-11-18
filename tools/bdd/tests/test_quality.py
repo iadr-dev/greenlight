@@ -153,6 +153,28 @@ class RunTest(GitProjectCase):
         with mock.patch.dict(os.environ, {"PYTHONPATH": "/elsewhere"}):
             self.assertEqual(self.check()[0], 0)
 
+    def test_a_check_runs_in_its_folder_and_one_that_only_lists_what_is_wrong_fails_when_it_prints(self):
+        self.write("api/marker.txt", "here")
+        in_folder = command("import sys, pathlib; sys.exit(0 if pathlib.Path('marker.txt').is_file() else 4)")
+        lists = command("print('src/a.go')")
+        self.config(tail=f"[adapters.quality.folder]\n{in_folder}\ncwd = 'api'\n\n[adapters.quality.lists]\n{lists}\n"
+                    f"fail_on_output = true\n\n[adapters.quality.quiet]\n{command(PASSING)}\nfail_on_output = true\n")
+        code, out, _ = self.check()
+        self.assertEqual(code, 1)
+        self.assertEqual([(c["name"], c["passed"]) for c in self.record()["checks"]],
+                         [("folder", True), ("lists", False), ("quiet", True)])
+        self.assertIn("src/a.go", out)
+
+    def test_cwd_and_fail_on_output_are_checked(self):
+        for body in ("cwd = '..'", "cwd = '/etc'", "cwd = 3", "fail_on_output = 'yes'"):
+            with self.subTest(body=body):
+                self.config(tail=f"[adapters.quality.lint]\ncommand = 'x'\n{body}\n")
+                with self.assertRaises(cfg.ConfigError):
+                    cfg.load(self.root)
+        self.config(tail="[adapters.quality.lint]\ncommand = 'x'\ncwd = 'api/'\nfail_on_output = true\n")
+        (check,) = cfg.load(self.root).quality.checks
+        self.assertEqual((check.cwd, check.fail_on_output), ("api", True))
+
     def test_it_needs_the_table_and_a_feature(self):
         self.config()
         code, _, err = self.check()

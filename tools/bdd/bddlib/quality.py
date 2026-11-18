@@ -5,6 +5,8 @@ An adapter or project opts in with named tables in ``.bdd/config.toml``:
     [adapters.quality.lint]
     command = '{project_python} -m ruff check {root}'
     timeout = 300                   # seconds, optional (default 600)
+    cwd = "api"                     # the folder to run in, optional (default: the project)
+    fail_on_output = true           # for a tool that lists what is wrong and exits 0 (gofmt -l), optional
 
     [adapters.quality.typecheck]
     command = '{project_python} -m mypy {root}'
@@ -87,8 +89,10 @@ def run_check(root: Path, check: cfg.QualityCheck, scrub: tuple[str, ...]) -> di
     tail = ""
     try:
         words = build_command(check, root)
-        status, output = runner.execute(words, root, check.timeout, scrub)
+        status, output = runner.execute(words, root, check.timeout, scrub, root / check.cwd if check.cwd else None)
         tail = output[-runner.TAIL_CHARS:]
+        if check.fail_on_output and status == 0 and output.strip():
+            status, note = 1, "the tool lists what is wrong (see below)"
     except UsageError as exc:                    # not installed, not startable, too slow: the check failed, say why
         note = str(exc)
     return {"name": check.name, "command": words, "exit": status, "passed": status == 0,
