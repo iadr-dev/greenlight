@@ -196,7 +196,7 @@ def feature_screens(root: Path) -> list[designfolder.Row]:
 
 
 def screens_of(root: Path, feature_id: str) -> list[designfolder.Row]:
-    return [r for r in feature_screens(root) if feature_id in r.features]
+    return [r for r in feature_screens(root) if feature_id in r.features and r.id]     # a row without an id is IN2's
 
 
 def context(root: Path, feature_dir: Path, feature_id: str) -> Context:
