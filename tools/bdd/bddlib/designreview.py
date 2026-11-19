@@ -83,6 +83,8 @@ def verdicts(feature_dir: Path) -> dict[str, str]:
             continue
         text = path.read_text(encoding="utf-8-sig", errors="replace")
         verdict, named = VERDICT.search(text), DIGEST.search(text)
-        found[reviewer] = ("stale" if named is None or named.group(1) != current else
-                           verdict.group(1).upper() if verdict else "no verdict")
+        if named is None or named.group(1) != current:
+            found[reviewer] = "stale"
+        else:
+            found[reviewer] = verdict.group(1).upper() if verdict else "no verdict"
     return found

@@ -95,7 +95,7 @@ DOC_SERVERS = ("context7", "microsoft-docs", "microsoft-learn")   # documentatio
 RUNNERS = ("npx", "bunx", "pnpm dlx", "yarn dlx", "npm exec")
 
 
-_UNSAFE_ADDRESS = re.compile(r"[\s\\@%\x00-\x1f\x7f]")
+_UNSAFE_ADDRESS = re.compile(r"[\s\\@%\x7f]|[^\x20-\x7e]")
 
 
 def hostname(url: str) -> str | None:
@@ -109,7 +109,7 @@ def hostname(url: str) -> str | None:
         port = parts.port
         host = (parts.hostname or "").rstrip(".")
         host = host.encode("idna").decode("ascii") if host else ""
-    except (ValueError, UnicodeError):
+    except ValueError:                                   # UnicodeError is one
         return None
     if parts.scheme != "https" or not host or parts.username is not None or port not in (None, 443):
         return None

@@ -122,15 +122,15 @@ class Table:
         return self.line > 0
 
 
-_WRAPPED = re.compile(r"(\*\*|__|\*|`+)(.+)\1")
+_WRAPPERS = ("**", "__", "*", "`")
 
 
 def plain(cell: str) -> str:
     """A cell without a matched pair of emphasis or code marks around it; every other mark is kept (``phone_numbers``,
     ``__init__.py``, ``_private.py``)."""
     text = cell.strip()
-    while (wrapped := _WRAPPED.fullmatch(text)) is not None:
-        text = wrapped.group(2).strip()
+    while mark := next((m for m in _WRAPPERS if len(text) > 2 * len(m) and text.startswith(m) and text.endswith(m)), None):
+        text = text[len(mark):-len(mark)].strip()
     return text
 
 
@@ -142,43 +142,60 @@ def _blank(value: str, missing: set[str] = EMPTY) -> bool:
     return normal(value) in missing
 
 
-_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_HEADING = re.compile(r"(#{1,6})\s+(\S.*)")
+_FENCE = re.compile(r"\s*(?:`{3}|~{3})")
+
+
+def headings_of(lines: list[str]) -> list[tuple[int, int, str]]:
+    """(line, level, title) of every Markdown heading outside a code fence."""
+    found, fenced = [], False
+    for number, line in enumerate(lines, start=1):
+        if _FENCE.match(line):
+            fenced = not fenced
+        elif not fenced and (heading := _HEADING.fullmatch(line.rstrip())):
+            found.append((number, len(heading.group(1)), heading.group(2).rstrip("# ").strip()))
+    return found
+
+
+def section_of(title: str, exact: set[str]) -> Section | None:
+    """The section a heading opens: its exact name, or a heading that starts with it when none is exact."""
+    words = normal(title)
+    return next((s for s in SECTIONS if words == s.name.casefold()
+                 or (s.name.casefold() not in exact and words.startswith(s.name.casefold()))), None)
+
+
+def read_table(table: Table, first_line: int, body: list[str]) -> None:
+    """Fill ``table`` from the first table of ``body`` that has the section's columns."""
+    wanted = [c.name.casefold() for c in table.section.columns]
+    for found in productmap.tables(body):
+        headers = [h.strip("*_ ") for h in found.headers]
+        if not all(name in headers for name in wanted):
+            continue
+        table.has_table = True
+        for line, cells in found.rows:
+            row = Row(first_line + line, {h: plain(cells[i]) if i < len(cells) else "" for i, h in enumerate(headers)})
+            if normal(row.get(table.section.columns[0].name)) not in NOT_APPLICABLE:
+                table.rows.append(row)
+                continue
+            reason = " ".join(plain(c) for c in cells[1:] if plain(c)).strip()
+            if len(reason) >= MIN_REASON:
+                table.reason = reason
+        return
 
 
 def parse(text: str) -> dict[str, Table]:
     """Every section of ``SECTIONS`` as read from the text: its heading line, its table's rows and its n/a reason."""
     lines = text.splitlines()
     tables = {s.name: Table(s) for s in SECTIONS}
-    headings, fenced = [], False
-    for n, line in enumerate(lines, start=1):
-        if re.match(r"\s*(`{3,}|~{3,})", line):
-            fenced = not fenced
-        elif not fenced and (m := _HEADING.match(line)):
-            headings.append((n, len(m.group(1)), m.group(2)))
+    headings = headings_of(lines)
     exact = {normal(title) for _, _, title in headings}
     for index, (number, level, title) in enumerate(headings):
-        section = next((s for s in SECTIONS if normal(title) == s.name.casefold()
-                        or (s.name.casefold() not in exact and normal(title).startswith(s.name.casefold()))), None)
+        section = section_of(title, exact)
         if section is None or tables[section.name].found:
             continue
         end = next((n for n, lvl, _ in headings[index + 1:] if lvl <= level), len(lines) + 1)
-        table = tables[section.name]
-        table.line = number
-        body = lines[number:end - 1]
-        wanted = [c.name.casefold() for c in section.columns]
-        for found in productmap.tables(body):
-            headers = [h.strip("*_ ") for h in found.headers]
-            if not all(name in headers for name in wanted):
-                continue
-            table.has_table = True
-            for line, cells in found.rows:
-                row = Row(number + line, {h: plain(cells[i]) if i < len(cells) else "" for i, h in enumerate(headers)})
-                if normal(row.get(section.columns[0].name)) in NOT_APPLICABLE:
-                    reason = " ".join(plain(c) for c in cells[1:] if plain(c)).strip()
-                    table.reason = reason if len(reason) >= MIN_REASON else table.reason
-                else:
-                    table.rows.append(row)
-            break
+        tables[section.name].line = number
+        read_table(tables[section.name], number, lines[number:end - 1])
     return tables
 
 
@@ -205,7 +222,7 @@ def feature_screens(root: Path) -> list[designfolder.Row]:
         config = cfg.load(root)
         inventory = root / designfolder.files_of(config, designfolder.folder_of(config))["inventory"]
         return designfolder.inventory_rows(inventory)[0] if inventory.is_file() else []
-    except (UsageError, cfg.ConfigError, OSError, ValueError):
+    except (UsageError, OSError, ValueError):
         return []
 
 
@@ -299,7 +316,7 @@ def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
         named = re.findall(r"[RN]-\d+\.\d+", row.get("Rule"))
         unknown = [r for r in named if r not in ctx.rules]
         if not named or unknown:
-            what = ", ".join(unknown) if unknown else safe_cell(row.get("Rule")) if row.get("Rule") else "nothing"
+            what = ", ".join(unknown) or (safe_cell(row.get("Rule")) if row.get("Rule") else "nothing")
             out.add(row.line, "TD12", "Design trace", f'"{safe_cell(element)}" names {what}, which is not a rule of rules.md; name the '
                                                       "rule it serves")
         if _blank(row.get("API field")) and _blank(row.get("Component")):
@@ -335,7 +352,7 @@ PACKAGE_NAMES = {
     "npm": re.compile(r"(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*"),
     "pypi": re.compile(r"[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?"),
     "go": re.compile(r"[A-Za-z0-9][\w./~-]*"),
-    "cargo": re.compile(r"[A-Za-z0-9_][\w-]*"),
+    "cargo": re.compile(r"\w[\w-]*", re.ASCII),
     "pub": re.compile(r"[a-z][a-z0-9_]*"),
     "nuget": re.compile(r"[A-Za-z0-9][\w.-]*"),
     "maven": re.compile(r"[A-Za-z0-9][\w.-]*:[A-Za-z0-9][\w.-]*"),
@@ -517,8 +534,8 @@ def install_line(manifest: sources.Manifest | None, ecosystem: str, name: str) -
                                                      ("bun", "bun.lock")) if lock in files), "npm")
         line = f"npm install {name}" if manager == "npm" else f"{manager} add {name}"
     elif ecosystem == "pypi":
-        line = (f"uv add {name}" if "uv.lock" in files else f"poetry add {name}" if "poetry.lock" in files
-                else f"python -m pip install {name}")
+        tool = next((t for t, lock in (("uv add", "uv.lock"), ("poetry add", "poetry.lock")) if lock in files), "python -m pip install")
+        line = f"{tool} {name}"
     elif ecosystem == "pub":
         line = f"{'flutter' if 'flutter' in deps else 'dart'} pub add {name}"
     elif ecosystem == "maven":

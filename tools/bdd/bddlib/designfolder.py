@@ -180,7 +180,7 @@ def split_states(cell: str) -> tuple[str, ...]:
 
 def split_fields(cell: str) -> tuple[str, ...]:
     """The fields of a row, with the marks inside a name kept (``contact_phone``)."""
-    parts = (re.sub(r"^[*`]+|[*`]+$", "", part.strip()).strip() for part in re.split(r"[,;]", cell))
+    parts = (part.strip().strip("*`").strip() for part in re.split(r"[,;]", cell))
     return tuple(p for p in parts if p and p.casefold() not in productmap.NONE)
 
 
