@@ -107,6 +107,26 @@ class GalleryTest(DesignCase):
         self.run_gallery()
         self.assertNotIn("--hidden", (self.root / "design" / "gallery.html").read_text(encoding="utf-8"))
 
+    def test_a_screen_outside_what_the_approval_covers_is_an_error_and_never_shown(self):
+        self.write("outside.html", screen())
+        self.write("design/.hidden/board.html", screen())
+        cases = {"a path with ..": "../outside.html", "an absolute path": str(self.root / "outside.html").replace("\\", "/"),
+                 "a hidden folder": ".hidden/board.html"}
+        link = self.root / "design" / "screens" / "link.html"
+        try:
+            link.symlink_to(self.root / "outside.html")
+            cases["a link out of the folder"] = "screens/link.html"
+        except OSError:
+            pass                                           # Windows without the right to make links
+        for what, named in cases.items():
+            with self.subTest(what=what):
+                self.write("design/inventory.md", INVENTORY.replace("FEAT-002 | screens/home.html", f"FEAT-002 | {named}"))
+                code, out, _ = self.run_gallery()
+                self.assertEqual(code, 1)
+                self.assertIn("IN6", out)
+                frames = [f["title"] for f in self.page().frames]
+                self.assertFalse([t for t in frames if "outside" in t or "link.html" in t or "board" in t], frames)
+
     def test_the_gallery_lists_the_gaps_and_still_shows_the_design(self):
         self.write("design/screens/home.html", screen({"S-IN-01": ("loading", "error", "success"),
                                                        "S-OR-01": ("loading", "error", "success")}))

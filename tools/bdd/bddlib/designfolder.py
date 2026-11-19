@@ -317,6 +317,19 @@ def _normal(rel: str) -> str:
     return "/".join(parts)
 
 
+def covered_screen(root: Path, folder: str, rel: str) -> bool:
+    """Is ``rel`` a screen file the approval covers: a file inside the design folder once every link is followed, and
+    not hidden? Only such a file is read, checked and shown, so the person sees only what they approve."""
+    target = root / rel
+    if PurePosixPath(rel).is_absolute() or rel.split("/")[0] == ".." or not target.is_file() or not inside(root, folder, target):
+        return False
+    try:
+        resolved = target.resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError):
+        return False
+    return covers(folder, resolved) and covers(folder, rel)
+
+
 def load(root: Path, config: cfg.Config | None = None) -> Design:
     """Read the whole design and check it. Reads only files inside the project; a screen is read only inside the design
     folder."""
@@ -348,9 +361,11 @@ def load(root: Path, config: cfg.Config | None = None) -> Design:
     pattern = config.design.screens if config.design and config.design.screens else f"{folder}/screens/*"
     globbed = [p.relative_to(root).as_posix() for p in sorted(root.glob(pattern)) if p.is_file() and p.suffix in (".html", ".htm")]
     for rel in dict.fromkeys([*named, *globbed]):
-        target = root / rel
-        if rel.split("/")[0] != ".." and target.is_file() and inside(root, folder, target):
+        if covered_screen(root, folder, rel):
             design.screens[rel] = read_screen(root, rel)
+        elif rel in globbed and rel not in named:
+            issues.append(Issue(rel, 1, ERROR, "IN6", "this screen file is outside what the approval of the design covers "
+                                                      "(a link out of the folder, or a hidden folder), so it is not shown"))
     issues += check_rows(design, files["inventory"], {f.id for f in design.features})
     issues += check_screens(design)
     return design

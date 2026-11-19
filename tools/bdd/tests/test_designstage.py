@@ -85,6 +85,21 @@ class ApprovalTest(DesignCase):
                          ("invalid", "this prompt was refused when it was typed, so it cannot approve the design later"))
         self.assertNotEqual(designstage.status_line(designstage.status(self.root)), "design: approved, locked")
 
+    def test_every_refusal_of_the_hook_keeps_its_prompt_id(self):
+        self.ready()
+        lockfile.lock_design(self.root, "design", {"design/DESIGN.md": "0" * 64}, "a lock that differs from the disk")
+        self.assertIn("it differs from the files on disk", self.hook(prompt_id="p2"))
+        self.assertIn("p2", designstage.load(self.root)["refused_prompts"])
+
+    def test_an_approval_whose_prompt_time_cannot_be_read_does_not_count(self):
+        self.ready()
+        self.hook()
+        self.transcript(typed("p1", "design", timestamp="not a time"))
+        designstage.verify(self.root)
+        approval = designstage.load(self.root)["approvals"][0]
+        self.assertEqual(approval["origin"], "invalid")
+        self.assertIn("when the prompt was typed cannot be read", approval["evidence"])
+
     def test_a_prompt_typed_long_before_the_approval_was_recorded_does_not_count(self):
         self.ready()
         self.hook()

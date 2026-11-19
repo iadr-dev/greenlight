@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import approvals, approvalsummary, config as cfg, designfolder, lockfile, store
@@ -163,7 +163,19 @@ def prerequisites(root: Path) -> tuple[designfolder.Design, dict[str, str], list
 
 def record(root: Path, decision: str, grade: str, *, session: str | None = None, prompt_id: str | None = None,
            transcript_path: str | None = None, reason: str = "") -> dict:
-    """Record the person's approval or rejection of the design. Approving locks it; rejecting releases the lock."""
+    """Record the person's approval or rejection of the design. Approving locks it; rejecting releases the lock. Every
+    refusal keeps the prompt's id, so the prompt cannot approve anything later."""
+    try:
+        return _record(root, decision, grade, session=session, prompt_id=prompt_id, transcript_path=transcript_path,
+                       reason=reason)
+    except UsageError:
+        if prompt_id and path_of(root).is_file():
+            keep_refused(root, prompt_id)
+        raise
+
+
+def _record(root: Path, decision: str, grade: str, *, session: str | None, prompt_id: str | None,
+            transcript_path: str | None, reason: str) -> dict:
     if grade not in GRADES:
         raise UsageError("the design is approved by the person, typing /greenlight:approve design")
     data = _started(root)
@@ -176,8 +188,6 @@ def record(root: Path, decision: str, grade: str, *, session: str | None = None,
     if decision == "approve":
         design, files, problems = prerequisites(root)
         if problems:
-            if prompt_id:
-                keep_refused(root, prompt_id)
             raise UsageError("cannot approve the design: " + "; ".join(problems))
         held = lockfile.read_design(root)
         if lockfile.design_locked(held) and held["files"] != files:
@@ -220,13 +230,16 @@ def _replayed(approval: dict, data: dict) -> str | None:
         return "this prompt was refused when it was typed, so it cannot approve the design later"
     try:
         entries = approvals.prompt_entries(approval["transcript_path"], approval["prompt_id"])
-        stamps = [datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")) for e in entries if e.get("timestamp")]
+        stamps = [datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")) for e in entries if "timestamp" in e]
+        if not stamps:                       # an entry without a time of its own: when the transcript was last written
+            path = approvals.find_transcript(approval["transcript_path"])
+            stamps = [datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)]
+        written = min(stamps)
         at, started = datetime.fromisoformat(approval["at"]), datetime.fromisoformat(data["started_at"])
-    except (UsageError, KeyError, TypeError, ValueError, OSError):
-        return None
-    if stamps and (min(stamps) < started or at - min(stamps) > approvals.PENDING_TIMEOUT or min(stamps) > at + PROMPT_SKEW):
-        return "the prompt was not typed when this approval was recorded"
-    return None
+        late = written < started or at - written > approvals.PENDING_TIMEOUT or written > at + PROMPT_SKEW
+    except (UsageError, KeyError, TypeError, ValueError, OSError, AttributeError) as exc:
+        return f"when the prompt was typed cannot be read ({type(exc).__name__}), so the approval cannot be verified"
+    return "the prompt was not typed when this approval was recorded" if late else None
 
 
 def verify(root: Path) -> int:
