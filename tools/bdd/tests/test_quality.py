@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import cli, doctor, gates, guard, initcmd, quality, redrecord, runner, state, tripwire
+from bddlib import cli, doctor, gates, guard, initcmd, quality, redrecord, route, runner, state, tripwire
 from bddlib import config as cfg
 from bddlib.errors import UsageError
 
@@ -243,11 +243,47 @@ class GateTest(GitProjectCase):
             self.gate("implement")
         self.assertIn("have not been run", str(cm.exception))
         self.check()
+        with self.assertRaises(UsageError) as cm:
+            self.gate("implement")
+        self.assertIn("T-007.0 has no passing run of the quality checks of its own", str(cm.exception))
+        self.assertEqual(self.check("--task", "T-007.0")[0], 0)
         self.assertEqual(self.gate("implement")["gates"]["implement"]["result"], "pass")
         self.write("src/app.py", "def total(x):\n    return x * 3\n")
         with self.assertRaises(UsageError) as cm:
             self.gate("verify")
         self.assertIn("quality result is out of date", str(cm.exception))
+
+    def test_a_feature_from_before_needs_only_the_result_of_the_feature(self):
+        self.make_old_feature()
+        state.update(self.feature_dir, lambda current: current.pop(route.MARKER, None))
+        self.walk_to("tasks")
+        self.check()
+        self.assertEqual(self.gate("implement")["gates"]["implement"]["result"], "pass")
+
+    def test_a_task_run_is_recorded_for_its_task_and_kept_by_the_next_run(self):
+        self.write(".bdd/features/FEAT-007-order-discounts/tasks.md", "## T-007.1 One\nCovers: EX-7.1.1\n\n## T-007.2 Two\n")
+        code, out, _ = self.check("--task", "T-007.1")
+        self.assertEqual(code, 0)
+        self.assertIn("recorded for T-007.1", out)
+        self.check()
+        recorded = quality.load_result(self.root, "FEAT-007")["tasks"]
+        self.assertEqual(list(recorded), ["T-007.1"])
+        self.assertEqual(quality.task_problems(self.root, "FEAT-007", ["T-007.1", "T-007.2"]),
+                         ["T-007.2 has no passing run of the quality checks of its own: run `bdd check FEAT-007 --task "
+                          "T-007.2` after the task"])
+
+    def test_a_failing_task_run_is_recorded_as_failed_and_the_task_must_run_again(self):
+        self.assertEqual(self.check("--task", "T-007.0")[0], 0)
+        self.config(tail=table(FAILING))
+        self.assertEqual(self.check("--task", "T-007.0")[0], 1)
+        self.assertIn("T-007.0 has no passing run", quality.task_problems(self.root, "FEAT-007", ["T-007.0"])[0])
+        self.assertEqual(quality.load_result(self.root, "FEAT-007")["tasks"]["T-007.0"]["failed"], ["lint"])
+
+    def test_a_task_that_is_not_one_of_the_feature_is_refused(self):
+        code, _, err = self.check("--task", "T-007.9")
+        self.assertEqual(code, 2)
+        self.assertIn("T-007.9 is not a task of FEAT-007", err)
+        self.assertEqual(self.check("--check", "--task", "T-007.0")[0], 2)
 
     def test_an_adopted_feature_is_not_held_to_it(self):
         data = state.load(self.feature_dir)

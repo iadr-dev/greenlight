@@ -22,6 +22,10 @@ else out of that folder), together with what it depends on: the production sourc
 interpreter, and the project's ``.bdd/standards.md``. The implement and verify gates ask for a current, passing result
 only when checks are configured; without them nothing changes. A feature of kind ``adopt`` is not held to it: the code
 it describes already exists and is not judged.
+
+``bdd check FEAT-n --task T-n.m`` is the run after a task: the architecture checker among the checks catches a layer
+reached past while the next task could still build on it. The result is recorded for the task as well, and the implement
+gate of a feature built against its design (``route.MARKER``) waits for a passing run of every task's own.
 """
 from __future__ import annotations
 
@@ -99,16 +103,41 @@ def run_check(root: Path, check: cfg.QualityCheck, scrub: tuple[str, ...]) -> di
             "seconds": round(time.perf_counter() - started, 2), "tail": tail, "note": note}
 
 
-def run_checks(root: Path, feature_id: str) -> dict:
+def task_ids(root: Path, feature_id: str) -> list[str]:
+    from . import route, vocabulary                      # route reads the vocabulary: only a task run needs it
+    feature_dir = store.find_feature_dir(root, feature_id)
+    try:
+        return [r.task for r in route.routes(root, feature_dir, feature_id)]
+    except vocabulary.VocabularyError as exc:
+        raise UsageError(f"the tasks cannot be routed: {exc}") from exc
+
+
+def _earlier_tasks(root: Path, feature_id: str) -> dict:
+    """The per-task results of the last record, kept by the next run; none when it cannot be read."""
+    try:
+        data = load_result(root, feature_id)
+    except StoreError:
+        return {}
+    tasks = data.get("tasks") if data else None
+    return dict(tasks) if isinstance(tasks, dict) else {}
+
+
+def run_checks(root: Path, feature_id: str, task: str | None = None) -> dict:
     rules = rules_of(root)
     store.find_feature_dir(root, feature_id)             # the feature must exist
+    if task is not None and task not in task_ids(root, feature_id):
+        raise UsageError(f"{task} is not a task of {feature_id}: `bdd route {feature_id}` lists its tasks")
     scrub = next((r.scrub_env for r in cfg.load(root).runs if r.adapter == rules.adapter), ())
     results = [run_check(root, check, scrub) for check in rules.checks]
     runner.runs_dir(root, feature_id).mkdir(parents=True, exist_ok=True)
+    passed = all(r["passed"] for r in results)
+    tasks = _earlier_tasks(root, feature_id)
+    if task is not None:
+        tasks[task] = {"at": store.utc_now(), "passed": passed, "failed": [r["name"] for r in results if not r["passed"]]}
     record = {"schema": runner.SCHEMA, "feature": feature_id, "at": store.utc_now(), "checks": results,
-              "passed": all(r["passed"] for r in results), **current_marks(root, feature_id, rules)}
+              "passed": passed, "tasks": tasks, **current_marks(root, feature_id, rules)}
     store.write_json(result_path(root, feature_id), record)
-    return record
+    return {**record, "task": task}
 
 
 def load_result(root: Path, feature_id: str) -> dict | None:
@@ -145,6 +174,23 @@ def problems(root: Path, feature_id: str) -> list[str]:
     return []
 
 
+def task_problems(root: Path, feature_id: str, tasks: list[str]) -> list[str]:
+    """For a feature built against its design: each task needs a passing run of the checks of its own, made after it was
+    written (``bdd check FEAT-n --task T-n.m``). The checks run over the whole project, so the feature's result (in
+    ``problems``) is what proves the code as it is now; this one proves the checks ran after every task, while the next
+    task could still be built on code that passed them."""
+    if cfg.load(root).quality is None:
+        return []
+    try:
+        data = load_result(root, feature_id)
+    except StoreError:
+        return []                                         # ``problems`` says why the record cannot be read
+    recorded = (data or {}).get("tasks")
+    recorded = recorded if isinstance(recorded, dict) else {}
+    return [f"{task} has no passing run of the quality checks of its own: run `bdd check {feature_id} --task {task}` after "
+            "the task" for task in tasks if not (isinstance(recorded.get(task), dict) and recorded[task].get("passed") is True)]
+
+
 def describe(record: dict) -> str:
     lines = [f"{record['feature']}: quality checks {'passed' if record['passed'] else 'FAILED'}"]
     for result in record["checks"]:
@@ -153,6 +199,12 @@ def describe(record: dict) -> str:
         lines.append(f"  {state} {result['name']}" + (f": {detail}" if detail else ""))
         if not result["passed"] and result["tail"]:
             lines += ["       " + line for line in result["tail"].strip().splitlines()[-12:]]
+    if record.get("task"):
+        lines.append(f"  recorded for {record['task']}")
+    tasks = record.get("tasks") if isinstance(record.get("tasks"), dict) else {}
+    if tasks:
+        lines.append("  tasks: " + ", ".join(f"{task} {'passed' if isinstance(entry, dict) and entry.get('passed') is True else 'FAILED'}"
+                                             for task, entry in tasks.items()))
     return "\n".join(lines)
 
 
@@ -163,10 +215,13 @@ def run(argv: list[str]) -> int:
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("--check", action="store_true",
                     help="do not run anything: show the recorded result and say whether it is current")
+    ap.add_argument("--task", help="the task just written, e.g. T-007.1: the result is recorded for it too")
     args = ap.parse_args(argv)
 
     def action() -> int:
         root = project_root()
+        if args.check and args.task is not None:
+            raise UsageError("--task runs the checks and records them for the task; --check only shows the record")
         if args.check:
             rules_of(root)
             found = problems(root, args.feature)
@@ -176,7 +231,7 @@ def run(argv: list[str]) -> int:
             for line in found:
                 print(line, file=sys.stderr)
             return 1 if found else 0
-        record = run_checks(root, args.feature)
+        record = run_checks(root, args.feature, args.task)
         print(describe(record))
         return 0 if record["passed"] else 1
 
