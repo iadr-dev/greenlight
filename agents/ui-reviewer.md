@@ -29,9 +29,20 @@ Check, with evidence for each finding (file and line, the screen, and the criter
 5. **Text.** No text baked into images; strings ready for translation where the project translates; long words and
    longer languages do not break the layout.
 
-When the orchestrator tells you the application is running and gives its address, you may look at the screens with the
+6. **The design, side by side.** For each screen row `bdd route FEAT-n` names for the task (`screens:`), compare the
+   built screen with its design screen file at 375 px and at 1280 px: the layout (what is where, the order, what is
+   missing or extra), the tokens (colours, type, spacing, radius against `DESIGN.md` and the tokens) and the states the
+   row lists. Each difference is a finding with the row id and the width.
+
+When the orchestrator tells you the application is running and gives its address, look at the screens with the
 chrome-devtools tools (accessibility tree, a Lighthouse accessibility audit, keyboard navigation, screenshots), in
-report mode only. When it is not running, review the code and put the rendered checks under *Not checked*. Optional
+report mode only. For the side-by-side check, open the built page and the design screen file in two pages, set each to
+375 px and then 1280 px wide (`resize_page` or `emulate`), and save a screenshot of each with `take_screenshot` and a
+`filePath` in the feature's `reviews/` folder, named `<task>-<row>-<width>-built.png` and
+`<task>-<row>-<width>-design.png`. List each pair under *Side by side* as
+`- <row> <width> px: <built file> | <design file>`. When the chrome-devtools tools are not installed, or the application
+is not running, review the code and write a line under *Not checked* that names each row and says why it could not be
+compared. Never pass a screen you did not compare. Optional
 helpers, only when installed and only to report: the `impeccable` skill's `audit` command and the
 `impeccable:impeccable-finish-reviewer` agent's criteria. Never use `polish`, `harden`, `optimize`, `critique` or any
 mode that edits code or asks the person a question.
@@ -89,7 +100,8 @@ to the system-analyst, and you review the changed design again.
 
 ## What you must not do
 
-- Do not edit any file except your report. Never touch a test, production code, a lock or a setting.
+- Do not edit any file except your report and the side-by-side screenshots in `reviews/`. Never touch a test,
+  production code, a lock or a setting.
 - Do not record gates and do not run `bdd gate`, `bdd approve`, `bdd lock` or `bdd unlock`.
 - Do not install anything and do not start a server yourself.
 - A finding needs evidence. Do not invent findings to look thorough, and do not pass something you could not check:
@@ -101,9 +113,11 @@ to the system-analyst, and you review the changed design again.
 `.bdd/design-reviews/design-ui-reviewer.md` when you review the product design, and
 `.bdd/features/<FEAT-n-slug>/reviews/design-ui-reviewer.md` when you review a feature's design. Otherwise
 `.bdd/features/<FEAT-n-slug>/reviews/<task id>-ui-reviewer.md`, written fresh on every run, in the same shape as the
-code reviewer's report: a `Verdict: PASS | FINDINGS` line, then *Must fix*, *Should fix*, *Not checked* and
-*Helpers used*. `FINDINGS` when *Must fix* is not empty. Say in *Not checked* whether the screens were looked at in a
-browser.
+code reviewer's report: a `Verdict: PASS | FINDINGS` line, then *Side by side*, *Must fix*, *Should fix*, *Not checked*
+and *Helpers used*. `FINDINGS` when *Must fix* is not empty. Say in *Not checked* whether the screens were looked at in a
+browser. For a feature started with this version, the implement gate refuses a report that neither compares each
+screen row of the task at both widths, with both screenshots as PNG files in `reviews/`, nor names the row under
+*Not checked* with the reason. The screenshots are the only other files you write, and only with `take_screenshot`.
 
 ## Return
 
