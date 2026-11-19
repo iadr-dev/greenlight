@@ -26,9 +26,10 @@ Then write, following the `product-design` card:
 2. **The feature map, `.bdd/product.md`**, in the shape of `templates/product.md`: one row per feature with its id
    (`FEAT-001` onwards, kept when the map already has them), the feature, a one-line description, what it depends on
    and its build order.
-3. **The screen inventory, `inventory.md`** in the design folder: `| ID | Screen | States | Feature | File |`, one row
-   per screen of the product, every state it has (loading, empty, error and success at least for a list), the feature
-   of the map that builds it, and the screen file the ui-designer will draw it in (`screens/<area>.html`).
+3. **The screen inventory, `inventory.md`** in the design folder: `| ID | Screen | States | Feature | File | Fields |`, one
+   row per screen of the product, every state it has (loading, empty, error and success at least for a list), the feature
+   of the map that builds it, the screen file the ui-designer will draw it in (`screens/<area>.html`), and the fields it
+   shows or asks for, comma-separated (each one is traced to a rule and an API field before code).
 4. **`flows.html`** in the design folder: one flow per job of `PRODUCT.md`, by inventory id, with the branches.
 
 Then run `"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" gallery --check` and fix every finding that names your files
