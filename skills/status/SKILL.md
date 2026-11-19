@@ -18,7 +18,8 @@ Everything here is computed by the tool; do not infer state from the conversatio
 
 2. Then say in a few lines, in plain words:
    - which feature needs the person next, and the exact line to type if it is waiting for an approval
-     (`/greenlight:approve FEAT-n rules` or `examples`);
+     (`/greenlight:approve FEAT-n rules` or `examples`); a `design: drafted` line means the product design waits for
+     the person: they look at `design/gallery.html` and type `/greenlight:approve design`;
    - anything blocked: a failed gate, an approval marked "not valid" (changed after approval or revoked by a change),
      an open integrity violation and which file it names;
    - anything unreviewed (autopilot) or soft (hooks were not active), and why.

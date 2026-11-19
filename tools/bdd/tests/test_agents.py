@@ -7,7 +7,7 @@ from bddlib import frontmatter, guard
 REPO = Path(__file__).resolve().parents[3]
 AGENTS = REPO / "agents"
 EXPECTED = {"product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "ui-engineer",
-            "code-reviewer", "security-reviewer", "ui-reviewer", "spec-auditor"}
+            "code-reviewer", "security-reviewer", "ui-reviewer", "spec-auditor", "ux-designer", "ui-designer"}
 WRITERS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 
@@ -47,7 +47,8 @@ class AgentTest(unittest.TestCase):
     def test_every_agent_that_changes_files_edits_them_and_the_reviewers_do_not(self):
         """A spec agent without Edit rewrote whole 2,000-line feature files to change one scenario; a reviewer writes
         its report whole with Write, because the guard refuses an edit of a report."""
-        editors = ("product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "ui-engineer")
+        editors = ("product-analyst", "qa-designer", "system-analyst", "step-engineer", "implementer", "ui-engineer",
+                   "ux-designer", "ui-designer")
         for name in EXPECTED:
             tools = {t.strip() for t in load(name)[0]["tools"].split(",")}
             self.assertEqual("Edit" in tools, name in editors, name)

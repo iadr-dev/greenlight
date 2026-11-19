@@ -1,7 +1,7 @@
 ---
 name: change
-description: Change something that was already approved or locked - a rule, an example, a step or the code - without breaking the audit trail. Use when the user runs /greenlight:change FEAT-n "<what changes>" or when an agent returns a change request.
-argument-hint: 'FEAT-n "<what changes and why>"'
+description: Change something that was already approved or locked - a rule, an example, a step, the code or the approved product design - without breaking the audit trail. Use when the user runs /greenlight:change FEAT-n "<what changes>" or /greenlight:change design "<what changes>", or when an agent returns a change request.
+argument-hint: 'FEAT-n|design "<what changes and why>"'
 ---
 
 # greenlight change
@@ -33,6 +33,7 @@ The person decides what changes. Never reopen the specification because an agent
    | the interfaces the steps use | `system-map` |
    | a step or a driver of this feature's own | `bind` |
    | the shared test plumbing (runner settings, package manifests, a driver the adapter ships, `operations` or `system`) | no feature: a plumbing change, below |
+| the approved product design: a screen, a state, the tokens, the flows, the feature map or the architecture | no feature: a design change, below |
    | the order or split of the work | `tasks` |
    | production code only | `implement` |
 
@@ -81,3 +82,17 @@ To share a file one feature locked (another feature needs to change it), name it
 
 Never edit a locked file by any other route, never unlock a feature with `bdd unlock` directly, and never remove an
 old approval or a gate result by hand: this command, and the plumbing change above, are the sanctioned ways.
+
+**A design change** reopens no feature either. The product design (the design folder, `.bdd/product.md` and
+`.bdd/architecture.md`) is locked once the person approves it. Tell the person what changes and why, get the clear yes,
+then:
+
+```sh
+"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" change --reopen design --reason "<the person's words>"
+```
+
+Show its output unchanged: the lock is released and the approval revoked. Redo steps 2 to 8 of `phases/design.md` for
+what changes only (the designer that owns the file, `bdd gallery --check`, the ui-reviewer's design review,
+`bdd gallery`). `bdd approve design --summary` then lists only what changed since the person's approval; the person
+approves again with `/greenlight:approve design`. A feature already built against the old design is changed afterwards
+with its own `/greenlight:change FEAT-n`, for the screens the change touches.

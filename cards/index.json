@@ -408,6 +408,18 @@
       "phase": "specify"
     },
     {
+      "apply_when": "turning a product spec into the product description, the feature map, the screen inventory, the flows and the screens of the whole product, before any feature is built",
+      "id": "product-design",
+      "kind": "practice",
+      "output": "a design folder a person can approve by looking at one page, in which every screen of the product is drawn with every state, every screen belongs to a feature of the map, and every screen uses the tokens",
+      "pairs_with": [
+        "ui-design",
+        "accessibility",
+        "story-splitting"
+      ],
+      "path": "practices/product-design.md"
+    },
+    {
       "apply_when": "a feature request has just arrived, in the person's own words, before any rule is written",
       "id": "request-decoder",
       "kind": "practice",

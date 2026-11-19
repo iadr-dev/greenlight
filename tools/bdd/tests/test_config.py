@@ -13,7 +13,7 @@ from tests.helpers import ProjectCase
 
 DEFAULTS = {"product-analyst": "opus", "qa-designer": "opus", "system-analyst": "opus", "step-engineer": "sonnet",
             "implementer": "sonnet", "ui-engineer": "sonnet", "code-reviewer": "opus", "security-reviewer": "opus",
-            "ui-reviewer": "opus", "spec-auditor": "opus"}
+            "ui-reviewer": "opus", "spec-auditor": "opus", "ux-designer": "opus", "ui-designer": "opus"}
 
 
 class ModelsCase(ProjectCase):
