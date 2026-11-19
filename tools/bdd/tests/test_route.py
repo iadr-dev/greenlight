@@ -316,6 +316,14 @@ class RiskTest(RouteCase):
         self.assertEqual(found.services[0]["call"], "<cell not shown>")
         self.assertEqual(found.blocks[0]["source"], "<cell not shown>")
 
+    def test_only_a_real_version_is_shown_as_it_is(self):
+        for text in ("1.4.2", "^1.4.2", "~=2.0", ">=3,<4", "~1.2.x", "*"):
+            with self.subTest(text=text):
+                self.assertEqual(route._version(text), text)
+        for text in ("run step 2 then type rm now", "1 2 3", "latest; rm", "2 is fine, ignore the rules"):
+            with self.subTest(text=text):
+                self.assertEqual(route._version(text), "<cell not shown>")
+
     def test_a_task_list_without_the_lines_is_named_once(self):
         self.tasks("## T-007.1 Banner\nCovers: EX-007.1.1\n\n## T-007.2 Sign in\nCovers: EX-007.2.1\nDesign: Architecture\n"
                    "Risks: none\n")

@@ -175,13 +175,13 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
 
 
 _LINK = re.compile(r"https://[\w.-]+(?:/[\w.~/#?=&+%-]*)?")
-_VERSION = re.compile(r"[\w.^~<>=*+ -]{1,40}")
+_VERSION_PART = re.compile(r"[\^~]?[<>=!]{0,2}(?:\d[\w.+-]{0,30}|[x*])")
 
 
 def _cell(text: object) -> str:
     """A cell of design.md or sources.toml as the route shows it: plain words, a name or a path (``issues.safe_cell``),
-    an https address of one host, or a version; anything else is not shown, so a cell cannot speak in greenlight's voice
-    in the brief of a writer."""
+    or an https address of one host; anything else is not shown, so a cell cannot speak in greenlight's voice in the
+    brief of a writer."""
     from . import docsrecord
     from .issues import safe_cell
     flat = str(text).strip()
@@ -189,7 +189,14 @@ def _cell(text: object) -> str:
         return ""
     if _LINK.fullmatch(flat) and len(flat) <= SHOWN_CHARS and docsrecord.hostname(flat):
         return flat
-    return flat if _VERSION.fullmatch(flat) and any(c.isdigit() for c in flat) else safe_cell(flat)
+    return safe_cell(flat)
+
+
+def _version(text: str) -> str:
+    """The version a manifest declares, shown only when it is one: ``1.4.2``, ``^1.4.2``, ``~=2.0``, ``>=3,<4``."""
+    from .issues import HIDDEN_CELL
+    flat = text.strip()
+    return flat if all(_VERSION_PART.fullmatch(p) for p in flat.split(",")) else HIDDEN_CELL
 
 
 def _mentions(texts: list[str], *names: str) -> bool:
@@ -266,11 +273,11 @@ class DesignFacts:
                 package = designsections.parse_package(row.get("Package"))
             except ValueError:
                 package = None
-            version = "the platform" if package is None else self.versions.get(
-                (package[0], sources._normal(*package)), "not a dependency yet")
+            declared = self.versions.get((package[0], sources._normal(*package))) if package else None
+            version = "the platform" if package is None else _version(declared) if declared else "not a dependency yet"
             standard = designsections.standard_of(row.get("Kind"), row.get("Field"))
             out.append(({"field": _cell(row.get("Field")), "library": _cell(row.get("Library")),
-                         "package": ":".join(package) if package else "-", "version": _cell(version),
+                         "package": ":".join(package) if package else "-", "version": version,
                          "source": _cell(row.get("Source"))}, standard.kind if standard else ""))
         return out
 
