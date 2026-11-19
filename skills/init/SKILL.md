@@ -1,12 +1,27 @@
 ---
 name: init
-description: Set this repository up for greenlight - check the machine, pick and apply a test adapter, and prove the sample feature runs green. Use when the user runs /greenlight:init or asks to set up or diagnose greenlight.
+description: Set this repository up for greenlight - check the machine, pick and apply a test adapter, and prove the sample feature runs green; with --product <spec file>, first design the whole product from a product spec for the person to approve by looking. Use when the user runs /greenlight:init or asks to set up or diagnose greenlight.
+argument-hint: '[--product <spec file>]'
 ---
 
 # greenlight init
 
 Prepare a repository for spec-driven development. Do the steps in order and show command output unchanged.
 Do not change anything on the machine without asking first.
+
+**From a product spec.** When the arguments are `--product <spec file>` (`$ARGUMENTS`), the person has a product spec
+and wants the whole product designed before any feature. Do step 1, then start the design stage and follow
+`phases/design.md` from its step 2 to the person's approval:
+
+```sh
+"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" init --product <spec file>
+```
+
+It sets the repository up when it is not yet, records `[design]` (the design folder, `design/`) and the stage, and adds
+the starting feature map and architecture without overwriting anything. The architecture decides the stack, so do
+steps 2 to 7 below once the person has approved the design: the adapter follows from it. Say plainly that the person
+approves the design by looking at one page, `design/gallery.html`, and typing `/greenlight:approve design`; until then
+no feature starts.
 
 1. **Check the machine.**
 

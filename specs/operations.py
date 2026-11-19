@@ -62,6 +62,8 @@ COMMANDS: dict[str, list[str]] = {
     "the prompt check": [*BDD, "tripwire", "--accept"],
     "the tool-call check": [*BDD, "tripwire"],
     "the approval hook": [*BDD, "approve", "--from-hook"],
+    "gallery": [*BDD, "gallery"],
+    "change": [*BDD, "change"],
 }
 
 LIB: dict[str, str] = {}
@@ -94,6 +96,17 @@ FILES: dict[str, str] = {
     "design system": "design/DESIGN.md",
     "design inventory": "design/inventory.md",
     "design screen": "design/screens/home.html",
+    "design tokens": "design/tokens.json",
+    "design token styles": "design/tokens.css",
+    "design flows": "design/flows.html",
+    "product description": "design/PRODUCT.md",
+    "gallery": "design/gallery.html",
+    "product spec": "product-spec.md",
+    "product map": ".bdd/product.md",
+    "architecture": ".bdd/architecture.md",
+    "design review": ".bdd/design-reviews/design-ui-reviewer.md",
+    "design record": ".bdd/design-stage.json",
+    "design lock record": ".bdd/design.lock.json",
     ".NET lock file": "tests/packages.lock.json",
     "Node lock file": "tests/pnpm-lock.yaml",
     "first feature state": ".bdd/features/FEAT-001-sign-in/state.json",

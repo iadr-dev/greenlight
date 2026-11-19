@@ -152,6 +152,9 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     problems += run_problems(root, data["feature"], gate, raw, data)
     kept = None if data.get("kind") == "adopt" else data.get("members_red", {})
     problems += workspace_problems(root, data["feature"], gate, member_raws, kept)
+    if gate == "discover" and data.get("kind") != "adopt":         # a started design stage: features wait for its approval
+        from . import designstage
+        problems += designstage.gate_problems(root)
     if gate == "test-design":
         problems += edgecheck.problems(feature_dir)
     if gate == "system-map" and (feature_dir / design.DESIGN_FILE).is_file():

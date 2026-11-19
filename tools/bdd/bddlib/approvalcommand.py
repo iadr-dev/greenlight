@@ -12,9 +12,11 @@ where Claude Code stores a slash command in its expanded form:
 
 Both must say the same thing, so an approval cannot borrow the prompt id of something else the person
 typed. Only a whole prompt in exactly this form counts. The same command acknowledges the open integrity
-violations:
+violations, and approves the product design the person looked at in the gallery:
 
     /greenlight:approve integrity tools reinstalled
+    /greenlight:approve design
+    /greenlight:approve design reject the order list needs a filter
 """
 from __future__ import annotations
 
@@ -23,10 +25,11 @@ import re
 COMMAND = "/greenlight:approve"
 PROMPT = re.compile(r"/greenlight:approve[ \t]+(FEAT-\d+)[ \t]+(rules|examples)(?:[ \t]+(reject)(?:[ \t]+(\S.*))?)?")
 INTEGRITY_PROMPT = re.compile(r"/greenlight:approve[ \t]+integrity(?:[ \t]+(\S.*))?")
+DESIGN_PROMPT = re.compile(r"/greenlight:approve[ \t]+design(?:[ \t]+(reject)(?:[ \t]+(\S.*))?)?")
 CODEX_COMMAND = "$greenlight-approve"
 CODEX_PROMPT = re.compile(r"\$greenlight-approve[ 	]+(FEAT-\d+)[ 	]+(rules|examples)(?:[ 	]+(reject)(?:[ 	]+(\S.*))?)?")
 _GATE_COMMAND = r"FEAT-\d+[ \t]+(?:rules|examples)"
-HOLDS_COMMAND = re.compile(r"/greenlight:approve[ \t]+(?:" + _GATE_COMMAND + r"|integrity)\b")
+HOLDS_COMMAND = re.compile(r"/greenlight:approve[ \t]+(?:" + _GATE_COMMAND + r"|integrity|design)\b")
 CODEX_HOLDS_COMMAND = re.compile(r"\$greenlight-approve[ \t]+" + _GATE_COMMAND + r"\b")
 REJECT_AFTER = re.compile(r"[ \t]+reject\b")
 _EXPANDED = re.compile(r"<command-message>[^<\n]*</command-message>\s*<command-name>/greenlight:approve</command-name>"
@@ -48,6 +51,14 @@ def parse_integrity(prompt: object) -> str | None:
     """The reason when the whole prompt is an integrity acknowledgement ("" when it gives none), else None."""
     match = INTEGRITY_PROMPT.fullmatch(prompt.strip()) if isinstance(prompt, str) else None
     return None if match is None else (match.group(1) or "").strip()
+
+
+def parse_design(prompt: object) -> tuple[str, str] | None:
+    """(decision, reason) when the whole prompt is a design approval or rejection, else None."""
+    match = DESIGN_PROMPT.fullmatch(prompt.strip()) if isinstance(prompt, str) else None
+    if match is None:
+        return None
+    return ("reject", match.group(2) or "no reason given") if match.group(1) else ("approve", "")
 
 
 def holds_command(prompt: object, pattern: re.Pattern[str] = HOLDS_COMMAND) -> re.Match[str] | None:
@@ -81,3 +92,9 @@ def matches(entry: dict, feature: str, gate: str, decision: str) -> bool:
     """Does this transcript entry say exactly the approval that was recorded?"""
     parsed = parse(typed_text(entry))
     return parsed is not None and parsed[:2] == (feature, gate) and (parsed[2] is not None) == (decision == "reject")
+
+
+def matches_design(entry: dict, decision: str) -> bool:
+    """Does this transcript entry say exactly the design approval (or rejection) that was recorded?"""
+    parsed = parse_design(typed_text(entry))
+    return parsed is not None and parsed[0] == decision

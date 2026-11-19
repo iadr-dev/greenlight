@@ -6,6 +6,7 @@
     bdd approve FEAT-007 --verify                   check pending approvals against the transcript
     bdd approve FEAT-007 --check                    CI: judge the committed record alone (no session needed)
     bdd approve FEAT-007 rules --summary            the rules in plain words, after a change only what changed (read-only)
+    bdd approve design --summary | --verify | --check   the product design (approved by the person: /greenlight:approve design)
 
 Approvals typed by the person in a session with hooks are recorded by the UserPromptSubmit hook
 (``bdd approve --from-hook``, input on stdin), not by the other forms; ``--self-reported`` is
@@ -16,13 +17,16 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import approvals, approvalsummary, enforcement, state, store
+from . import approvals, approvalsummary, enforcement, lockfile, state, store
+from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import project_root
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="bdd approve", description="Record or verify human approvals.")
+    ap = argparse.ArgumentParser(prog="bdd approve", description="Record or verify human approvals.",
+                                 epilog="The product design: bdd approve {design} --summary | --verify | --check | "
+                                        "--self-reported (see bdd approve design --help).")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
     ap.add_argument("gate", nargs="?", choices=approvals.GATES, help="the human gate")
     how = ap.add_mutually_exclusive_group()
@@ -96,6 +100,52 @@ def do_record(root, feature_dir, args: argparse.Namespace) -> int:
     return 0
 
 
+def design_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="bdd approve design", description="The product design: summary, verification, check.")
+    how = ap.add_mutually_exclusive_group(required=True)
+    how.add_argument("--summary", action="store_true",
+                     help="read-only: what the person approves, and after a change only what changed since their approval")
+    how.add_argument("--verify", action="store_true", help="verify a pending design approval against the session transcript")
+    how.add_argument("--check", action="store_true", help="CI: exit 1 unless the started design stage is validly approved")
+    how.add_argument("--self-reported", action="store_true",
+                     help="record the person's answer when no hooks are active in this session (refused once they have run)")
+    ap.add_argument("--reject", action="store_true", help="with --self-reported: record a rejection")
+    ap.add_argument("--reason", default="", help="why (kept with the record)")
+    return ap
+
+
+def run_design(argv: list[str]) -> int:
+    from . import designstage
+
+    args = design_parser().parse_args(argv)
+    root = project_root()
+    if (args.reject or args.reason) and not args.self_reported:
+        raise UsageError("--reject and --reason go with --self-reported; the person rejects by typing "
+                         "/greenlight:approve design reject <reason>")
+    if args.summary:
+        print(designstage.summary_text(root))
+        return 0
+    if args.self_reported:
+        designstage.record(root, "reject" if args.reject else "approve", "self-reported", reason=args.reason,
+                           session=enforcement.current_session())
+        print(f"design {'rejected' if args.reject else 'approved and locked'} (self-reported)")
+        print("note: this approval is self-reported, not verified by a hook.", file=sys.stderr)
+        return 0
+    data = designstage.load(root)
+    if data is None and not lockfile.design_path(root).exists():
+        print("design: the design stage has not started; nothing to approve")
+        return 0
+    if args.verify and data is not None:
+        print(f"design: verified {designstage.verify(root)} approval(s)")
+        for a in designstage.load(root)["approvals"]:
+            if a["grade"] == "hook":
+                print(f"  #{a['id']} {a['decision']}: {a['origin']}" + (f" ({a['evidence']})" if a.get("evidence") else ""))
+        return 0 if all(a["origin"] != "pending" for a in designstage.load(root)["approvals"] if a["grade"] == "hook") else 1
+    info = designstage.status(root)
+    print(designstage.status_line(info))
+    return 0 if info["stage"] == "approved" and not info["problems"] else 1
+
+
 def run(argv: list[str]) -> int:
     if argv == ["--from-hook"]:                     # UserPromptSubmit: cheap for every other prompt
         from . import approvehook
@@ -104,6 +154,12 @@ def run(argv: list[str]) -> int:
         print("bdd approve: only the person can acknowledge an integrity violation, by typing "
               "/greenlight:approve integrity <reason>; no command records it", file=sys.stderr)
         return 2
+    if argv[:1] == ["design"]:
+        try:
+            return run_design(argv[1:])
+        except (UsageError, StoreError, cfg.ConfigError) as exc:
+            print(f"bdd approve: {exc}", file=sys.stderr)
+            return 2
     args = build_parser().parse_args(argv)
     try:
         root = project_root()

@@ -7,7 +7,7 @@ blocks (exit 2, reason on stderr, which the model sees).
 What it blocks inside a greenlight project:
 
 * edits to files locked by a feature (approved specs, bound steps and drivers) or by the project (the shared
-  test plumbing);
+  test plumbing, the approved product design and every file added to its folder);
 * edits to the CLI-managed data files (``state.json``, ``lock.json``, ``.bdd/config.toml``,
   enforcement markers);
 * edits to what enforces all of this: the plugin's own files, and Claude Code settings or hooks
@@ -62,12 +62,15 @@ AGENT_WRITES = {
     "security-reviewer": {"data"},
     "ui-reviewer": {"data"},
     "spec-auditor": set(),
+    "ux-designer": {"data", "production"},  # the design stage: the design folder, the feature map (.bdd/product.md)
+    "ui-designer": {"production"},          # the design folder only (it is not a test or a step folder)
 }
 # A subagent that is not one of greenlight's (a built-in one, a user's own, another plugin's) gets what the implementer
 # gets: it may never write the feature files or the steps, whichever tests are locked yet.
 FOREIGN_AGENT = "another agent"
 FOREIGN_WRITES = {"data", "production"}
-MANAGED_NAMES = {"state.json", "lock.json", "docs-consulted.json", sharedvocab.LOCK_NAME, lockfile.PLUMBING_FILE}
+MANAGED_NAMES = {"state.json", "lock.json", "docs-consulted.json", sharedvocab.LOCK_NAME, lockfile.PLUMBING_FILE,
+                 lockfile.DESIGN_FILE, "design-stage.json"}
 MANAGED_SUFFIXES = (".lock", ".tmp")
 MANAGED_DIRS = (".enforcement", ".integrity", ".runs")   # session markers, integrity data, recorded test runs
 ENVIRONMENT_DIRS = (".venv", "venv")           # the project's interpreter and packages: installed by the person
@@ -76,7 +79,7 @@ MANAGED_CONFIG = "config.toml"          # only .bdd/config.toml: other projects 
 PERSON_FILES = (MANAGED_CONFIG, "standards.md", "sources.toml")   # in .bdd/, edited by the person only
 SETTINGS_NAMES = {"settings.json", "settings.local.json"}
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
-PROJECT_OWNER = "the project"           # who holds the plumbing lock
+PROJECT_OWNER = "the project"           # who holds the plumbing lock and the design lock
 
 _APPROVAL_TEXT = re.compile(r"greenlight:(?:approve|reject)\b|\$greenlight-(?:approve|reject)\b", re.IGNORECASE)
 # Codex: its hook entry points are not for an agent to run (a made-up payload could fake an approval), and its home,
@@ -149,6 +152,7 @@ class Project:
         self.root = root.resolve()
         self.config = cfg.load(self.root)
         self.locked: dict[str, Locked] = {}
+        self.design_folder: str | None = None    # path_key of the approved design's folder while it is locked
         self.shared = {path_key(f): f for f in sharedvocab.protected_files(self.config.vocabulary_file)}   # included vocabularies
         self.load_locks()
         # The other repositories of a workspace are protected with their own locks and data, wherever the tool call
@@ -181,6 +185,21 @@ class Project:
         if not plumbing.get("unlocked"):
             for rel in plumbing.get("files", {}):
                 self.locked[path_key(self.root / rel)] = Locked(PROJECT_OWNER, lockfile.PLUMBING, self.root / rel)
+        design = lockfile.read_design(self.root)                    # StoreError propagates: fail closed
+        if lockfile.design_locked(design):
+            for rel in design["files"]:
+                self.locked[path_key(self.root / rel)] = Locked(PROJECT_OWNER, lockfile.DESIGN, self.root / rel)
+            self.design_folder = path_key(self.root / design["folder"])
+
+    def design_lock(self, path: Path) -> Locked | None:
+        """A file added to the approved design's folder is locked with it (hidden folders and the gallery are not)."""
+        key = path_key(path)
+        if self.design_folder is None or not key.startswith(self.design_folder + "/"):
+            return None
+        parts = key[len(self.design_folder) + 1:].split("/")
+        if parts == ["gallery.html"] or any(part.startswith(".") for part in parts):
+            return None
+        return Locked(PROJECT_OWNER, lockfile.DESIGN, path)
 
     def relative(self, path: Path) -> str:
         try:
@@ -214,6 +233,11 @@ class Project:
 
 
 def locked_message(project: Project, path: Path, lock: Locked) -> str:
+    if lock.scope == lockfile.DESIGN:
+        return (f"greenlight: {project.relative(path)} is part of the approved product design, locked by the project. The "
+                "code is built against what the person approved, so a change to the design is the person's: stop and "
+                "say what should change; /greenlight:change reopens it (`bdd change --reopen design --reason \"...\"`), "
+                "and the person approves it again with /greenlight:approve design.")
     if lock.scope == lockfile.PLUMBING:
         return (f"greenlight: {project.relative(path)} is shared test plumbing, locked by the project. Every feature's "
                 "tests run on it, so a change to it is its own change: the person or the orchestrator releases it with "
@@ -434,7 +458,7 @@ def record_review(project: Project, payload: dict, target: Path, agent: str | No
 
 
 def check_file_write(project: Project, path: Path, agent: str | None) -> str | None:
-    lock = project.locked.get(path_key(path))
+    lock = project.locked.get(path_key(path)) or project.design_lock(path)
     if lock:
         return locked_message(project, path, lock)
     if project.is_data(path) or path_key(path) in project.shared:

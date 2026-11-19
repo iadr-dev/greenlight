@@ -89,6 +89,13 @@ def plumbing_status(root: Path) -> dict | None:
             "rerun": sorted(rerun)}
 
 
+def design_status(root: Path) -> dict:
+    """The product design stage: not started, drafted or approved, and whether it is locked."""
+    from . import designstage
+    designstage.safe_verify(root)
+    return designstage.status(root)
+
+
 def plumbing_line(info: dict) -> str:
     if info["unlocked"]:
         return (f"plumbing: unlocked at {info['unlocked']['at']} ({info['unlocked']['reason']}); "
@@ -184,15 +191,20 @@ def do_status(root: Path, as_json: bool) -> int:
     facts = toolchain.recorded(root, config)
     violations = open_violation_count(root)
     plumbing = plumbing_status(root)
+    design = design_status(root)
     if as_json:
         print(json.dumps({"features": rows, "costs": costs, "models": [vars(c) for c in models.choices(chosen)],
                           "model_problems": models.problems(chosen), "open_violations": violations, "plumbing": plumbing,
+                          "design": design,
                           "unverified_surfaces": unverified, "config_warnings": list(config.warnings), "recorded": facts},
                          indent=2, ensure_ascii=False))
         return 0
     print(table(rows) if rows else "no features yet; start one with /greenlight:feature")
     if plumbing is not None:
         print(plumbing_line(plumbing))
+    if design["stage"] != "not started" or config.design is not None:
+        from . import designstage
+        print(designstage.status_line(design))
     print(models.render(chosen))
     for line in toolchain.recorded_lines(facts):
         print(line)

@@ -762,6 +762,59 @@ class PlumbingTest(unittest.TestCase):
         self.assertIsNotNone(self.write_as("implementer", "src/app.py"))
 
 
+class DesignLockTest(unittest.TestCase):
+    """The approved product design is locked by the project, against every agent and the orchestrator."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name).resolve()
+        (self.root / ".bdd").mkdir()
+        (self.root / ".bdd" / "config.toml").write_text('[[adapters]]\nname = "x"\nfeatures = "features"\n', encoding="utf-8")
+        files = {}
+        for rel in ("design/screens/home.html", "design/DESIGN.md", ".bdd/product.md"):
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text("x\n", encoding="utf-8")
+            files[rel] = lockfile.file_digest(self.root / rel)
+        lockfile.lock_design(self.root, "design", files, "design approved (#1)")
+
+    def write_as(self, agent: str | None, rel: str, tool: str = "Write") -> str | None:
+        payload = {"tool_name": tool, "tool_input": {"file_path": str(self.root / rel)}, "cwd": str(self.root)}
+        if agent:
+            payload["agent_type"] = f"greenlight:{agent}"
+        return guard.evaluate(payload)
+
+    def test_every_agent_and_the_orchestrator_are_refused_a_locked_design_file(self):
+        for agent in (None, "ux-designer", "ui-designer", "implementer", "ui-engineer"):
+            for rel in ("design/screens/home.html", ".bdd/product.md"):
+                with self.subTest(agent=agent, rel=rel):
+                    reason = self.write_as(agent, rel)
+                    self.assertIn(f"{rel} is part of the approved product design, locked by the project", reason)
+                    self.assertIn("bdd change --reopen design", reason)
+
+    def test_a_file_added_to_the_locked_folder_is_refused_but_its_hidden_files_and_the_gallery_are_not(self):
+        self.assertIn("approved product design", self.write_as(None, "design/screens/checkout.html"))
+        self.assertIsNone(self.write_as(None, "design/gallery.html"))
+        self.assertIsNone(self.write_as(None, "design/.impeccable/design.json"))
+        self.assertIsNone(self.write_as("implementer", "src/app.py"))
+
+    def test_a_shell_command_that_writes_a_locked_screen_is_refused(self):
+        payload = {"tool_name": "Bash", "tool_input": {"command": "rm design/screens/home.html"}, "cwd": str(self.root)}
+        self.assertIn("approved product design", guard.evaluate(payload))
+
+    def test_released_design_is_open_again_and_the_records_stay_the_command_lines(self):
+        lockfile.unlock_design(self.root, "a new filter")
+        self.assertIsNone(self.write_as("ui-designer", "design/screens/home.html"))
+        self.assertIsNone(self.write_as("ux-designer", ".bdd/product.md"))
+        self.assertIn("ui-designer agent may not write data files", self.write_as("ui-designer", ".bdd/product.md"))
+        for rel in (".bdd/design.lock.json", ".bdd/design-stage.json"):
+            self.assertIn("managed by the bdd command line", self.write_as(None, rel))
+
+    def test_an_unreadable_design_lock_fails_closed(self):
+        lockfile.design_path(self.root).write_text("{not json", encoding="utf-8")
+        self.assertIsNotNone(self.write_as("implementer", "src/app.py"))
+
+
 class PerformanceTest(unittest.TestCase):
     def test_fifty_locked_features_are_evaluated_quickly(self):
         with tempfile.TemporaryDirectory() as d:

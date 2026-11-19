@@ -23,12 +23,13 @@ from pathlib import Path
 from . import featurefiles
 from .errors import UsageError
 
-NOUN = {"rules": ("rule", "rules"), "examples": ("scenario", "scenarios")}
+NOUN = {"rules": ("rule", "rules"), "examples": ("scenario", "scenarios"), "design": ("item", "items")}
 OUTSIDE = {"rules": "text outside the rules (headings, out of scope, glossary or notes)",
-           "examples": "text outside the scenarios (names, descriptions, tags or comments of the feature and its rules)"}
+           "examples": "text outside the scenarios (names, descriptions, tags or comments of the feature and its rules)",
+           "design": "text outside the tables of the feature map and the inventory (headings and notes)"}
 BULLET = re.compile(r"^\s*[-*+]\s+([^:]{1,40}):\s*(.*)$")
 HEADING = re.compile(r"^\s*#{1,6}\s")
-LABEL = {"rules": "statement", "examples": "title"}
+LABEL = {"rules": "statement", "examples": "title", "design": "title"}
 SHOWS_EXTRA = {"tags", "description", "all"}
 PART_WORDS = {"all": "other text of the item", "notes": "free text under the rule"}
 OUTSIDE_SHOWN = 12

@@ -1,6 +1,6 @@
 ---
 name: approve
-description: Approve or reject the rules or the examples of a feature, or acknowledge open integrity violations. Only the person can run this by typing /greenlight:approve FEAT-n rules|examples (add "reject <reason>" to reject) or /greenlight:approve integrity <ids> <reason>; the AI never invokes it.
+description: Approve or reject the rules or the examples of a feature, or the product design, or acknowledge open integrity violations. Only the person can run this by typing /greenlight:approve FEAT-n rules|examples or /greenlight:approve design (add "reject <reason>" to reject) or /greenlight:approve integrity <ids> <reason>; the AI never invokes it.
 disable-model-invocation: true
 ---
 
@@ -34,8 +34,17 @@ to stand in for the person when the hook has run.
    close once the transcript shows the person typed it, so run it again after the next turn if they are
    still open. Never edit `.bdd/.integrity` and never try to acknowledge anything yourself: no command
    does it.
+   If the person typed `design` (or `design reject <reason>`), run these instead and show the output unchanged:
+
+   ```sh
+   "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" approve design --verify
+   "${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" status
+   ```
+
+   `design: approved, locked` means the features can start, in the order of `.bdd/product.md`. A rejection goes back to
+   the step of `phases/design.md` that owns what the person wants changed.
 3. If there is **no** `greenlight approval:` line at all, hooks are not active in this session.
    Say so. In a project that allows it (`enforcement = "soft"`, or hooks never having run), ask the
    person to confirm in plain words, and only then record their answer with
-   `bdd approve <FEAT-n> <gate> --self-reported`. The command refuses when the project requires
-   hard enforcement; relay that refusal and do not look for another way.
+   `bdd approve <FEAT-n> <gate> --self-reported` (for the design, `bdd approve design --self-reported`). The command
+   refuses when the project requires hard enforcement; relay that refusal and do not look for another way.

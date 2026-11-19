@@ -348,14 +348,17 @@ def age_exceeds_timeout(at: str) -> bool:
         return True
 
 
-def says_something_else(entries: list[dict], feature: str, approval: dict) -> bool:
+def says_something_else(entries: list[dict], feature: str | None, approval: dict) -> bool:
     """Is any entry of the prompt not exactly the approval that was recorded?
 
-    Without this an approval could borrow the prompt id of anything else the person typed."""
+    Without this an approval could borrow the prompt id of anything else the person typed. A feature of None is the
+    product design, approved with ``/greenlight:approve design``."""
+    if feature is None:
+        return not all(approvalcommand.matches_design(e, approval["decision"]) for e in entries)
     return not all(approvalcommand.matches(e, feature, approval["gate"], approval["decision"]) for e in entries)
 
 
-def verdict_for(approval: dict, feature: str, earlier: list[dict]) -> tuple[str, str] | None:
+def verdict_for(approval: dict, feature: str | None, earlier: list[dict]) -> tuple[str, str] | None:
     """New (origin, evidence) for a pending hook approval, or None if it still cannot be decided."""
     if not approval.get("transcript_path") or not approval.get("prompt_id"):
         return "unverifiable", "the hook did not record where the prompt came from"
@@ -397,7 +400,7 @@ def pending_verdicts(data: dict) -> dict[int, tuple[str, str]]:
     verdicts = {}
     for index, approval in enumerate(data["approvals"]):
         if approval["grade"] == "hook" and approval["origin"] == "pending":
-            verdict = verdict_for(approval, data["feature"], data["approvals"][:index])
+            verdict = verdict_for(approval, data.get("feature"), data["approvals"][:index])
             if verdict:
                 verdicts[approval["id"]] = verdict
     return verdicts

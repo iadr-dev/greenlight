@@ -51,6 +51,14 @@ request ─▶ rules ─▶ test design ─▶ examples ─▶ system map + desi
   vendor's own pages and not a guess. It records your `design/` folder as `[design]` and lists the surfaces you ship (web,
   iOS, Android, API, command line) with the adapter that verifies each. `bdd status` lists what was recorded and shows
   a surface no adapter covers as unverified, so nobody mistakes a tested API for tested screens.
+- **From a product spec to a design you approve by looking.** With only a product spec, `/greenlight:init --product
+  spec.md` first designs the whole product, once: who it is for and their jobs (`design/PRODUCT.md`), every feature in
+  build order (`.bdd/product.md`), the architecture decided once (`.bdd/architecture.md`: stack per surface, layers,
+  hosting, sign-in, data store, security and threat model, observability, delivery), and every screen as real HTML in
+  every state, with the flows and the design tokens. `bdd gallery` builds one page that needs no network, with every
+  screen and state grouped by feature; the `ui-reviewer` reviews the design first, and you approve it by typing
+  `/greenlight:approve design`. The approved design is locked: every feature is built against what you saw, and a change
+  goes back through you (`/greenlight:change`).
 - **Mistakes are caught early, not by the auditor at the end.** `bdd lint` refuses two record tables of one entity with
   different columns. `bdd classify` refuses a red in which a scenario tagged `@existing` fails. The test-design gate asks
   for the edge examples a `boundary-value` rule needs. Where the hooks run, the implement gate refuses a review older
@@ -110,6 +118,10 @@ independent audit, so the report shows what was recorded up to the green run.
 
 ## How it works
 
+0. **Design the product first, if you start from a product spec.** `/greenlight:init --product spec.md` runs the
+   design stage (`phases/design.md`): the `ux-designer` and the `ui-designer` write the product description, the
+   feature map, the screen inventory, the flows and the screens; `bdd gallery --check` checks them; the `ui-reviewer`
+   reviews them; you look at `design/gallery.html` and type `/greenlight:approve design`. Until then no feature starts.
 1. **Set up once.** `/greenlight:init` checks the machine, recommends a test adapter for you to confirm, creates
    `.bdd/` and the adapter's `tests/` skeleton, and proves a sample feature runs (install the adapter's test
    requirements first; for Python, `pytest` and `pytest-bdd`). It writes greenlight's default engineering standards to
@@ -137,6 +149,7 @@ independent audit, so the report shows what was recorded up to the green run.
 
 | Phase | Agent |
 |---|---|
+| product and design (once per product) | `ux-designer`, `ui-designer`; reviewed by `ui-reviewer` |
 | discover, specify | `product-analyst` |
 | test design, examples | `qa-designer` |
 | system map | `system-analyst` |
