@@ -75,7 +75,12 @@ request ─▶ rules ─▶ test design ─▶ examples ─▶ system map + desi
 - **The right specialist for each task, chosen for you.** In the code stage `bdd route` reads each task's scenarios and
   names who writes it (the `implementer`, or the `ui-engineer` for screens) and who reviews it (a `code-reviewer`
   always, a `ui-reviewer` for screens, a `security-reviewer` for signing in, money or personal data). Nobody is asked;
-  the implement gate waits for every review, and the report shows the routing and each verdict. Each agent runs on the
+  the implement gate waits for every review, and the report shows the routing and each verdict. It also names what each
+  task builds against: the sections of the technical design, the screens, the libraries with their versions, the
+  outside services with the page, MCP server or CLI to check each call against, and the known risks (concurrent
+  writes, retries, rate limits, storage errors, authorisation, personal data, time zones, large lists) that the code
+  reviewer answers one by one. Tasks that touch different files are built at the same time, and the UI reviewer
+  compares each built screen with its design side by side. Each agent runs on the
   model its file names; `[models]` in `.bdd/config.toml` changes one (`implementer = "opus"`), and `bdd status` shows
   the model of every agent.
 - **Deterministic work is code, not prompts.** Lint, trace, locks, gates and classification are the `bdd` command line
@@ -141,7 +146,8 @@ independent audit, so the report shows what was recorded up to the green run.
    `/greenlight:approve FEAT-n rules|examples`. Approved examples lock the feature files.
 4. **Red, then green.** The steps and drivers are written and run; every new scenario must fail for the intended
    reason before any code is written. Then each task goes to the writer `bdd route` picks for it, which writes the code
-   until its scenarios pass, and to its reviewers (code, UI, security), whose must-fix findings go back to the writer.
+   against the design until its scenarios pass, and to its reviewers (code, UI, security), whose must-fix findings go
+   back to the writer. Your quality checks run after every task.
 5. **Verify.** The `spec-auditor` agent is read-only. It checks the evidence against `review/checklist.md` and returns
    a report, which the orchestrator saves as `report.md`. `Verdict: PASS` means no blocking checklist item failed. That
    covers more than the rules and the tests. It includes approvals given the way the mode requires, a red proven before
@@ -293,7 +299,8 @@ these lines say `bdd` (see *Running `bdd` yourself*), or ask Claude to run them:
 bdd init --detect                                 # which adapter fits this repository, and why
 bdd init --refresh                                # record the sources, checks, design folder and surfaces a project gained
 bdd approve FEAT-001 rules --summary              # what you are about to approve, in plain words
-bdd route FEAT-001                                # who writes and who reviews each task, and why
+bdd route FEAT-001                                # who writes and who reviews each task, its design and risks, and the order
+bdd check FEAT-001 --task T-001.1                 # the checks after one task, the architecture checker among them
 bdd check FEAT-001                                # your formatter, linter and type checker, once configured
 bdd mode FEAT-001 --switch autopilot --reason "you decide"   # change the autonomy level, with your words
 bdd pr FEAT-001                                   # a pull-request description from the recorded facts
