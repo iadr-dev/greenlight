@@ -24,7 +24,7 @@ import re
 import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import config as cfg
 from . import featurefiles, gherkin, reviewfresh, reviewlog, roles, store, trace, vocabulary
@@ -58,6 +58,7 @@ class Route:
     reviewers: list[str]
     cards: list[str]
     because: list[str] = field(default_factory=list)
+    design: list[str] = field(default_factory=list)       # a UI task: the feature's rows of the design's screen inventory
 
 
 def _instruction_ids(vocab: vocabulary.Vocabulary, step: gherkin.Step, language: str) -> list[str]:
@@ -104,6 +105,7 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
         title = "the whole feature" if not tasks else "the examples no task claims"
         reserved = tasks.setdefault(whole_feature_task(feature_id), {"title": title, "examples": []})
         reserved["examples"] = reserved["examples"] + [e for e in unclaimed if e not in reserved["examples"]]   # never overwritten
+    screens = designed_screens(root, config, feature_id)
     out: list[Route] = []
     for task_id, task in tasks.items():
         ids: list[str] = []
@@ -125,8 +127,22 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
         kinds = [k for k, hit in (("ui", ui), ("api", api), ("data", data), ("security", auth or words)) if hit]
         reviewers = ["code-reviewer"] + (["security-reviewer"] if "security" in kinds else []) + (["ui-reviewer"] if ui else [])
         cards = [c for k in kinds for c in CARDS[k] if (PRACTICES / f"{c}.md").is_file()]
-        out.append(Route(task_id, task["title"], "ui-engineer" if ui else "implementer", reviewers, cards, because))
+        out.append(Route(task_id, task["title"], "ui-engineer" if ui else "implementer", reviewers, cards, because,
+                         screens if ui else []))
     return out
+
+
+def designed_screens(root: Path, config: cfg.Config, feature_id: str) -> list[str]:
+    """The rows of the design's screen inventory (``[design]``) that name the feature: id, screen, file and states."""
+    from . import designfolder
+    try:
+        inventory = designfolder.files_of(config, designfolder.folder_of(config))["inventory"]
+        rows = designfolder.inventory_rows(root / inventory)[0] if (root / inventory).is_file() else []
+    except (UsageError, OSError, ValueError):
+        return []
+    base = PurePosixPath(inventory).parent
+    return [f"{r.id} {r.screen}: {(base / r.file).as_posix() if r.file else 'no screen file'} ({', '.join(r.states)})"
+            for r in rows if feature_id in r.features]
 
 
 def whole_feature_task(feature_id: str) -> str:
@@ -230,7 +246,8 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
 def describe(route: Route) -> str:
     lines = [f"{route.task} {route.title}".rstrip(), f"  writer: {route.writer}", f"  reviewers: {', '.join(route.reviewers)}",
              f"  cards: {', '.join(route.cards) or '(the language card only)'}"]
-    return "\n".join(lines + ([f"  because: {'; '.join(route.because)}"] if route.because else []))
+    lines += [f"  because: {'; '.join(route.because)}"] if route.because else []
+    return "\n".join(lines + ([f"  design: {'; '.join(route.design)}"] if route.design else []))
 
 
 def run(argv: list[str]) -> int:

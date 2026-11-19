@@ -26,6 +26,7 @@ COMMANDS = {
     "trace": ("reportcmd", "run_trace"),
     "scan": ("reportcmd", "run_scan"),
     "design": ("design", "run"),
+    "gallery": ("gallery", "run"),
     "route": ("route", "run"),
     "helpers": ("helpers", "run"),
     "docs": ("docsrecord", "run"),

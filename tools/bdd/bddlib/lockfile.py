@@ -11,6 +11,10 @@ settings, package manifests) and the step and driver files the adapters ship. Ev
 is locked once for the project, and a change to it is its own change (``bdd lock --plumbing``), after which every
 feature reruns its scenarios once and none is reopened.
 
+``.bdd/design.lock.json`` (one per project) records the product design the person approved (``designstage``): the files
+of the design folder, the feature map and the architecture, and the folder itself, so a file added to it is refused too.
+It is written by the approval and released only by ``bdd change --reopen design``.
+
 Every locked file in the step and driver folders has one owner: the plumbing, or the feature whose bind lock took it
 first. A file no lock covers is a violation of every bound feature, except a step or driver file while another
 feature is locked but not bound (between its approved examples and its bind lock, or reopened before it): that file
@@ -41,7 +45,8 @@ _SKIP_DIRS = {"__pycache__", "node_modules", ".git"}
 _ADDED = {"spec": "is tagged for this feature but was never locked",
           "bind": "is in a step or driver folder, and neither a feature's bind lock nor the plumbing lock covers it",
           PLUMBING: "is shared test plumbing that the plumbing lock does not cover; lock it with "
-                    "`bdd lock --plumbing --reason \"...\"`"}
+                    "`bdd lock --plumbing --reason \"...\"`",
+          "design": "was added to the approved product design after it was locked"}
 
 
 @dataclass(frozen=True)
@@ -362,6 +367,58 @@ def migrate_legacy(root: Path, candidates: set[str]) -> list[str]:
         store.write_json(feature_dir / LOCK_FILE, data)
         notes.append(f"{fid}: keeps {len(own)} file(s) of its own; {len(gone)} moved to the plumbing or an earlier feature")
     return notes
+
+
+# -- the design lock -----------------------------------------------------------------------------------------------
+DESIGN = "design"                       # the scope of the approved product design
+DESIGN_FILE = "design.lock.json"
+
+
+def design_path(root: Path) -> Path:
+    return root / cfg.BDD_DIR / DESIGN_FILE
+
+
+def read_design(root: Path) -> dict:
+    """The design lock. ``files`` and ``folder`` are there while the approved design is locked; ``unlocked`` holds when
+    and why it was released."""
+    path = design_path(root)
+    if path.exists():
+        return store.read_json(path, "design lock file")
+    return {"schema": store.SCHEMA, "unlocked": None, "history": []}
+
+
+def design_locked(data: dict) -> bool:
+    return "files" in data and not data.get("unlocked")
+
+
+def lock_design(root: Path, folder: str, files: dict[str, str], reason: str) -> None:
+    """Lock the approved design as it is: its files, and its folder, so that a file added to it is refused too."""
+    data = read_design(root)
+    now = store.utc_now()
+    data.update({"locked_at": now, "folder": folder, "files": files, "unlocked": None})
+    data["history"].append({"event": "lock", "at": now, "reason": reason, "digest": files_digest(files)})
+    store.write_json(design_path(root), data)
+
+
+def unlock_design(root: Path, reason: str) -> bool:
+    """Release the design lock with a reason; False when it was not locked."""
+    data = read_design(root)
+    if not design_locked(data):
+        return False
+    now = store.utc_now()
+    data["unlocked"] = {"at": now, "reason": reason}
+    data["history"].append({"event": "unlock", "at": now, "reason": reason})
+    store.write_json(design_path(root), data)
+    return True
+
+
+def design_violations(root: Path, current: list[str]) -> list[Violation]:
+    """The locked design files that changed or are gone, and the files of ``current`` (what the design covers now) that
+    the lock does not hold. Nothing while the design is not locked."""
+    data = read_design(root)
+    if not design_locked(data):
+        return []
+    return _compare(root, DESIGN, data["files"]) + [Violation(DESIGN, rel, "added") for rel in current if rel not in data["files"]]
 
 
 # -- checking ------------------------------------------------------------------------------------------------------

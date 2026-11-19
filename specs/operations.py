@@ -105,7 +105,7 @@ FILES: dict[str, str] = {
     "product map": ".bdd/product.md",
     "architecture": ".bdd/architecture.md",
     "design review": ".bdd/design-reviews/design-ui-reviewer.md",
-    "design record": ".bdd/design.json",
+    "design record": ".bdd/design-stage.json",
     "design lock record": ".bdd/design.lock.json",
     ".NET lock file": "tests/packages.lock.json",
     "Node lock file": "tests/pnpm-lock.yaml",

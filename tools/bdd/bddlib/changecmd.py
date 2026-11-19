@@ -1,6 +1,7 @@
 """`bdd change`: reopen a feature at an earlier phase because something that was approved has to change.
 
     bdd change FEAT-007 --reopen examples --reason "the threshold is now 500, not 1000"
+    bdd change --reopen design --reason "the order list needs a filter"     (the product design: ``designstage``)
 
 What it does, in one step, so nothing is left half-undone:
 
@@ -28,6 +29,7 @@ from .statecmd import guarded, project_root
 
 REOPENABLE = state.PHASES[:-1]                       # everything but "done"
 SPEC_FROM, BIND_FROM = "examples", "bind"            # reopening at or before these phases releases the locks
+DESIGN = "design"                                    # the product design, approved once for the whole product
 
 
 def index(phase: str) -> int:
@@ -108,15 +110,23 @@ def describe(entry: dict, feature: str) -> str:
 
 
 def run(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="bdd change", description="Reopen a feature at an earlier phase.")
-    ap.add_argument("feature", help="feature id, e.g. FEAT-007")
-    ap.add_argument("--reopen", required=True, choices=REOPENABLE, metavar="PHASE",
-                    help=f"the first phase to redo ({', '.join(REOPENABLE)})")
+    ap = argparse.ArgumentParser(prog="bdd change", description="Reopen a feature at an earlier phase, or the product design.")
+    ap.add_argument("feature", nargs="?", help="feature id, e.g. FEAT-007 (none with --reopen design)")
+    ap.add_argument("--reopen", required=True, choices=(*REOPENABLE, DESIGN), metavar="PHASE",
+                    help=f"the first phase to redo ({', '.join(REOPENABLE)}), or {DESIGN}: the approved product design")
     ap.add_argument("--reason", required=True, help="why (kept in the feature's history and the lock history)")
     args = ap.parse_args(argv)
 
     def action() -> int:
         root = project_root()
+        if args.reopen == DESIGN:
+            if args.feature:
+                raise UsageError("the design belongs to the whole product: `bdd change --reopen design --reason \"...\"`")
+            from . import designstage
+            print(designstage.reopen(root, args.reason))
+            return 0
+        if not args.feature:
+            raise UsageError(f"name the feature to reopen at {args.reopen}")
         entry = reopen(root, store.find_feature_dir(root, args.feature), args.reopen, args.reason)
         print(describe(entry, args.feature))
         return 0

@@ -3,6 +3,7 @@
     /greenlight:approve FEAT-007 rules
     /greenlight:approve FEAT-007 examples reject the boundary case is missing
     /greenlight:approve integrity tools reinstalled
+    /greenlight:approve design
 
 Only a prompt that is *exactly* one of these forms counts; a message that holds one together with other text, or a
 second one, records nothing and is answered with "NOT recorded: send one approval per message", shown to the
@@ -58,6 +59,32 @@ def record(payload: dict, parse=approvalcommand.parse, tool: str = "Claude Code"
                "(`bdd approve --check`)."))
 
 
+def record_design(payload: dict) -> str | None:
+    """Record ``/greenlight:approve design`` (or ``... design reject <reason>``). Returns the line to show, or None if the
+    prompt is not one. Like a feature's approval it is pending until the transcript shows the person typed it."""
+    parsed = approvalcommand.parse_design(payload.get("prompt"))
+    if parsed is None:
+        return None
+    from . import config, designstage, enforcement
+    from .config import ConfigError
+    from .errors import StoreError, UsageError
+
+    root = config.find_root(Path(payload.get("cwd") or "."))
+    if root is None:
+        return None
+    decision, reason = parsed
+    try:
+        enforcement.touch(root, payload.get("session_id"))
+        designstage.record(root, decision, "hook", session=enforcement.safe_session(payload.get("session_id")),
+                           prompt_id=payload.get("prompt_id"), transcript_path=payload.get("transcript_path"), reason=reason)
+    except (UsageError, StoreError, ConfigError, OSError) as exc:
+        return f"{PREFIX} NOT recorded. {exc}"
+    if decision == "reject":
+        return f"{PREFIX} design rejected ({reason}); it is not locked, and the design stage goes on."
+    return (f"{PREFIX} design approved; the design folder, the feature map and the architecture are locked. The approval "
+            "stays pending until Claude Code's transcript confirms the person typed it.")
+
+
 def acknowledge(payload: dict) -> str | None:
     """Record ``/greenlight:approve integrity <reason>``. Returns the line to show, or None if the prompt is not one.
 
@@ -108,7 +135,7 @@ def main() -> int:
         return 0
     if not isinstance(payload, dict):
         return 0
-    line = acknowledge(payload) or record(payload)
+    line = acknowledge(payload) or record_design(payload) or record(payload)
     if line:
         print(line)
         return 0

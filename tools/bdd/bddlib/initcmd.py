@@ -6,6 +6,7 @@
     bdd init --smoke                        prove the adapter's sample feature runs green, leaving nothing behind
     bdd init --standards                    add .bdd/standards.md (greenlight's default engineering standards) to a project that has none
     bdd init --refresh                      read the project's files again and record what is new (sources, quality checks, design, surfaces)
+    bdd init --product SPEC                 start the product and design stage from a product spec (``designstage``)
 
 Nothing is overwritten, and an existing project is only extended (``--adapter`` on a project that has none). Setup also
 records what the project's own files show: ``.bdd/sources.toml`` (the services and frameworks its dependencies name),
@@ -240,6 +241,30 @@ def do_init(root: Path, name: str | None, autonomy: str, python: str | None = No
     return 0
 
 
+DESIGN_DEFAULT = cfg.Design("design/DESIGN.md", "design/screens/*", "design/inventory.md")
+
+
+def do_product(root: Path, spec: str, autonomy: str, python: str | None) -> int:
+    """Start the design stage: set the repository up when it is not yet, record ``[design]`` when the configuration has
+    none (the design folder is written by the stage), and record the stage and its spec."""
+    from . import designstage
+
+    config_path = root / cfg.BDD_DIR / "config.toml"
+    if not config_path.exists():
+        print("\n".join(f"  + {path}" for path in write_project(root, autonomy, None, python)))
+    text = config_path.read_text(encoding="utf-8")
+    if "design" not in tomllib.loads(text):
+        extra = toolchain.design_text(DESIGN_DEFAULT)
+        whole = text.rstrip("\n") + "\n" + extra
+        problem = unreadable(extra, whole)
+        if problem:
+            raise UsageError(f"[design] could not be added to {cfg.BDD_DIR}/config.toml ({problem})")
+        config_path.write_text(whole, encoding="utf-8", newline="\n")
+        print("design: " + toolchain.design_summary(DESIGN_DEFAULT) + " (recorded as [design]; the design stage writes them)")
+    print("\n".join(designstage.start(root, Path(spec))))
+    return 0
+
+
 def do_smoke(root: Path) -> int:
     config = cfg.load(root)
     rules = runner.pick_rules(config, None)
@@ -269,6 +294,8 @@ def run(argv: list[str]) -> int:
                     help="include a shared vocabulary file (inside the project) in .bdd/vocabulary.toml and pin it; repeatable")
     ap.add_argument("--refresh", action="store_true",
                     help="read the project's files again and add the sources, quality checks, design and surfaces it lacks")
+    ap.add_argument("--product", metavar="SPEC",
+                    help="start the product and design stage from a product spec (a file inside the project)")
     ap.add_argument("--standards", action="store_true",
                     help="add .bdd/standards.md (greenlight's default engineering standards) to a project that has none")
     args = ap.parse_args(argv)
@@ -292,6 +319,11 @@ def run(argv: list[str]) -> int:
             return 0
         if args.smoke:
             return do_smoke(require_project(here))
+        if args.product:
+            if args.adapter:
+                raise UsageError("--product starts the design stage; add the adapter with its own `bdd init --adapter NAME`")
+            return do_product((cfg.find_root(here) or here).resolve(), args.product, args.autonomy,
+                              str(Path(args.python).resolve()) if args.python else None)
         root = cfg.find_root(here) or here
         if args.python and not Path(args.python).is_file():
             raise UsageError(f"--python {args.python!r} is not a file")
