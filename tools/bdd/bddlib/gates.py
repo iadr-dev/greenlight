@@ -160,7 +160,7 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
     technical = bool(data.get(designsections.MARKER))           # a feature from before keeps the gates it had
     if gate == "system-map" and (technical or (feature_dir / design.DESIGN_FILE).is_file()):
         problems += [str(issue) for issue in design.check(root, feature_dir, data["feature"])]
-    if gate == "tasks" and technical:
+    if gate in ("tasks", "implement", "verify") and technical:
         problems += [str(issue) for issue in design.check(root, feature_dir, data["feature"])]
         problems += designreview.problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")))
     if gate in ("tasks", "implement") and technical:

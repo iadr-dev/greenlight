@@ -56,7 +56,9 @@ def problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool) -
             continue
         text = path.read_text(encoding="utf-8-sig", errors="replace")
         verdict, named = VERDICT.search(text), DIGEST.search(text)
-        if verdict is None:
+        if len(VERDICT.findall(text)) > 1 or len(DIGEST.findall(text)) > 1:
+            out.append(f"{rel} has more than one Verdict: or Design: line; a report says each once")
+        elif verdict is None:
             out.append(f"{rel} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line")
         elif named is None or named.group(1) != current:
             out.append(f"{rel} reviewed another version of design.md (its Design: line is not {current[:12]}..., which "

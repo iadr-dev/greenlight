@@ -261,6 +261,8 @@ def evidence(facts: dict) -> list[str]:
                    for r, v in technical["reviews"].items()]
         body += [f"<h3>Technical design</h3><p>{state_badge} <code>bdd design</code> on design.md</p>",
                  table(["Design review", "Verdict"], reviews)]
+        if not technical.get("checked"):
+            body.append('<p class="muted">No hooks ran here: nothing checked that each reviewer wrote its own report.</p>')
     if facts["changes"]:
         body.append(f"<p>Approved work was changed {esc(facts['changes'])} time(s) through the change flow.</p>")
     acknowledged = facts.get("integrity") or []

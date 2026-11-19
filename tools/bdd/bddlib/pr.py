@@ -241,7 +241,7 @@ def technical_design_of(root: Path, feature_dir: Path, data: dict) -> dict | Non
         gaps = len(design.check(root, feature_dir, data["feature"]))
     except (UsageError, StoreError, OSError) as exc:
         gaps = str(exc)
-    return {"gaps": gaps, "reviews": designreview.verdicts(feature_dir)}
+    return {"gaps": gaps, "reviews": designreview.verdicts(feature_dir), "checked": bool(data.get("hooks_seen"))}
 
 
 def collect(root: Path, feature_dir: Path) -> dict:
@@ -399,7 +399,8 @@ def render_tail(facts: dict) -> list[str]:
     technical = facts.get("technical_design")
     if technical:
         reviews = ", ".join(f"{reviewer} {verdict}" for reviewer, verdict in technical["reviews"].items())
-        out += [f"Technical design: {technical['gaps']} gap(s) by `bdd design`; design reviews: {reviews}.", ""]
+        unchecked = "" if technical["checked"] else " (no hooks ran: nothing checked that each reviewer wrote its own report)"
+        out += [f"Technical design: {technical['gaps']} gap(s) by `bdd design`; design reviews: {reviews}{unchecked}.", ""]
     if facts["assumptions"]:
         out += ["## Assumptions", ""]
         out += [f"- **{a['id']}** {cell(a['text'])} _(because {cell(a['rationale'])})_" for a in facts["assumptions"]] + [""]

@@ -122,9 +122,16 @@ class Table:
         return self.line > 0
 
 
+_WRAPPED = re.compile(r"(\*\*|__|\*|`+)(.+)\1")
+
+
 def plain(cell: str) -> str:
-    """A cell without the emphasis or code marks around it; marks inside are kept (``phone_numbers`` is a package name)."""
-    return re.sub(r"^[*_`]+|[*_`]+$", "", cell.strip()).strip()
+    """A cell without a matched pair of emphasis or code marks around it; every other mark is kept (``phone_numbers``,
+    ``__init__.py``, ``_private.py``)."""
+    text = cell.strip()
+    while (wrapped := _WRAPPED.fullmatch(text)) is not None:
+        text = wrapped.group(2).strip()
+    return text
 
 
 def normal(text: str) -> str:
@@ -142,9 +149,16 @@ def parse(text: str) -> dict[str, Table]:
     """Every section of ``SECTIONS`` as read from the text: its heading line, its table's rows and its n/a reason."""
     lines = text.splitlines()
     tables = {s.name: Table(s) for s in SECTIONS}
-    headings = [(n, len(m.group(1)), m.group(2)) for n, line in enumerate(lines, start=1) if (m := _HEADING.match(line))]
+    headings, fenced = [], False
+    for n, line in enumerate(lines, start=1):
+        if re.match(r"\s*(`{3,}|~{3,})", line):
+            fenced = not fenced
+        elif not fenced and (m := _HEADING.match(line)):
+            headings.append((n, len(m.group(1)), m.group(2)))
+    exact = {normal(title) for _, _, title in headings}
     for index, (number, level, title) in enumerate(headings):
-        section = next((s for s in SECTIONS if normal(title).startswith(s.name.casefold())), None)
+        section = next((s for s in SECTIONS if normal(title) == s.name.casefold()
+                        or (s.name.casefold() not in exact and normal(title).startswith(s.name.casefold()))), None)
         if section is None or tables[section.name].found:
             continue
         end = next((n for n, lvl, _ in headings[index + 1:] if lvl <= level), len(lines) + 1)
@@ -275,9 +289,9 @@ def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
             out.add(table.line, "TD10", "Design trace", f"design row {label} is not traced; add a row for each element "
                                                        "of the screen with its rule, API field and component")
             continue
-        elements = {normal(r.get("Element")) for r in traced}
+        elements = {_field_key(r.get("Element")) for r in traced}
         for name in screen.fields:
-            if normal(name) not in elements:
+            if _field_key(name) not in elements:
                 out.add(table.line, "TD11", "Design trace", f'design row {label} lists the field "{safe_cell(name)}", which no row '
                                                            "traces; add it, or change the design with the person")
     for row in rows:
@@ -294,12 +308,18 @@ def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
     return list(dict.fromkeys(keys + [s.id for s in ctx.screens]))
 
 
+def _field_key(name: str) -> str:
+    """A field's name for comparing the inventory with the trace: case, spaces and marks do not matter."""
+    return re.sub(r"[\s*_`-]+", "", name.casefold())
+
+
 def standard_of(kind: str, name: str) -> Standard | None:
-    """The standard a building block is held to: by its Kind when that names a standard kind, else by the field's name."""
+    """The standard a building block is held to: by its Kind when that names a standard kind, else by the field's name,
+    whatever else the Kind says (a phone of kind `varchar(40)` is still a phone)."""
     words = normal(kind)
     words = _KIND_WORDS.get(words, words)
     by_kind = next((s for s in STANDARDS if s.kind == words or words.startswith(s.kind)), None)
-    if by_kind is not None or words not in ("", "text", "string", "number", "integer", "free text"):
+    if by_kind is not None:
         return by_kind
     field_name = normal(name)
     return next((s for s in STANDARDS if any(re.search(rf"\b{re.escape(w)}\b", field_name) for w in s.words)), None)
@@ -410,11 +430,15 @@ def _data_and_security(tables: dict[str, Table], out: Findings) -> None:
             out.add(row.line, "TD62", "Data and performance", f'operation "{safe_cell(name)}" has no budget, such as p95 under 300 ms')
         elif kind == "migration" and _blank(row.get("Rollback"), MISSING):
             out.add(row.line, "TD63", "Data and performance", f'migration "{safe_cell(name)}" has no rollback; say how it is undone')
-    operations = [normal(r.get("Name")) for r in data.rows if normal(r.get("Kind")) == "operation"]
-    kinds = [(normal(r.get("Kind")), normal(r.get("Subject"))) for r in security.rows]
+    operations = [_named(r.get("Name")) for r in data.rows if normal(r.get("Kind")) == "operation"]
+    kinds = [(normal(r.get("Kind")), _named(r.get("Subject"))) for r in security.rows]
+    api = tables["API contract"]
+    if not endpoints and api.reason is not None and any(not _blank(r.get("API field")) for r in tables["Design trace"].rows):
+        out.add(api.line, "TD65", "API contract", "the trace names API fields, so the section applies: list the endpoints "
+                                                  "that carry them, the ones this feature adds or uses")
     for endpoint in endpoints:
         wanted = normal(endpoint)
-        if not any(wanted in name for name in operations):
+        if not any(wanted in names for names in operations):
             out.add(data.line, "TD64", "Data and performance", f"operation {safe_cell(endpoint)} has no budget; add an "
                                                                "operation row for it with its budget")
         if not any(kind.startswith("authori") and wanted in subject for kind, subject in kinds):
@@ -428,6 +452,11 @@ def _data_and_security(tables: dict[str, Table], out: Findings) -> None:
         if normal(row.get("Kind")) not in SECURITY_KINDS:
             out.add(row.line, "TD72", "Security and privacy", f'"{safe_cell(row.get("Subject"))}" has the kind "{safe_cell(row.get("Kind"))}"; '
                                                               "the kinds are " + ", ".join(SECURITY_KINDS))
+
+
+def _named(cell: str) -> set[str]:
+    """The things a cell names, one per comma or semicolon: an endpoint is covered only by a row that names it whole."""
+    return {normal(part) for part in re.split(r"[,;]", cell) if normal(part)}
 
 
 def _screens(tables: dict[str, Table], ctx: Context, keys: list[str], out: Findings) -> None:

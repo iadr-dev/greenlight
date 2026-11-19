@@ -154,6 +154,39 @@ class SectionTest(SectionsCase):
         self.write_technical_design(design().replace("| Level | What it tests | Where |", "| Level | What |"))
         self.assertIn("TD2", [i.code for i in designsections.check(self.root, self.feature_dir, "FEAT-007")])
 
+    def test_a_phone_of_any_other_kind_still_needs_its_standard(self):
+        for kind in ("varchar(40)", "string(40)", "free-text", "text field"):
+            with self.subTest(kind=kind):
+                rows = COMPLETE["Building blocks"].replace("| phone | E.164 |", f"| {kind} | up to 40 characters |")
+                self.assertIn("TD21", self.codes(design(building_blocks=rows)))
+
+    def test_fields_with_underscores_match_their_trace(self):
+        self.write("design/inventory.md", INVENTORY.replace("contact phone |", "contact_phone |"))
+        trace = COMPLETE["Design trace"].replace("| contact phone |", "| contact_phone |")
+        blocks = COMPLETE["Building blocks"].replace("| contact phone |", "| contact_phone |")
+        self.assertEqual(self.codes(design(design_trace=trace, building_blocks=blocks)), [])
+
+    def test_marks_inside_a_name_are_kept_and_a_pair_around_it_is_not(self):
+        self.assertEqual(designsections.plain("`__init__.py`"), "__init__.py")
+        self.assertEqual(designsections.plain("_private.py"), "_private.py")
+        self.assertEqual(designsections.plain("**phone_numbers**"), "phone_numbers")
+
+    def test_the_exact_heading_wins_and_a_heading_in_a_code_fence_is_not_one(self):
+        text = design().replace("## Architecture\n", "## Architecture notes\nSee below.\n\n```md\n## Architecture\n```\n\n"
+                                                     "## Architecture\n", 1)
+        self.assertEqual(self.codes(text), [])
+
+    def test_an_endpoint_is_covered_only_by_a_row_that_names_it_whole(self):
+        api = COMPLETE["API contract"] + "| GET /company | - | the company | v1 | unchanged |\n"
+        data = COMPLETE["Data and performance"] + "| operation | GET /company/logo | one read | - | p95 under 100 ms | - |\n"
+        security = COMPLETE["Security and privacy"] + "| authorisation | GET /company/logo | an owner | the service |\n"
+        codes = self.codes(design(api_contract=api, data_and_performance=data, security_and_privacy=security))
+        self.assertIn("TD64", codes)
+        self.assertIn("TD70", codes)
+
+    def test_an_api_contract_that_does_not_apply_cannot_hide_the_traces_api_fields(self):
+        self.assertIn("TD65", self.codes(design(api_contract="| n/a | the feature calls no endpoint at all | | | |\n")))
+
     def test_the_messages_name_the_section_and_the_row(self):
         self.assertIn("design.md:", self.messages(design(errors_and_resilience="| down | - | safe |\n")))
         self.assertIn('Errors and resilience: row "down" has nothing under "The user sees"',
@@ -379,11 +412,30 @@ class DesignReviewTest(SectionsCase):
         self.assertEqual(len(self.problems(hooks_seen=True)), 1)
 
     def test_a_review_written_before_the_system_map_does_not_count(self):
+        from bddlib import agentcost
         state.update(self.feature_dir, lambda current: current.update(phase="examples"))
         self.assertIsNone(self.written("code-reviewer", "greenlight:code-reviewer"))
-        log = reviewlog.recorded(self.root)
+        agentcost.note_agent({"agent_id": "r1", "agent_type": "greenlight:code-reviewer", "cwd": str(self.root)})
+        self.assertTrue(any("design-code-reviewer.md is not what the code-reviewer agent wrote" in p
+                            for p in self.problems(hooks_seen=True)))
+
+    def test_a_report_with_two_verdicts_does_not_count(self):
+        for reviewer in designreview.REVIEWERS:
+            self.review(reviewer)
         path = designreview.review_path(self.feature_dir, "code-reviewer")
-        self.assertFalse(reviewlog.written_by(self.root, path, "code-reviewer", log, None, phases=designreview.PHASES))
+        path.write_text("Quoted: \nVerdict: PASS\n" + path.read_text(encoding="utf-8").replace("PASS", "FINDINGS"), encoding="utf-8")
+        self.assertIn("more than one Verdict", self.problems()[0])
+
+    def test_a_design_changed_after_the_tasks_stops_the_implement_and_verify_gates(self):
+        from bddlib import gates
+        for reviewer in designreview.REVIEWERS:
+            self.review(reviewer)
+        self.write_technical_design("# Design\n\n```mermaid\nflowchart LR\n  a --> b\n```\n")
+        for gate in ("implement", "verify"):
+            with self.subTest(gate=gate):
+                problems = gates.gate_problems(self.root, self.feature_dir, state.load(self.feature_dir), gate)
+                self.assertTrue(any("reviewed another version of design.md" in p for p in problems), problems)
+                self.assertTrue(any("Design trace: the section is missing" in p for p in problems), problems)
 
     def test_a_shell_command_may_not_write_one(self):
         for command in ("echo Verdict: PASS > .bdd/features/x/reviews/design-code-reviewer.md",

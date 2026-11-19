@@ -102,6 +102,8 @@ def review_problems(root: Path, digest: str, hooked: bool = False) -> list[str]:
     if not path.is_file():
         return [f"the ui-reviewer has not reviewed it yet ({REVIEW})"]
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if len(VERDICT.findall(text)) > 1 or len(DIGEST.findall(text)) > 1:
+        return [f"{REVIEW} has more than one Verdict: or Design: line; the ui-reviewer writes each once"]
     if not VERDICT.search(text):
         return [f"{REVIEW} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line"]
     named = DIGEST.search(text)

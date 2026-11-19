@@ -178,6 +178,12 @@ def split_states(cell: str) -> tuple[str, ...]:
     return tuple(s for s in (productmap.plain(part) for part in re.split(r"[,;]", cell)) if s and s.casefold() not in productmap.NONE)
 
 
+def split_fields(cell: str) -> tuple[str, ...]:
+    """The fields of a row, with the marks inside a name kept (``contact_phone``)."""
+    parts = (re.sub(r"^[*`]+|[*`]+$", "", part.strip()).strip() for part in re.split(r"[,;]", cell))
+    return tuple(p for p in parts if p and p.casefold() not in productmap.NONE)
+
+
 def inventory_rows(path: Path) -> tuple[list[Row], int]:
     """The rows of every inventory table, and how many such tables there are."""
     lines = path.read_text(encoding="utf-8-sig").splitlines()
@@ -195,7 +201,7 @@ def inventory_rows(path: Path) -> tuple[list[Row], int]:
                 index = at[key]
                 return row[index] if index is not None and index < len(row) else ""
             rows.append(Row(productmap.plain(cell("id")), productmap.plain(cell("screen")), split_states(cell("states")),
-                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line, split_states(cell("fields"))))
+                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line, split_fields(cell("fields"))))
     return rows, count
 
 

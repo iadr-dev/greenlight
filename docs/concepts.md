@@ -258,7 +258,7 @@ command-line tool. The orchestrator records it from the analyst's report.
 Before the tasks are written, the code-reviewer (architecture, patterns, API, data, performance), the security-reviewer
 (threats, authorisation, races, rate limits, personal data) and, when the design shows a screen, the ui-reviewer (the
 trace against the screens and the tokens) review `design.md` in parallel and write `reviews/design-<reviewer>.md` with
-the design's digest. The tasks gate waits for a `PASS` from each on the design as it is now; must-fix items go back to
+the design's digest. The tasks gate waits for a `PASS` from each on the design as it is now, and the implement and verify gates check the design and its reviews again, so a design changed after the review stops the code until it is reviewed again; must-fix items go back to
 the system-analyst. Where the hooks run, a report counts only as its reviewer wrote it. The tasks and implement gates
 name each building block that is not a dependency of the project with the one line the person types to add it; an agent
 never installs a package.
