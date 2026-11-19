@@ -189,6 +189,7 @@
 - Engine and version used in production: <for example PostgreSQL 18>; tests run against the same engine, not a lookalike. [review]
 - Schema: keys and foreign keys are declared; constraints state the rules (`NOT NULL`, `UNIQUE`, `CHECK`); each fact is stored once unless a measured reason says otherwise. [review]
 - Types: money as <integer minor units or exact decimal>, instants as <timestamps with a time zone in UTC>, identifiers as <one type>. [review]
+- Values with a standard are stored in it, with the library the card `standard-values` names: a phone in E.164, a country as an ISO 3166-1 code, a currency as an ISO 4217 code, a time zone as an IANA name, an address in the country's format. The Building blocks table of each feature's `design.md` names them, and `bdd design FEAT-n` refuses a field of these kinds without its standard. [tool]
 - Indexes: every foreign key that is joined or filtered on gets one; any other index needs a named query or scenario that uses it, and none exist without one. [review]
 - Queries: no query per record (a query-count scenario for every operation that returns a collection), every result is bounded, transactions are short. [tool]
 - Database access goes through repository interfaces; SQL and ORM code appear only in the `infra` layer. [review]
@@ -197,6 +198,6 @@
 
 ## Dependencies
 
-- A new dependency is a decision the person makes; it is named in the report, never added silently. [review]
+- A new dependency is a decision the person makes; it is named in the report, never added silently. The design names it (the Package column of its Building blocks), and the tasks gate prints the one line the person types to add it; an agent never installs it. [tool]
 - Before adding one, check that the language's standard library or an existing dependency does not already do the job. [review]
 - Dependencies are pinned through a lock file; licences are <the allowed list>; unmaintained or vulnerable packages are not added. [review]

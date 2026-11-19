@@ -34,7 +34,7 @@ Recording is the orchestrator's job. The agents write their files and report; th
    in `sources.toml`). A choice only the person can make (a paid provider, where the data may live) is listed in the
    section as an open question with a recommendation, not decided silently.
 4. **The screens on paper.** Run the ux-designer again (or in the same run) for the screen inventory in the design
-   folder's `inventory.md`, one row per screen: `| ID | Screen | States | Feature | File |`, and `flows.html`.
+   folder's `inventory.md`, one row per screen: `| ID | Screen | States | Feature | File | Fields |`, and `flows.html`.
 5. **The visual design.** Run the ui-designer. It writes `DESIGN.md` (the design system and the design contract),
    `tokens.json` and `tokens.css`, and `screens/*.html`: every state of every row in an element marked
    `data-screen="<row id>" data-state="<state>"`, styled only through the tokens.

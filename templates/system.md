@@ -48,5 +48,6 @@
 <!-- When the project has a schema file (OpenAPI, GraphQL, protobuf), name it and copy the operations and types this
      feature uses, exactly as the file has them; say which of them the feature adds or changes. When it has none, say
      so here instead of inventing one. For a database, name the migration folder and the tables this feature reads or
-     changes. -->
+     changes. What the feature adds or changes is decided in design.md: its API contract, its data and performance and
+     its security tables. -->
 <schemas or interface fragments the implementation must satisfy>

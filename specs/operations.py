@@ -10,6 +10,7 @@ scaffold of the `python-pytest-bdd` adapter, which is exactly what a user's proj
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +34,25 @@ class ErrorRule:
 
 
 API: dict[str, Api] = {}
+
+# A reviewer writing its report in a session: the guard is asked with the Write call (and records what the reviewer
+# wrote), then Claude Code reports the agent as finished. The report's text is the file the scenario gave.
+REVIEWER_WRITES = """
+import json, pathlib, subprocess, sys
+bdd, path, agent = sys.argv[1:4]
+call = {"tool_name": "Write", "agent_type": agent, "agent_id": "r1",
+        "tool_input": {"file_path": path, "content": pathlib.Path(path).read_text(encoding="utf-8")}}
+done = subprocess.run(["sh", bdd, "guard"], input=json.dumps(call), text=True, capture_output=True)
+sys.stderr.write(done.stderr)
+if done.returncode == 0:
+    subprocess.run(["sh", bdd, "subagent-stop"], input=json.dumps({"agent_id": "r1", "agent_type": agent}), text=True)
+sys.exit(done.returncode)
+"""
+
+
+def reviewer_writes(path: str, agent: str) -> list[str]:
+    return [sys.executable, "-c", REVIEWER_WRITES, BDD[1], path, agent]
+
 
 COMMANDS: dict[str, list[str]] = {
     "lint": [*BDD, "lint"],
@@ -64,6 +84,9 @@ COMMANDS: dict[str, list[str]] = {
     "the approval hook": [*BDD, "approve", "--from-hook"],
     "gallery": [*BDD, "gallery"],
     "change": [*BDD, "change"],
+    "design": [*BDD, "design"],
+    "the design review by the ui-reviewer": reviewer_writes(".bdd/design-reviews/design-ui-reviewer.md",
+                                                            "greenlight:ui-reviewer"),
 }
 
 LIB: dict[str, str] = {}
@@ -107,6 +130,13 @@ FILES: dict[str, str] = {
     "design review": ".bdd/design-reviews/design-ui-reviewer.md",
     "design record": ".bdd/design-stage.json",
     "design lock record": ".bdd/design.lock.json",
+    "company state": ".bdd/features/FEAT-001-company-profile/state.json",
+    "company rules": ".bdd/features/FEAT-001-company-profile/rules.md",
+    "technical design": ".bdd/features/FEAT-001-company-profile/design.md",
+    "company code review": ".bdd/features/FEAT-001-company-profile/reviews/design-code-reviewer.md",
+    "second state": ".bdd/features/FEAT-002-error-wording/state.json",
+    "second technical design": ".bdd/features/FEAT-002-error-wording/design.md",
+    "example source": "src/orders/form.ts",
     ".NET lock file": "tests/packages.lock.json",
     "Node lock file": "tests/pnpm-lock.yaml",
     "first feature state": ".bdd/features/FEAT-001-sign-in/state.json",

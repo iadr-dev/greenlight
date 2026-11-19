@@ -22,13 +22,13 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import approvals, approvalsummary, config as cfg, designfolder, lockfile, store
+from . import approvals, approvalsummary, config as cfg, designfolder, enforcement, lockfile, reviewlog, roles, store
 from .errors import StoreError, UsageError
 
 STATE_FILE = "design-stage.json"
 GATE = "design"
-REVIEWS_DIR = "design-reviews"
-REVIEW = f"{cfg.BDD_DIR}/{REVIEWS_DIR}/design-ui-reviewer.md"
+REVIEWS_DIR = roles.DESIGN_REVIEWS_DIR
+REVIEW = f"{cfg.BDD_DIR}/{REVIEWS_DIR}/design-{roles.DESIGN_REVIEWER}.md"
 TEMPLATES = Path(__file__).resolve().parents[3] / "templates"
 STARTING_FILES = {designfolder.ARCHITECTURE: "architecture.md", designfolder.PRODUCT_MAP: "product.md"}
 GRADES = ("hook", "self-reported")
@@ -90,18 +90,41 @@ def digest_of(files: dict[str, str]) -> str:
     return lockfile.files_digest(files)
 
 
-def review_problems(root: Path, digest: str) -> list[str]:
+def hooks_seen(root: Path) -> bool:
+    """Have hooks run here: the project's markers, or a design approval the hook recorded (kept in the record, one way)."""
+    data = load(root) if path_of(root).is_file() else None
+    return enforcement.hooks_seen(root) or bool(data and data.get("hooks_seen"))
+
+
+def review_problems(root: Path, digest: str, hooked: bool = False) -> list[str]:
+    """Why the review does not let the person approve the design; ``hooked``: the approval comes through the hook."""
     path = root / REVIEW
     if not path.is_file():
         return [f"the ui-reviewer has not reviewed it yet ({REVIEW})"]
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if len(VERDICT.findall(text)) > 1 or len(DIGEST.findall(text)) > 1:
+        return [f"{REVIEW} has more than one Verdict: or Design: line; the ui-reviewer writes each once"]
     if not VERDICT.search(text):
         return [f"{REVIEW} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line"]
     named = DIGEST.search(text)
     if named is None or named.group(1) != digest:
         return [f"{REVIEW} reviewed another version of the design (its Design: line is not {digest[:12]}..., which "
                 "`bdd gallery --check` prints for the design as it is now); the ui-reviewer reviews it again"]
+    if not (hooked or hooks_seen(root)):
+        return []
+    from . import route                                  # the approval hook imports this module; route is heavier
+    if not reviewlog.written_by(root, path, roles.DESIGN_REVIEWER, reviewlog.recorded(root), route.finished_agents(root),
+                                phases=(GATE,), need_agent=True):
+        return [f"{REVIEW} is not what the ui-reviewer agent wrote: where the hooks run, the design review counts only as "
+                "the ui-reviewer subagent wrote it, unchanged; run the ui-reviewer again"]
     return []
+
+
+def review_note(root: Path) -> str | None:
+    """What the status says about a design review that nothing could check was the ui-reviewer's: no hooks run here."""
+    if (root / REVIEW).is_file() and not hooks_seen(root):
+        return "the design review is not checked as the ui-reviewer's (no hooks have run here: soft mode)"
+    return None
 
 
 def reading(root: Path, design: designfolder.Design, files: dict[str, str]) -> dict:
@@ -145,13 +168,13 @@ def _started(root: Path) -> dict:
     return data
 
 
-def prerequisites(root: Path) -> tuple[designfolder.Design, dict[str, str], list[str]]:
+def prerequisites(root: Path, hooked: bool = False) -> tuple[designfolder.Design, dict[str, str], list[str]]:
     """The design, its files and why it cannot be approved yet (an empty list: it can)."""
     from . import gallery
 
     design = designfolder.load(root)
     files = current_files(root, design.folder)
-    problems = review_problems(root, digest_of(files))
+    problems = review_problems(root, digest_of(files), hooked)
     if design.issues:
         problems.append(f"the design checks found {len(design.issues)} gap(s); `bdd gallery --check` lists them")
     page = root / design.folder / designfolder.GALLERY
@@ -186,7 +209,7 @@ def _record(root: Path, decision: str, grade: str, *, session: str | None, promp
     files: dict[str, str] = {}
     items = outside = None
     if decision == "approve":
-        design, files, problems = prerequisites(root)
+        design, files, problems = prerequisites(root, hooked=grade == "hook")
         if problems:
             raise UsageError("cannot approve the design: " + "; ".join(problems))
         held = lockfile.read_design(root)
@@ -295,21 +318,25 @@ def status(root: Path) -> dict:
     locked = lockfile.design_locked(lockfile.read_design(root))
     standing = approvals.counted(root, data, GATE)
     reopened = next((e["reason"] for e in reversed(data["history"]) if e["event"] == "reopen"), None)
+    note = review_note(root)
     if standing is None or standing["decision"] != "approve" or standing.get("revoked"):
         rejected = standing["reason"] if standing and standing["decision"] == "reject" else None
-        return {"stage": "drafted", "locked": locked, "problems": [], "reopened": reopened, "rejected": rejected}
-    return {"stage": "approved", "locked": locked, "problems": effective_problems(root, data), "reopened": None}
+        return {"stage": "drafted", "locked": locked, "problems": [], "reopened": reopened, "rejected": rejected,
+                "review_note": note}
+    return {"stage": "approved", "locked": locked, "problems": effective_problems(root, data), "reopened": None,
+            "review_note": note}
 
 
 def status_line(info: dict) -> str:
     if info["stage"] == "not started":
         return "design: not started (the person starts it with /greenlight:init --product <spec file>)"
+    note = f"; {info['review_note']}" if info.get("review_note") else ""
     if info["stage"] == "drafted":
         why = (f" (rejected: {info['rejected']})" if info.get("rejected") else
                f" (reopened: {info['reopened']})" if info.get("reopened") else "")
-        return f"design: drafted, not approved{why}"
+        return f"design: drafted, not approved{why}{note}"
     line = "design: approved, " + ("locked" if info["locked"] else "not locked")
-    return line + ("; not valid: " + "; ".join(info["problems"]) if info["problems"] else "")
+    return line + ("; not valid: " + "; ".join(info["problems"]) if info["problems"] else "") + note
 
 
 def safe_verify(root: Path) -> None:

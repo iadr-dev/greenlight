@@ -2,7 +2,13 @@
 
     bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE
     bdd docs FEAT-n --task T-n.m --none "why this task calls no library"
+    bdd docs FEAT-n --service NAME --source URL_OR_FILE | --mcp SERVER --query TEXT | --cli COMMAND
     bdd docs FEAT-n [--list]
+
+``--service`` records the evidence for an outside call of the technical design (``designsections``) before any task
+exists: the service's official page, a documentation lookup through an MCP server, or a run of its command-line tool.
+When ``.bdd/sources.toml`` lists the service, the page must be on its official site and the server and the tool the ones
+it names.
 
 A writer is told to read the current documentation of every library it calls instead of recalling it. It cannot run this
 command (it reports, the orchestrator records); the report's "documentation consulted" lines become records here. A record
@@ -17,6 +23,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import config as cfg
 from . import route, store
@@ -84,6 +91,101 @@ def add(root: Path, feature_dir: Path, feature_id: str, task: str, library: str 
     return entry
 
 
+DOC_SERVERS = ("context7", "microsoft-docs", "microsoft-learn")   # documentation MCP servers that serve any vendor's docs
+RUNNERS = ("npx", "bunx", "pnpm dlx", "yarn dlx", "npm exec")
+
+
+_UNSAFE_ADDRESS = re.compile(r"[\s\\@%\x7f]|[^\x20-\x7e]")
+
+
+def hostname(url: str) -> str | None:
+    """The host a browser opens for an https address, lower-cased, IDNA-encoded and without a trailing dot; None for an
+    address that is not plainly one host: userinfo, a backslash, an escape, white space or a control character, a port
+    other than 443, or no host at all."""
+    if _UNSAFE_ADDRESS.search(url):
+        return None
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+        host = (parts.hostname or "").rstrip(".")
+        host = host.encode("idna").decode("ascii") if host else ""
+    except ValueError:                                   # UnicodeError is one
+        return None
+    if parts.scheme != "https" or not host or parts.username is not None or port not in (None, 443):
+        return None
+    return host
+
+
+def site_of(host: str) -> str:
+    """The registrable part of a host: ``supabase.com`` for ``docs.supabase.com``, ``example.co.uk`` for a host below it."""
+    labels = host.split(".")
+    keep = 3 if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in ("co", "com", "org", "net", "ac", "gov", "edu") else 2
+    return ".".join(labels[-keep:])
+
+
+def on_site(url: str, docs: str) -> bool:
+    """Is ``url`` an address on the official site of the documentation ``docs`` (the site, or a host below it)?"""
+    host, official = hostname(url), hostname(docs)
+    if host is None or official is None:
+        return False
+    site = site_of(official)
+    return host == site or host.endswith("." + site)
+
+
+def _program(command: str) -> str:
+    words = command.split()
+    for runner in RUNNERS:
+        if " ".join(words[:len(runner.split())]) == runner:
+            words = words[len(runner.split()):]
+    return words[0].casefold() if words else ""
+
+
+def add_evidence(root: Path, feature_dir: Path, service: str, source: str | None, mcp: str | None, query: str | None,
+                 cli: str | None) -> dict:
+    """Record what the design's call to ``service`` was checked against: its official page (or a file of the installed
+    package), a lookup through an MCP server, or a run of the vendor's command-line tool. ``.bdd/sources.toml`` names the
+    service's official site, server and tool when it lists the service; then the evidence has to come from them."""
+    from . import designsections, sources
+    if sum(x is not None for x in (source, mcp, cli)) != 1:
+        raise UsageError("evidence is one of --source URL_OR_FILE, --mcp SERVER --query TEXT, or --cli COMMAND")
+    services = {key.casefold(): value for key, value in sources.load(root)[0].items()}
+    key = designsections.service_key(services, service)
+    if not key:
+        raise UsageError("--service needs the name of the service, as .bdd/sources.toml names it")
+    entry_of = services.get(key, {})
+    entry: dict = {"service": key}
+    if source is not None:
+        problem = source_problem(root, source)
+        if problem:
+            raise UsageError(problem)
+        docs = str(entry_of.get("docs", ""))
+        address = re.match(r"[a-z]+://", source, re.IGNORECASE) is not None
+        if address and hostname(source) is None:
+            raise UsageError(f"{source} is not an https address of one host (no user name, port, escape or backslash)")
+        if address and docs and not on_site(source, docs):
+            raise UsageError(f"{source} is not on the official site of {key} ({docs}): give its official page, an MCP lookup "
+                             "(--mcp) or a CLI run (--cli)")
+        entry.update(kind="page", source=source.strip())
+    elif mcp is not None:
+        if not (query or "").strip():
+            raise UsageError("--mcp needs --query: what was looked up")
+        named = {str(entry_of.get("mcp", "")).casefold(), str(entry_of.get("plugin", "")).split("@", 1)[0].casefold()} - {""}
+        if entry_of and named and not any(n in mcp.casefold() for n in named | set(DOC_SERVERS)):
+            raise UsageError(f"the MCP server {mcp} is not one .bdd/sources.toml names for {key} ({', '.join(sorted(named))}) "
+                             f"nor a documentation server ({', '.join(DOC_SERVERS)})")
+        entry.update(kind="mcp", server=mcp.strip(), query=query.strip())
+    else:
+        program, wanted = _program(cli or ""), _program(str(entry_of.get("cli", "")))
+        if not program:
+            raise UsageError("--cli needs the command that was run")
+        if wanted and program != wanted:
+            raise UsageError(f"the command runs {program}, but .bdd/sources.toml names {wanted} as the tool of {key}")
+        entry.update(kind="cli", command=cli.strip())
+    entry["at"] = store.utc_now()
+    store.write_json(record_path(feature_dir), {"schema": store.SCHEMA, "entries": [*entries(feature_dir), entry]})
+    return entry
+
+
 def problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
     """Why the implement gate may not pass: a task with no record of the documentation read, and no reason for having none."""
     try:
@@ -96,6 +198,10 @@ def problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
 
 
 def describe(entry: dict) -> str:
+    if entry.get("service"):
+        how = {"page": entry.get("source"), "mcp": f"{entry.get('server')}: {entry.get('query')}",
+               "cli": f"ran {entry.get('command')}"}.get(str(entry.get("kind")), "")
+        return f"design  {entry['service']}  {how}"
     if entry.get("kind") == "none":
         return f"{entry['task']}  no library: {entry.get('reason', '')}"
     return f"{entry['task']}  {entry.get('library')} {entry.get('version')}  {entry.get('source')}"
@@ -109,12 +215,22 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--version")
     ap.add_argument("--source", help="an https address, or a file (the installed package's documentation or types)")
     ap.add_argument("--none", metavar="REASON", help="the task calls no library; say why")
+    ap.add_argument("--service", help="the evidence for a call of the technical design: the service, as sources.toml names it")
+    ap.add_argument("--mcp", metavar="SERVER", help="with --service: the MCP server the documentation was looked up with")
+    ap.add_argument("--query", help="with --mcp: what was looked up")
+    ap.add_argument("--cli", metavar="COMMAND", help="with --service: the vendor command-line tool run that was read")
     ap.add_argument("--list", action="store_true", help="print the records of the feature")
     args = ap.parse_args(argv)
     try:
         from .statecmd import project_root
         root = project_root()
         feature_dir = store.find_feature_dir(root, args.feature)
+        if args.service is not None:
+            if args.task or args.library or args.version or args.none is not None:
+                raise UsageError("--service records the design's evidence; it takes --source, --mcp with --query, or --cli")
+            entry = add_evidence(root, feature_dir, args.service, args.source, args.mcp, args.query, args.cli)
+            print(f"recorded: design evidence for {entry['service']}")
+            return 0
         if args.list or not args.task:
             found = entries(feature_dir)
             print("\n".join(describe(e) for e in found) or f"{args.feature}: no documentation recorded yet")

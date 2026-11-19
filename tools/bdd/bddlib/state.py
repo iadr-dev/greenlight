@@ -41,10 +41,12 @@ KINDS = ("feature", "adopt")        # adopt: describes behaviour the system alre
 
 
 def new_state(feature_id: str, title: str, autonomy: str, kind: str = "feature") -> dict:
+    """A new feature is held to the technical design (``designsections``); a feature from before has no marker, and an
+    adoption describes code that already exists."""
     return {"schema": store.SCHEMA, "feature": feature_id, "kind": kind, "title": title, "created_at": store.utc_now(),
             "phase": PHASES[0], "autonomy": {"level": autonomy, "switches": []}, "gates": {},
             "approvals": [], "assumptions": [], "cost": {}, "red": None, "hooks_seen": False,
-            "changes": []}
+            "changes": [], "technical_design": kind == "feature"}
 
 
 def observe_hooks(root: Path, feature_dir: Path) -> bool:

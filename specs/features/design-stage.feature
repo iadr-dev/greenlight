@@ -317,6 +317,7 @@ Feature: A product design the person approves by looking
         | key | value            |
         | arg | --product        |
         | arg | product-spec.md  |
+      And alice runs the design review by the ui-reviewer
       And alice runs gallery
       And alice runs the approval hook with:
         | key   | value                                                                               |
@@ -392,6 +393,7 @@ Feature: A product design the person approves by looking
         | key | value            |
         | arg | --product        |
         | arg | product-spec.md  |
+      And alice runs the design review by the ui-reviewer
       And alice runs gallery
       And alice runs the approval hook with:
         | key   | value                                                                               |
@@ -416,6 +418,7 @@ Feature: A product design the person approves by looking
         | key | value            |
         | arg | --product        |
         | arg | product-spec.md  |
+      And alice runs the design review by the ui-reviewer
       And alice runs gallery
       And alice runs the approval hook with:
         | key   | value                                                                               |
@@ -443,6 +446,7 @@ Feature: A product design the person approves by looking
         | key | value            |
         | arg | --product        |
         | arg | product-spec.md  |
+      And alice runs the design review by the ui-reviewer
       And alice runs gallery
       And alice runs the approval hook with:
         | key   | value                                                                               |
@@ -547,4 +551,39 @@ Feature: A product design the person approves by looking
         """
         Changed:
           S-OR-01  Order list
+        """
+
+  @R-116.7
+  Rule: Where the hooks run, the design review counts only as the ui-reviewer wrote it
+
+    @EX-116.7.1
+    Scenario: The orchestrator may not write the design review
+      When alice runs guard with:
+        | key   | value                                                                                    |
+        | stdin | {"tool_name":"Edit","tool_input":{"file_path":".bdd/design-reviews/design-ui-reviewer.md"}} |
+      Then the command fails with refused
+      And the stderr output contains:
+        """
+        only the ui-reviewer agent writes it
+        """
+
+    @EX-116.7.2
+    Scenario: A design review the ui-reviewer did not write does not let the person approve
+      Given the input file design review contains:
+        """
+        Design: bd269d555e7bd88b33ad877353401c277ccaef08657794f0c49d151e20e7d2d8
+        Verdict: PASS
+        """
+      When alice runs init with:
+        | key | value            |
+        | arg | --product        |
+        | arg | product-spec.md  |
+      And alice runs gallery
+      And alice runs the approval hook with:
+        | key   | value                                                                               |
+        | stdin | {"prompt_id":"p","transcript_path":"s.jsonl","prompt":"/greenlight:approve design"} |
+      Then the command succeeds
+      And the stdout output contains:
+        """
+        is not what the ui-reviewer agent wrote
         """

@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import cli, enforcement, lockfile, route, store
+from bddlib import cli, designreview, enforcement, lockfile, route, store
+
+from tests.helpers import TECHNICAL_DESIGN
 
 HAVE_RUNNER = all(importlib.util.find_spec(name) for name in ("pytest", "pytest_bdd"))
 FEATURE = "FEAT-001"
@@ -143,6 +145,8 @@ class SoftModePipelineTest(unittest.TestCase):
         self.ok("lint", "tests/features")
         self.ok("approve", FEATURE, "examples", "--self-reported")
         self.assertIn("spec", lockfile.read_lock(self.feature_dir(), FEATURE)["scopes"])      # approving locked the examples
+        self.write(f"{self.feature_dir().relative_to(self.root).as_posix()}/design.md", TECHNICAL_DESIGN)  # the system-analyst's
+        self.ok("design", FEATURE)
         self.ok("gate", FEATURE, "system-map", "--result", "pass")
         self.ok("gate", FEATURE, "refine", "--result", "pass")
 
@@ -155,6 +159,12 @@ class SoftModePipelineTest(unittest.TestCase):
         self.ok("lock", FEATURE, "--scope", "bind", "--bound")
         self.commit()
         self.ok("gate", FEATURE, "bind", "--result", "pass", "--record-red")
+        code, _, err = self.bdd("gate", FEATURE, "tasks", "--result", "pass")
+        self.assertIn("has no design review by the code-reviewer", err, code)
+        digest = designreview.digest(self.feature_dir())
+        for reviewer in designreview.needed(self.root, self.feature_dir(), FEATURE):    # what the reviewers leave
+            path = designreview.review_path(self.feature_dir(), reviewer)
+            self.write(path.relative_to(self.root).as_posix(), f"# {reviewer}: design\n\nDesign: {digest}\nVerdict: PASS\n")
         self.ok("gate", FEATURE, "tasks", "--result", "pass")
 
     def step_4_a_seeded_edit_of_a_locked_spec_is_detected(self):

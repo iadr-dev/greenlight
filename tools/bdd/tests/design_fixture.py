@@ -72,8 +72,24 @@ class DesignCase(unittest.TestCase):
     def review(self, verdict: str = "PASS") -> None:
         """The ui-reviewer's report on the design as it is now, then the gallery built from it."""
         digest = designstage.digest_of(designstage.current_files(self.root, "design"))
-        self.write(designstage.REVIEW, f"# Design review\n\nDesign: {digest}\nVerdict: {verdict}\n")
+        refused = self.write_review(f"# Design review\n\nDesign: {digest}\nVerdict: {verdict}\n")
+        self.assertIsNone(refused)
         self.build()
+
+    def write_review(self, text: str, agent: str | None = "greenlight:ui-reviewer", agent_id: str = "ui-1") -> str | None:
+        """Write the design review as ``agent`` does in a session: the guard is asked first (and records what a reviewer
+        writes), then the file is written, then Claude Code reports the agent as finished. Returns the guard's refusal."""
+        from bddlib import agentcost, guard
+        payload = {"tool_name": "Write", "cwd": str(self.root), "agent_id": agent_id,
+                   "tool_input": {"file_path": str(self.root / designstage.REVIEW), "content": text}}
+        if agent:
+            payload["agent_type"] = agent
+        refused = guard.evaluate(payload)
+        if refused is None:
+            self.write(designstage.REVIEW, text)
+            if agent:
+                agentcost.note_agent({"agent_id": agent_id, "agent_type": agent, "cwd": str(self.root)})
+        return refused
 
     def build(self) -> None:
         out = self.root / "design" / "gallery.html"

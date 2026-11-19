@@ -19,7 +19,8 @@ import re
 import sys
 from pathlib import Path
 
-from . import store
+from . import config as cfg
+from . import designsections, lockfile, state, store
 from .errors import StoreError, UsageError
 from .issues import ERROR, Issue
 
@@ -106,15 +107,53 @@ def lint(feature_dir: Path) -> list[Issue]:
     return issues
 
 
+def technical(feature_dir: Path) -> bool:
+    """Is the feature held to the technical design? Only one started since it (its state says so)."""
+    try:
+        return bool(state.load(feature_dir).get(designsections.MARKER))
+    except UsageError:
+        return False
+
+
+def check(root: Path, feature_dir: Path, feature_id: str) -> list[Issue]:
+    """Every finding on the feature's design: the diagrams, and for a feature held to it, the technical design."""
+    issues = lint(feature_dir)
+    if technical(feature_dir) and (feature_dir / DESIGN_FILE).is_file():
+        issues += designsections.check(root, feature_dir, feature_id)
+    return issues
+
+
+def screens_text(root: Path, feature_id: str) -> str:
+    rows = designsections.screens_of(root, feature_id)
+    lines = [f"{r.id} {r.screen}: states {', '.join(r.states) or 'none'}; fields {', '.join(r.fields) or 'none listed'}"
+             for r in rows]
+    return "\n".join(lines) or f"{feature_id}: no row of the design's screen inventory names this feature"
+
+
 def run(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="bdd design", description="Check the Mermaid design view of a feature.")
+    ap = argparse.ArgumentParser(prog="bdd design", description="Check the design of a feature: its Mermaid views and, "
+                                                                "for a feature started with it, its technical design.")
     ap.add_argument("feature", help="feature id, e.g. FEAT-007")
+    ap.add_argument("--screens", action="store_true",
+                    help="print the rows of the design's screen inventory that name the feature, with their states and fields")
     args = ap.parse_args(argv)
     try:
         from .statecmd import project_root
-        issues = lint(store.find_feature_dir(project_root(), args.feature))
-    except (UsageError, StoreError) as exc:
+        root = project_root()
+        feature_dir = store.find_feature_dir(root, args.feature)
+        if args.screens:
+            print(screens_text(root, args.feature))
+            return 0
+        issues = check(root, feature_dir, args.feature)
+        held = technical(feature_dir)
+        notes = designsections.install_problems(root, feature_dir) if held else []
+    except (UsageError, StoreError, cfg.ConfigError) as exc:
         print(f"bdd design: {exc}", file=sys.stderr)
         return 2
-    print("\n".join(str(i) for i in issues) if issues else f"{args.feature}: design view is fine")
+    fine = f"{args.feature}: design is fine" if held else f"{args.feature}: design view is fine"
+    print("\n".join(str(i) for i in issues) if issues else fine)
+    for note in notes:
+        print(f"to install before implement: {note}")
+    if held and (feature_dir / DESIGN_FILE).is_file():
+        print(f"Design: {lockfile.file_digest(feature_dir / DESIGN_FILE)}")
     return 1 if issues else 0

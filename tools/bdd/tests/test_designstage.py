@@ -32,6 +32,43 @@ class ApprovalTest(DesignCase):
         return approvehook.record_design({"prompt": prompt, "prompt_id": prompt_id, "transcript_path": "session.jsonl",
                                           "cwd": str(self.root), "session_id": "s1"})
 
+    def reviewed_by(self, agent: str | None) -> str | None:
+        digest = designstage.digest_of(designstage.current_files(self.root, "design"))
+        refused = self.write_review(f"Design: {digest}\nVerdict: PASS\n", agent)
+        self.build()
+        return refused
+
+    def test_only_the_ui_reviewer_may_write_the_design_review(self):
+        self.start()
+        for agent in (None, "greenlight:ui-designer", "greenlight:ux-designer", "greenlight:code-reviewer"):
+            with self.subTest(agent=agent):
+                self.assertIn("only the ui-reviewer agent writes it", self.reviewed_by(agent) or "")
+        self.assertIsNone(self.reviewed_by("greenlight:ui-reviewer"))
+        self.assertIn("design approved", self.hook())
+
+    def test_where_the_hooks_run_a_review_the_ui_reviewer_did_not_write_lets_nobody_approve(self):
+        self.start()
+        digest = designstage.digest_of(designstage.current_files(self.root, "design"))
+        self.write(designstage.REVIEW, f"Design: {digest}\nVerdict: PASS\n")          # written past the guard
+        self.build()
+        self.assertIn("is not what the ui-reviewer agent wrote", self.hook())
+        self.assertIsNone(self.write_review(f"Design: {digest}\nVerdict: PASS\n", agent_id=""))   # no agent id: no proof
+        self.assertIn("is not what the ui-reviewer agent wrote", self.hook(prompt_id="p2"))
+        self.assertIsNone(self.write_review(f"Design: {digest}\nVerdict: PASS\n"))
+        self.assertIn("design approved", self.hook(prompt_id="p3"))
+
+    def test_without_hooks_the_review_is_read_as_before_and_the_status_says_so(self):
+        self.start()
+        digest = designstage.digest_of(designstage.current_files(self.root, "design"))
+        self.write(designstage.REVIEW, f"Design: {digest}\nVerdict: PASS\n")
+        self.build()
+        self.assertEqual(designstage.prerequisites(self.root)[2], [])
+        line = designstage.status_line(designstage.status(self.root))
+        self.assertIn("the design review is not checked as the ui-reviewer's (no hooks have run here: soft mode)", line)
+        enforcement.touch(self.root, "s1")
+        self.assertIn("is not what the ui-reviewer agent wrote", designstage.prerequisites(self.root)[2][0])
+        self.assertNotIn("soft mode", designstage.status_line(designstage.status(self.root)))
+
     def test_the_approval_waits_for_the_review_of_this_very_design(self):
         self.start()
         self.assertIn("the ui-reviewer has not reviewed it yet", self.hook())

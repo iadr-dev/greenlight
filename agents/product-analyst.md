@@ -14,6 +14,12 @@ Run the **discover** or **specify** playbook that the orchestrator names in your
 `bdd cards list` to see them cheaply. Write `brief.md` or `rules.md` from `templates/` into the feature
 directory under `.bdd/features/`, and new terms into `.bdd/glossary.md`.
 
+When the product has an approved design, the person has already seen the screens of this feature. Run
+`bdd design FEAT-n --screens`: it lists the screen rows of the design that name the feature, with their states and
+fields. Read their screen files too. Every field, state and action they show becomes a rule, an example the rules
+imply, or a question for the person; none is dropped without saying so. A field the request does not mention is a
+question, not a guess.
+
 To change a file that already exists (a rule, a line of the brief), use Edit on the lines that change; do not write
 the whole file again. Rewriting a long file costs many tokens and can change text you did not mean to touch, such as
 an escape sequence the file spells out or a rule the person approved.

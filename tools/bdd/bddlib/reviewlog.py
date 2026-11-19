@@ -6,7 +6,9 @@ recorded for that file and that reviewer, written while the feature was in the i
 Code then reported as finished, so a report written or changed any other way (another agent, the orchestrator, a shell
 command, a later edit), or an old report put back, does not count, whatever command made the change. When the reviewer
 finishes, the SubagentStop hook adds a seal line with the hashes of the production files of its task (``seal``), so a
-report older than the code it covers is found too. Kept light: the guard imports it on every call.
+report older than the code it covers is found too. A design review (a feature's ``reviews/design-<reviewer>.md``, the
+product design's ``.bdd/design-reviews/design-ui-reviewer.md``) is recorded the same way and has no seal: the digest of
+the design it names binds it to what it read. Kept light: the guard imports it on every call.
 """
 from __future__ import annotations
 
@@ -142,14 +144,18 @@ def seal(root: Path, agent_id: object) -> bool:
 
 
 def written_by(root: Path, path: Path, reviewer: str, log: dict[tuple[str, str], dict] | None = None,
-               finished: dict[str, str] | None = None) -> bool:
-    """Is the report's content now exactly what ``reviewer`` last wrote to it, during the implement phase? With
-    ``finished`` ({agent id: agent type} of the agents Claude Code reported as finished), the agent that wrote it must
-    also be one of them, and a ``greenlight:<reviewer>``."""
+               finished: dict[str, str] | None = None, phases: tuple[str, ...] = ("implement",),
+               need_agent: bool = False) -> bool:
+    """Is the report's content now exactly what ``reviewer`` last wrote to it, during one of ``phases`` (the implement
+    phase for a task's review)? With ``finished`` ({agent id: agent type} of the agents Claude Code reported as
+    finished), the agent that wrote it must also be one of them, and a ``greenlight:<reviewer>``; with ``need_agent``, a
+    line without an agent id does not count (a design review has no seal to ask for one later)."""
     line = (recorded(root) if log is None else log).get((key(root, path), reviewer))
     if line is None or line.get("sha256") != digest(Path(path).read_text(encoding="utf-8-sig")):
         return False
-    if line.get("phase") != "implement":
+    if line.get("phase") not in phases:
         return False
     agent_id = line.get("agent_id")
+    if need_agent and agent_id in (None, ""):
+        return False
     return finished is None or agent_id is None or finished.get(str(agent_id)) == f"greenlight:{reviewer}"

@@ -5,7 +5,7 @@ The design folder is the folder of ``[design] system`` (or ``inventory``) in ``.
     design/PRODUCT.md        who uses the product, their jobs, the platforms
     design/DESIGN.md         the design system and the design contract
     design/tokens.json       the design tokens; the screens use them through a stylesheet named tokens*.css
-    design/inventory.md      the screen inventory: | ID | Screen | States | Feature | File |
+    design/inventory.md      the screen inventory: | ID | Screen | States | Feature | File | (Fields, when listed)
     design/flows.html        the flows between the screens
     design/screens/*.html    the screens, every state of a row in an element marked
                              <section data-screen="S-OR-01" data-state="empty">
@@ -36,7 +36,7 @@ from pathlib import Path, PurePosixPath
 from . import config as cfg
 from . import productmap
 from .errors import UsageError
-from .issues import ERROR, Issue
+from .issues import ERROR, Issue, safe_cell
 
 DEFAULT_FOLDER = "design"
 GALLERY = "gallery.html"
@@ -46,7 +46,8 @@ ARCHITECTURE_SECTIONS = ("Stack per surface", "Layers", "Hosting and environment
                          "Security baseline and threat model", "Observability", "CI and delivery")
 PRODUCT_SECTIONS = {"users": ("user",), "jobs": ("job", "purpose"), "platforms": ("platform",)}
 INVENTORY_COLUMNS = {"id": ("id",), "screen": ("screen", "name", "page", "message"), "states": ("states", "key states"),
-                     "feature": ("feature", "features", "bdd"), "file": ("file", "screen file", "comp")}
+                     "feature": ("feature", "features", "bdd"), "file": ("file", "screen file", "comp"),
+                     "fields": ("fields", "contents", "elements")}
 _SKIP_DIRS = {"__pycache__", "node_modules"}
 _LINK = re.compile(r"\]\(([^)\s]+)")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -62,6 +63,7 @@ class Row:
     file: str                    # as the row writes it, relative to the inventory's folder; "" when it names none
     section: str
     line: int
+    fields: tuple[str, ...] = ()  # what the screen shows or asks for, when the inventory has a Fields column
 
 
 @dataclass
@@ -176,6 +178,12 @@ def split_states(cell: str) -> tuple[str, ...]:
     return tuple(s for s in (productmap.plain(part) for part in re.split(r"[,;]", cell)) if s and s.casefold() not in productmap.NONE)
 
 
+def split_fields(cell: str) -> tuple[str, ...]:
+    """The fields of a row, with the marks inside a name kept (``contact_phone``)."""
+    parts = (part.strip().strip("*`").strip() for part in re.split(r"[,;]", cell))
+    return tuple(p for p in parts if p and p.casefold() not in productmap.NONE)
+
+
 def inventory_rows(path: Path) -> tuple[list[Row], int]:
     """The rows of every inventory table, and how many such tables there are."""
     lines = path.read_text(encoding="utf-8-sig").splitlines()
@@ -193,7 +201,7 @@ def inventory_rows(path: Path) -> tuple[list[Row], int]:
                 index = at[key]
                 return row[index] if index is not None and index < len(row) else ""
             rows.append(Row(productmap.plain(cell("id")), productmap.plain(cell("screen")), split_states(cell("states")),
-                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line))
+                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line, split_fields(cell("fields"))))
     return rows, count
 
 
@@ -265,24 +273,24 @@ def check_rows(design: Design, inventory: str, known: set[str]) -> list[Issue]:
         if not row.screen or not row.states or not row.features:
             missing = [what for what, value in (("a screen name", row.screen), ("its states", row.states),
                                                 ("a feature id", row.features)) if not value]
-            issues.append(Issue(*where, "IN2", f"{row.id or 'a row'} needs " + ", ".join(missing)))
+            issues.append(Issue(*where, "IN2", f"{safe_cell(row.id) if row.id else 'a row'} needs " + ", ".join(missing)))
         if row.id in seen:
-            issues.append(Issue(*where, "IN3", f"{row.id} is used for two rows"))
+            issues.append(Issue(*where, "IN3", f"{safe_cell(row.id)} is used for two rows"))
         seen.add(row.id)
         for feature in row.features:
             if known and feature not in known:
-                issues.append(Issue(*where, "IN4", f"{row.id} names {feature}, which the product map ({PRODUCT_MAP}) does not list"))
+                issues.append(Issue(*where, "IN4", f"{safe_cell(row.id)} names {feature}, which the product map ({PRODUCT_MAP}) does not list"))
         if not row.file:
-            issues.append(Issue(*where, "IN5", f"{row.id} names no screen file; every row is drawn in a screen file"))
+            issues.append(Issue(*where, "IN5", f"{safe_cell(row.id)} names no screen file; every row is drawn in a screen file"))
             continue
         rel = (base / row.file).as_posix()
         screen = design.screens.get(_normal(rel))
         if screen is None:
-            issues.append(Issue(*where, "IN6", f"{row.id} names {row.file}, which is not a file in the design folder"))
+            issues.append(Issue(*where, "IN6", f"{safe_cell(row.id)} names {safe_cell(row.file)}, which is not a file in the design folder"))
             continue
         for state in row.states:
             if (row.id, state_name(state)) not in screen.shown:
-                issues.append(Issue(*where, "SC1", f'{row.id} lists the state {state}, but {row.file} shows no '
+                issues.append(Issue(*where, "SC1", f'{safe_cell(row.id)} lists the state {safe_cell(state)}, but {safe_cell(row.file)} shows no '
                                                    f'data-state="{state_name(state)}" for it'))
     return issues
 
@@ -297,7 +305,7 @@ def check_screens(design: Design) -> list[Issue]:
             target = (PurePosixPath(rel).parent / href.split("?")[0].split("#")[0]).as_posix()
             linked.append(PurePosixPath(target).name)
             if not (design.root / target).is_file() or not inside(design.root, design.folder, design.root / target):
-                issues.append(Issue(rel, 1, ERROR, "SC3", f"it links {href}, which is not a file in the design folder"))
+                issues.append(Issue(rel, 1, ERROR, "SC3", f"it links {safe_cell(href)}, which is not a file in the design folder"))
         if not screen.names_tokens and not any(name.casefold().startswith("tokens") for name in linked):
             issues.append(Issue(rel, 1, ERROR, "SC2", "it does not use the design tokens: link the stylesheet made from "
                                                       "tokens.json (tokens.css)"))

@@ -128,9 +128,15 @@ independent audit, so the report shows what was recorded up to the green run.
    `.bdd/standards.md`; they apply at once, and you may edit them. It also reads your dependency files and records
    your sources, quality tools, design folder and surfaces (below); `bdd init --refresh` adds what is new later.
 2. **Ask for a feature.** `/greenlight:feature "what you want"` runs the phases: discover, specify (rules), test design,
-   examples (Gherkin scenarios), system map (which also writes the design view, `design.md`), refine, bind, tasks,
+   examples (Gherkin scenarios), system map (which also writes the design, `design.md`), refine, bind, tasks,
    implement and verify. `/greenlight:feature "..." --quick` takes the short path for a change of one rule
    (`phases/quick.md`).
+   Before any code, `design.md` holds the technical design: fourteen tables that trace every screen element of the
+   approved design to a rule, an API field and a component, and name each field's standard and library (a phone in
+   E.164 with libphonenumber), the official documentation of every outside call, the layers and patterns, the API
+   contract, an index per query, a budget per operation, an authorisation row per endpoint, the states of every
+   screen and the tests. `bdd design FEAT-n` refuses each gap by section and row, and the code, security and UI
+   reviewers review the design before the tasks are written.
 3. **Approve the contract.** You read `rules.md` and the scenarios and approve each by typing
    `/greenlight:approve FEAT-n rules|examples`. Approved examples lock the feature files.
 4. **Red, then green.** The steps and drivers are written and run; every new scenario must fail for the intended

@@ -23,7 +23,7 @@ ux-designer and the ui-designer follow when the `impeccable` plugin is not insta
    build order. Sign-in and the data every other feature needs come first. A feature that needs another is built after
    it; nothing depends on a later feature.
 3. **List every screen before drawing any.** The inventory has one row per screen: a stable id (`O-ST-01`: side, area,
-   number), the screen, its states, the feature that builds it and the file that draws it. A list has loading, empty,
+   number), the screen, its states, the feature that builds it, the file that draws it and the fields it shows or asks for. A list has loading, empty,
    error and success at least; a form adds validation errors and saving; anything on a phone adds offline. Add the
    states the domain has (a job in progress, a payment overdue, an expired invitation).
 4. **Draw the flows** in `flows.html`: the path through the screens for each job of step 1, by inventory id, with the

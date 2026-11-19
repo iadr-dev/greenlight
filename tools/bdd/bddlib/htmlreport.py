@@ -243,6 +243,26 @@ def lock_badge(locks: dict) -> str:
     return badge("intact", GOOD) if locks["intact"] else badge("NOT intact", BAD)
 
 
+REVIEW_KINDS = {"PASS": GOOD, "FINDINGS": BAD, "stale": BAD}
+
+
+def technical_design_block(technical: dict | None) -> list[str]:
+    """How far the feature's technical design is: the gaps `bdd design` finds and each design review's verdict."""
+    if not technical:
+        return []
+    gaps = technical["gaps"]
+    if gaps == 0:
+        state_badge = badge("complete", GOOD)
+    else:
+        state_badge = badge(f"{gaps} gap(s)" if isinstance(gaps, int) else gaps, BAD)
+    reviews = [[esc(r), badge(v, REVIEW_KINDS.get(v, WARN))] for r, v in technical["reviews"].items()]
+    block = [f"<h3>Technical design</h3><p>{state_badge} <code>bdd design</code> on design.md</p>",
+             table(["Design review", "Verdict"], reviews)]
+    if not technical.get("checked"):
+        block.append('<p class="muted">No hooks ran here: nothing checked that each reviewer wrote its own report.</p>')
+    return block
+
+
 def evidence(facts: dict) -> list[str]:
     gates = [[esc(name), badge(g["result"], GOOD if g["result"] == "pass" else BAD)] for name, g in facts["gates"].items()]
     approvals = [approval_row(a) for a in facts["approvals"]]
@@ -253,6 +273,7 @@ def evidence(facts: dict) -> list[str]:
             f"<h3>Locks</h3><p>{lock_badge(locks)} {esc(', '.join(locks['scopes']))}</p>"]
     if locks["problems"]:
         body.append(bullets([esc(p) for p in locks["problems"]]))
+    body += technical_design_block(facts.get("technical_design"))
     if facts["changes"]:
         body.append(f"<p>Approved work was changed {esc(facts['changes'])} time(s) through the change flow.</p>")
     acknowledged = facts.get("integrity") or []
