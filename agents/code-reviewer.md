@@ -31,7 +31,19 @@ Check, with evidence for each finding (file and line, and the rule or card it br
 5. **Suppressions.** No blanket `noqa`, `eslint-disable`, `@Suppress`, `#[allow]`, `nolint` or `@ts-ignore` without a
    stated reason.
 6. **The project's own checks.** When `.bdd/config.toml` has `[adapters.quality.NAME]` tables, the orchestrator runs
-   `bdd check FEAT-n`; read its last result (`bdd check FEAT-n --check`) and do not repeat it.
+   `bdd check FEAT-n --task T-n.m` after each task, the architecture checker among them; read its last result
+   (`bdd check FEAT-n --check`) and do not repeat it.
+7. **The design.** The code follows the sections of `design.md` that `bdd route FEAT-n` names for the task (`design:`):
+   each piece in its layer and path, each pattern copied from its example file, each building block's library used
+   (`blocks:`) instead of a hand-rolled parser or validator, each query with its index, each operation within its
+   budget, each outside call (`services:`) as its official documentation says.
+8. **The risks.** For each risk `bdd route FEAT-n` names for the task (`risks:`), find where the code handles it.
+   Concurrent writes: a transaction, a unique key or a conditional update, not a read followed by a write. Retries and
+   idempotency: a repeated request has the same effect once. Rate limits: the limit the design decides is applied on
+   the server. Unmapped storage errors: every error of the database or the storage call is mapped to the error the
+   design names, none passed through raw. Authorisation: the server checks who may act on which record. Personal
+   data: kept where the design says, never in logs. Time zones: stored with the zone or in UTC, shown in the user's.
+   Large lists: a page size, a maximum and a stable order. Write one line per risk under *Risks* (see the output file).
 
 Optional helpers, used only when installed and only in report mode: pstack's `thermos` or `interrogate` skills, the
 read-only `feature-dev:code-reviewer` agent's checklist, `code-metrics-tracker` (complexity and duplication of the
@@ -84,6 +96,11 @@ to the system-analyst, and you review the changed design again.
 
 Verdict: PASS | FINDINGS
 
+## Risks
+- Risk concurrent writes: handled in src/auth/link.ts:31
+- Risk time zones: not applicable: the task stores no date or time
+- Risk rate limits: missing
+
 ## Must fix
 - path:line - what is wrong, the rule or card it breaks, what to do instead
 
@@ -97,7 +114,10 @@ Verdict: PASS | FINDINGS
 - none | the helper and what it reported
 ```
 
-`FINDINGS` when *Must fix* is not empty.
+`FINDINGS` when *Must fix* is not empty. *Risks* has one line for each risk of the task, in one of three forms:
+`handled in <file:line>`, `not applicable: <reason>` or `missing`. A risk that is `missing` is also a *Must fix*. For a
+feature started with this version, the implement gate refuses a report without a line for a risk of its task, with a
+risk `missing`, or with an answer that names neither a place nor a reason.
 
 ## Return
 

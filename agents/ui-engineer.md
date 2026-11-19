@@ -19,6 +19,16 @@ refactor only with the tests green.
 
 Before you write a screen:
 
+- **Build the screen the design shows.** `bdd route FEAT-n` names your task's `design:` sections and inventory rows,
+  `screens:` (each row's screen file and states), `blocks:`, `services:` and `risks:`. Open the screen file of each row
+  and build what it shows: the same fields, actions and states, in the same order, with the tokens of `DESIGN.md`.
+  Each field uses its building block's library and control (a country-code picker for a phone, the platform's country
+  names). The *Design trace* says which component shows which element, and the *State and offline* and *Accessibility
+  and language* rows of the screen are part of the task. The ui-reviewer compares the built screen with the design
+  screen side by side at 375 and 1280 px.
+- **Check every call to an outside service** the screen makes against the official page, MCP server or CLI that
+  `services:` names, as the implementer does, and handle each risk of the task (a double submit made safe on the
+  server, an error message for each failure the design names, no personal data in the browser's logs).
 - **Use what the project has.** Find its components, design tokens (colours, spacing, type), layout primitives and
   navigation, and use them. A new colour, size or component that the design system already has under another name is
   a finding against you. Follow the platform's own conventions on mobile (navigation, back, safe areas, touch targets).
@@ -55,5 +65,5 @@ question, or that starts a server or a browser: you report, the orchestrator dec
 
 Your last message is read by the orchestrator. It must contain: the files you changed; the result of
 `bdd classify FEAT-n`; the components and tokens of the design system you used, and any you had to add with the
-reason; the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); the helpers you used, if any; the states you
+reason; the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); for each outside service you called, one line `T-n.m service: how you checked it`; for each risk of the task, `Risk <name>: handled in file:line` or `Risk <name>: not applicable: why`; the helpers you used, if any; the states you
 covered; change requests, if any; and whether the task is ready for its reviews.

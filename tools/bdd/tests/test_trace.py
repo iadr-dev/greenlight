@@ -128,6 +128,13 @@ class GapTest(TraceCase):
         report = self.build()
         self.assertEqual(sorted(self.codes(report)), ["T005", "T006", "T006"])
 
+    def test_a_risk_word_that_is_not_a_known_risk_is_one_gap_for_every_task_that_names_it(self):
+        self.put("tasks.md", "## T-007.1 One\nCovers: EX-007.1.1\nRisks: flakiness, rate limits\n\n"
+                             "## T-007.2 Two\nCovers: EX-007.1.2\nRisks: Flakiness\n\n## T-007.3 Three\nRisks: none\n")
+        gaps = [g["message"] for g in self.build()["gaps"] if g["code"] == "T010"]
+        self.assertEqual(len(gaps), 1)
+        self.assertTrue(gaps[0].startswith('tasks.md names the risk "flakiness" (T-007.1, T-007.2), which is not one'))
+
     def test_a_scenario_without_an_example_tag_and_an_unreadable_file(self):
         self.write("features/more.feature", "@FEAT-007\nFeature: More\n  @R-007.1\n  Scenario: Untagged\n    Then the request succeeds\n")
         self.write("features/broken.feature", "@FEAT-007\nFeature: Broken\n  @dangling\n")

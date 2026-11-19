@@ -1,7 +1,7 @@
 # Phase 8: Tasks
 
 Agent: the **orchestrator** (the main session), and the **code-reviewer**, **security-reviewer** and **ui-reviewer**
-for the design review. Cards: `story-splitting`.
+for the design review. Cards: `story-splitting`, `pre-mortem`.
 
 ## Inputs
 
@@ -28,6 +28,13 @@ for the design review. Cards: `story-splitting`.
 4. Put the thinnest end-to-end path first, so the plumbing is proved before the exceptions.
 5. Every example is owned by exactly one task. Check with `bdd trace FEAT-n`: an unowned example is gap `T006`,
    an unknown example in a task `T005`.
+6. **Design and risks of each task.** Run `bdd route FEAT-n` and copy each task's `design:` and `risks:` into its
+   `Design:` and `Risks:` lines (`Risks: none` when it names none). Add a section or a risk it missed: the route keeps
+   what you add. A risk is one of the fixed list (concurrent writes, retries and idempotency, rate limits, unmapped
+   storage errors, authorisation, personal data, time zones, large lists); another word is gap `T010` in `bdd trace`.
+   Use the `pre-mortem` card's failures to decide what to add.
+7. **Areas that do not overlap.** Two tasks that share no `Areas:` path and do not depend on each other can be built at
+   the same time (`bdd route` prints `runs in: group N`). Give every task real paths: a task with none is built alone.
 
 ## Output files
 
@@ -36,8 +43,8 @@ for the design review. Cards: `story-splitting`.
 ## Gate
 
 The tasks gate checks the technical design again, waits for a `PASS` from each design reviewer on the design as it is
-now (where the hooks run, written by that reviewer itself), and for every building block to be a dependency of the
-project.
+now (where the hooks run, written by that reviewer itself), for every building block to be a dependency of the
+project, and for every task to have a `Design:` and a `Risks:` line with known risks only.
 
 ```sh
 bdd gate FEAT-n tasks --result pass
@@ -51,3 +58,5 @@ bdd gate FEAT-n tasks --result pass
 - Writing the tasks while a design review has must-fix items: the code is then built against a design the reviewers
   refused. Send the items back to the system-analyst first.
 - Running the three reviewers one after another: they read the same file and do not depend on each other.
+- Dropping a risk `bdd route` names because the task "does not do that". Keep it: the code-reviewer answers it with
+  `not applicable` and the reason, which takes one line.

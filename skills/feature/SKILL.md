@@ -86,17 +86,25 @@ this one needs. Tell it to read the playbook first.
 | refine | step-engineer | `bdd lint` clean | `bdd gate FEAT-n refine --result pass` |
 | bind | step-engineer | `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, `bdd scan FEAT-n` | `bdd lock FEAT-n --scope bind --bound`; `bdd gate FEAT-n bind --result pass --record-red` |
 | tasks | you (first the design review: the code-reviewer, the security-reviewer and, when the design shows a screen, the ui-reviewer on `design.md`, in parallel, at most three at once) | each `reviews/design-<reviewer>.md` names the digest `bdd design FEAT-n` prints and says PASS (must-fix items go back to the system-analyst, then the review runs again); the person typed the install line the gate prints for a missing building block; write `tasks.md` from `templates/tasks.md`; `bdd trace` shows no `T005` or `T006` | `bdd gate FEAT-n tasks --result pass` |
-| implement | implementer, one task at a time (or ui-engineer for a task with screens, as `bdd route FEAT-n` names; then the task's reviewers: code-reviewer, and ui-reviewer and security-reviewer where routed) | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status`; if `.bdd/config.toml` has `[adapters.quality.NAME]` tables, `bdd check FEAT-n` after the last change (a failed check goes back to the writer with its output); every routed review in `reviews/` with its verdict | `bdd gate FEAT-n implement --result pass` |
+| implement | implementer (or ui-engineer for a task with screens, as `bdd route FEAT-n` names; the writers of one `runs in:` group together, then the task's reviewers together, at most three at once: code-reviewer, and ui-reviewer and security-reviewer where routed) | `bdd run FEAT-n`, `bdd classify`, `bdd lock FEAT-n --check --require`, `bdd status`; if `.bdd/config.toml` has `[adapters.quality.NAME]` tables, `bdd check FEAT-n --task T-n.m` after each task and `bdd check FEAT-n` after the last change (a failed check goes back to the writer with its output); every routed review in `reviews/` with its verdict, its risk lines and, for a screen, its side-by-side lines | `bdd gate FEAT-n implement --result pass` |
 | verify | spec-auditor | the report has evidence on every line (the Q items of the checklist included); if `.bdd/config.toml` has `[adapters.mutation]`, you ran `bdd mutate FEAT-n` before starting the auditor and told it the result; if it has `[stability]`, you ran `bdd stability FEAT-n` too | write the returned report to `report.md`; `bdd gate FEAT-n verify --result pass` only if the verdict is PASS (see Findings below) |
 
 **Routing the implement phase.** Do not ask the person who writes or reviews a task: run
-`"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" route FEAT-n` once `tasks.md` is written and follow it. For each task, in order:
-start the writer it names with the task id, the cards it lists and the commit of the red record; run the checks of the
-table; then start each reviewer it names with the same task id, cards and commit. A report with must-fix items goes
+`"${CLAUDE_PLUGIN_ROOT}/tools/bdd/bdd" route FEAT-n` once `tasks.md` is written and follow it. It prints, for each task,
+the writer, the reviewers, the cards, the `design:` sections and rows, the `risks:`, the `blocks:` (library, version,
+documentation), the `services:` (official page, MCP server, CLI) and `runs in: group N`. Work through the groups in
+order (`bdd route FEAT-n --json` gives `group`, `after` and `depends_on`). Start the writers of one group together,
+each with its task id, the cards, the commit of the red record and the route's design, risks, blocks and services for
+its task; when `services:` names an MCP server that is installed, look each call up with it and put the result in the
+writer's task. When a writer returns, run the checks of the table, `bdd check FEAT-n --task T-n.m` among them, then
+start that task's reviewers together, at most three reviewers at once. While they run, you may start the writer of a
+task whose `after` list names no task still in review. A task's dependants start only after its reviews pass. A report with must-fix items goes
 back to the writer with the report's path, then the reviewer runs again; after two rounds a must-fix that is left goes
 in the final report under *Findings* and you move on. When the application can be started for a UI task, start it
-before the `ui-reviewer` and give it the address; when it cannot, say so in its task. Record what each writer says it read with `bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE`
-(or `--none "reason"`); the implement gate refuses a task with no record, and a source that is neither an https address nor
+before the `ui-reviewer` and give it the address and the design screen files of the task's rows; when it cannot, say so
+in its task, and the reviewer names each row under *Not checked*. Record what each writer says it read with `bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE`
+(or `--none "reason"`), and each outside service it checked with `bdd docs FEAT-n --task T-n.m --service NAME --mcp SERVER
+--query TEXT` (or `--source URL`, `--cli COMMAND`); the implement gate refuses a task with no library record, and a source that is neither an https address nor
 a file that exists is refused. Put the routing (`bdd route`'s output), the documentation records and each review's
 verdict in the report.
 

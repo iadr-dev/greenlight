@@ -289,6 +289,37 @@ implement gate refuses while a routed review is missing. Each writer also states
 task (the library, its version and a source anyone can open); the orchestrator records it with `bdd docs`, and the gate
 refuses a task with no record and no stated reason.
 
+### Building each task against its design
+
+`bdd route FEAT-n` also says what each task builds against, so the writer does not have to find it:
+
+- `design:` the sections of `design.md` the task builds, and the inventory rows of its screens (`screens:` gives each
+  row's file and states). A section is named when it has rows and the task needs it: Architecture and Patterns for
+  every task, API contract for an API task, Security and privacy for a security task, the screen sections for a UI task.
+- `blocks:` each building block of the fields the task's trace rows name: the library, the package, the version a
+  manifest of the project declares (or `not a dependency yet`) and its documentation.
+- `services:` each outside service of the design that the task's rules name (every one, when they name none), with
+  the official page, MCP server and CLI that `.bdd/sources.toml` gives. The writer checks each call against one of them,
+  and the orchestrator records it with `bdd docs FEAT-n --task T-n.m --service NAME`.
+- `risks:` the known risks the task's code must handle, from a fixed list: concurrent writes, retries and idempotency,
+  rate limits, unmapped storage errors, authorisation, personal data, time zones and large lists. The words of the
+  rules raise them (signing in raises concurrent writes, rate limits and authorisation), and so do the steps (a
+  signed-in actor, a record, a clock, a query count) and, for a task with server code, the rows of the design's
+  Security and privacy, Errors and resilience and Data and performance sections.
+- `runs in: group N`: the order. A task waits for the tasks its `Depends on:` line names and for every earlier task
+  whose `Areas:` overlap its own; tasks of one group may be built at the same time.
+
+The orchestrator copies `design:` and `risks:` into each task's `Design:` and `Risks:` lines of `tasks.md` and may add
+to them; a word that is not a known risk is gap `T010` of `bdd trace`. The code reviewer writes one line per risk,
+`Risk <name>: handled in <file:line>`, `not applicable: <reason>` or `missing`, and the implement gate refuses a report
+that leaves one out or says it is missing. The UI reviewer opens the built screen and the design screen side by side
+at 375 and 1280 px with the chrome-devtools tools, saves both screenshots in `reviews/` and reports each difference in
+layout, tokens and states; without the tools, it names each row under *Not checked*, and the gate refuses a report that
+does neither. After every task the orchestrator runs `bdd check FEAT-n --task T-n.m`, and the implement gate waits for
+a passing run of every task's own when quality checks are configured. A feature started before this version has no
+`against_design` marker in its state and keeps the gates it had; `bdd route` still prints the derived lines, with one
+note that `tasks.md` lacks them.
+
 ## Features across several repositories
 
 When one feature needs work in more than one repository (an API and a web app, a library and its consumers), one

@@ -19,6 +19,25 @@ scenarios green, and build the seams that `system.md` lists, following the shape
 When the code touches an API or a database, read the cards `api-design`, `database-schema`, `database-migrations`,
 `database-performance` and `database-engines` that apply, and the API and data sections of the standards.
 
+## Build against the design
+
+`bdd route FEAT-n` names, for your task, what it builds against. Read each before you write:
+
+- **`design:`** the sections of `design.md` your task builds. Put each piece where *Architecture* says, copy the
+  example file of each pattern in *Patterns*, keep each endpoint to *API contract*, each query to its index and each
+  operation to its budget in *Data and performance*, and show each failure the way *Errors and resilience* says.
+- **`blocks:`** each building block: the field, its standard, the library and the version the project declares, and
+  its documentation. Use that library. Do not write your own phone, date, money or address parser where it has one.
+- **`services:`** each outside service the task may call, with the official page, MCP server and CLI that
+  `.bdd/sources.toml` names. Check every call you write against one of them: the vendor's CLI (`--help`, or a dry run
+  that changes nothing), a documentation server you have (context7, Microsoft Learn), or a page on the official site.
+  The orchestrator puts a lookup through the vendor's own MCP server in your task when that server is installed. Never
+  write a call from memory or from another site.
+- **`risks:`** the known risks your code must handle. For each one, handle it in the code (a transaction or a unique
+  key for concurrent writes, an idempotency key for a retried request, the rate limit on the call, each storage error
+  mapped to the error the design names, the authorisation check on the server, no personal data in logs, times stored
+  with their zone, a page size and a maximum for a list) or know why it does not apply.
+
 ## What you must not do
 
 - **Never edit a test.** Feature files, step definitions and drivers are locked and read-only. Do not loosen an
@@ -40,5 +59,5 @@ When the code touches an API or a database, read the cards `api-design`, `databa
 ## Return
 
 Your last message is read by the orchestrator. It must contain: the files you changed; the result of
-`bdd classify FEAT-n`; the quality tools you ran, if any (`bdd check FEAT-n` is the orchestrator's); the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); the tasks done and not done; change requests, if any; and whether the implement gate can
+`bdd classify FEAT-n`; the quality tools you ran, if any (`bdd check FEAT-n` is the orchestrator's); the documentation you consulted, one line per library for each task: `T-n.m library version source` (the version the project declares, and an https address or a file you opened), or `T-n.m none: why this task calls no library` (the orchestrator records these with `bdd docs`; a task without either keeps the implement gate closed); for each outside service you called, one line `T-n.m service: how you checked it` (the MCP server and the query, the CLI command, or the official page); for each risk of the task, `Risk <name>: handled in file:line` or `Risk <name>: not applicable: why`; the tasks done and not done; change requests, if any; and whether the implement gate can
 pass.

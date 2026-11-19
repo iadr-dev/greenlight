@@ -15,10 +15,21 @@ feature already has, so the same feature is always routed the same way.
 A UI task is written by the ``ui-engineer``, any other by the ``implementer``. Every task is reviewed by the
 ``code-reviewer``; a UI task also by the ``ui-reviewer``, a security task by the ``security-reviewer``. Each reviewer
 writes ``reviews/<task>-<reviewer>.md`` in the feature folder, and the implement gate waits for those reports.
+
+Each task is also told what it builds against: the sections of the technical design it builds (``SECTION_NEEDS``) and
+the inventory rows of its screens, its building blocks with the version a manifest declares, the outside services its
+rules name (every one when they name none) with their ``.bdd/sources.toml`` entry, and its known risks (``risks``). The
+``Design:`` and ``Risks:`` lines of ``tasks.md`` add to what is derived. ``plan_groups`` orders the tasks: tasks of one
+group share no ``Areas:`` path and wait for none of each other, so their writers may run at the same time.
+
+A feature started with this (``MARKER`` in its state) is held to it at the tasks and implement gates: every task has its
+two lines (``line_problems``), its code review answers each of its risks (``risks.review_problems``) and its UI review
+compares each of its rows with the design at 375 and 1280 px or says why it could not (``side_by_side_problems``).
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -27,7 +38,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
 
 from . import config as cfg
-from . import featurefiles, gherkin, reviewfresh, reviewlog, roles, store, trace, vocabulary
+from . import featurefiles, gherkin, reviewfresh, reviewlog, risks, roles, store, trace, vocabulary
 from .errors import StoreError, UsageError
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -50,6 +61,26 @@ CARDS = {"ui": ("ui-design", "accessibility"), "api": ("api-design",),
 WRITERS, REVIEWERS = roles.WRITERS, roles.REVIEWERS
 
 
+MARKER = "against_design"          # in state.json: the feature's tasks are built against the design, with their risks
+ALWAYS = "always"
+# The sections of design.md a task builds, when the section has rows: the facts of the task that make it build one (its
+# kinds, its risks, or rows of its own in the trace, the building blocks or the outside services).
+SECTION_NEEDS = {
+    "Design trace": {"traced"},
+    "Building blocks": {"blocks"},
+    "External services": {"services"},
+    "Architecture": {ALWAYS},
+    "Patterns": {ALWAYS},
+    "API contract": {"api"},
+    "Data and performance": {"data", "unmapped storage errors", "large lists"},
+    "Security and privacy": {"security", "authorisation", "personal data", "rate limits"},
+    "Errors and resilience": {"api", "data", "concurrent writes", "retries and idempotency", "unmapped storage errors"},
+    "State and offline": {"ui"},
+    "Accessibility and language": {"ui"},
+}
+SHOWN_CHARS = 160
+
+
 @dataclass
 class Route:
     task: str
@@ -58,7 +89,16 @@ class Route:
     reviewers: list[str]
     cards: list[str]
     because: list[str] = field(default_factory=list)
-    design: list[str] = field(default_factory=list)       # a UI task: the feature's rows of the design's screen inventory
+    design: list[str] = field(default_factory=list)       # the sections of design.md the task builds
+    rows: list[str] = field(default_factory=list)         # the ids of the inventory rows it builds
+    screens: list[str] = field(default_factory=list)      # those rows: id, screen, file and states
+    risks: list[str] = field(default_factory=list)        # the known risks its code must handle (``risks``)
+    blocks: list[dict] = field(default_factory=list)      # the building blocks it uses: library, package, version, source
+    services: list[dict] = field(default_factory=list)    # the outside services it may call, with their sources.toml entry
+    depends_on: list[str] = field(default_factory=list)
+    group: int = 0                                         # tasks of one group may be built at the same time
+    after: list[str] = field(default_factory=list)        # the earlier tasks it waits for: its dependencies, shared areas
+    alongside: list[str] = field(default_factory=list)    # the other tasks of its group
 
 
 def _instruction_ids(vocab: vocabulary.Vocabulary, step: gherkin.Step, language: str) -> list[str]:
@@ -106,6 +146,7 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
         reserved = tasks.setdefault(whole_feature_task(feature_id), {"title": title, "examples": []})
         reserved["examples"] = reserved["examples"] + [e for e in unclaimed if e not in reserved["examples"]]   # never overwritten
     screens = designed_screens(root, config, feature_id)
+    facts = DesignFacts.read(root, feature_dir)
     out: list[Route] = []
     for task_id, task in tasks.items():
         ids: list[str] = []
@@ -127,22 +168,194 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
         kinds = [k for k, hit in (("ui", ui), ("api", api), ("data", data), ("security", auth or words)) if hit]
         reviewers = ["code-reviewer"] + (["security-reviewer"] if "security" in kinds else []) + (["ui-reviewer"] if ui else [])
         cards = [c for k in kinds for c in CARDS[k] if (PRACTICES / f"{c}.md").is_file()]
-        out.append(Route(task_id, task["title"], "ui-engineer" if ui else "implementer", reviewers, cards, because,
-                         screens if ui else []))
+        found = Route(task_id, task["title"], "ui-engineer" if ui else "implementer", reviewers, cards, because)
+        facts.fill(found, task, kinds, texts, ids, screens)
+        out.append(found)
+    plan_groups(out, tasks)
     return out
 
 
-def designed_screens(root: Path, config: cfg.Config, feature_id: str) -> list[str]:
-    """The rows of the design's screen inventory (``[design]``) that name the feature: id, screen, file and states."""
+_LINK = re.compile(r"https://[\w.-]+(?:/[\w.~/#?=&+%-]*)?")
+_VERSION_PART = re.compile(r"(?:\^|~=|~|>=|<=|==|<|>)?(?:\d[\d.]*(?:\.[x*])?(?:[-+][A-Za-z0-9.]{0,20}){0,2}|[x*])")
+VERSION_CHARS, VERSION_PARTS = 40, 3
+
+
+def _cell(text: object) -> str:
+    """A cell of design.md or sources.toml as the route shows it: plain words, a name or a path (``issues.safe_cell``),
+    or an https address of one host; anything else is not shown, so a cell cannot speak in greenlight's voice in the
+    brief of a writer."""
+    from . import docsrecord
+    from .issues import safe_cell
+    flat = str(text).strip()
+    if not flat:
+        return ""
+    if _LINK.fullmatch(flat) and len(flat) <= SHOWN_CHARS and docsrecord.hostname(flat):
+        return flat
+    return safe_cell(flat)
+
+
+def _version(text: str) -> str:
+    """The version a manifest declares, shown only when it is one: ``1.4.2``, ``^1.4.2``, ``~=2.0``, ``>=3,<4``."""
+    from .issues import HIDDEN_CELL
+    flat = text.strip()
+    parts = [p.strip() for p in flat.split(",")]
+    shown = len(flat) <= VERSION_CHARS and len(parts) <= VERSION_PARTS and all(_VERSION_PART.fullmatch(p) for p in parts)
+    return flat if shown else HIDDEN_CELL
+
+
+def _mentions(texts: list[str], *names: str) -> bool:
+    return any(re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", t, re.IGNORECASE) for n in names if n for t in texts)
+
+
+@dataclass
+class DesignFacts:
+    """What the technical design, sources.toml and the manifests say, read once per feature for all its tasks."""
+    tables: dict | None
+    entries: dict[str, dict]                 # sources.toml by id (lower-cased)
+    versions: dict[tuple[str, str], str]     # (ecosystem, package) -> the version a manifest declares
+
+    @classmethod
+    def read(cls, root: Path, feature_dir: Path) -> "DesignFacts":
+        from . import designsections, sources
+        try:
+            tables = designsections.read(feature_dir)
+        except UnicodeDecodeError as exc:
+            raise UsageError(f"{designsections.DESIGN_FILE} of {feature_dir.name} is not UTF-8 text ({exc.reason}); save it "
+                             "as UTF-8") from exc
+        if tables is None:
+            return cls(None, {}, {})
+        entries = {key.casefold(): value for key, value in sources.load(root)[0].items()}
+        versions = {(m.ecosystem, sources._normal(m.ecosystem, name)): version
+                    for m in reversed(sources.manifests(root)) for name, version in m.deps.items()}
+        return cls(tables, entries, versions)
+
+    def fill(self, found: Route, task: dict, kinds: list[str], texts: list[str], ids: list[str],
+             screens: dict[str, str]) -> None:
+        """The task's design sections, rows, screens, risks, building blocks and services."""
+        from . import designsections
+        written_sections, written_rows = self._written_design(task.get("design") or "", screens)
+        traced = self._traced(task) if self.tables else []
+        rows = list(dict.fromkeys([r for r in screens if any(designsections._mentions(t.get("Screen"), r) for t in traced)]
+                                  + written_rows))
+        if "ui" in kinds and not rows:
+            rows = list(screens)                     # a screen task the trace does not tie to a row: every row of the feature
+        found.rows, found.screens = rows, [screens[r] for r in rows]
+        derived = risks.from_texts(texts, ids)
+        if self.tables is not None:
+            blocks = self._blocks(traced)
+            found.blocks, found.services = [block for block, _ in blocks], self._services(texts)
+            derived |= risks.from_design(self.tables, bool({"api", "data", "security"} & set(kinds)),
+                                         [kind for _, kind in blocks])
+        found.risks = risks.ordered(derived | set(risks.parse_line(task.get("risks") or "")[0]))
+        tags = {ALWAYS, *kinds, *found.risks} | {name for name, hit in (("traced", traced), ("blocks", found.blocks),
+                                                                        ("services", found.services)) if hit}
+        derived_sections = {name for name, needs in SECTION_NEEDS.items()
+                            if self.tables is not None and needs & tags and self.tables[name].rows}
+        found.design = [s.name for s in designsections.SECTIONS if s.name in derived_sections | written_sections]
+
+    @staticmethod
+    def _written_design(line: str, screens: dict[str, str]) -> tuple[set[str], list[str]]:
+        """A ``Design:`` line of tasks.md: the section names it gives, and the inventory rows of the feature it names."""
+        from . import designsections
+        names = {s.name.casefold(): s.name for s in designsections.SECTIONS}
+        parts = [" ".join(p.strip(" .*_`").split()) for p in re.split(r"[,;]", line)]
+        return ({names[p.casefold()] for p in parts if p.casefold() in names},
+                [r for r in screens if any(p.casefold() == r.casefold() for p in parts)])
+
+    def _traced(self, task: dict) -> list:
+        """The trace rows of the rules the task's examples belong to (``R-7.1`` and ``R-007.1`` are one rule)."""
+        mine = {trace._sort_key(trace.rule_of(e)) for e in task["examples"]}
+        return [r for r in self.tables["Design trace"].rows
+                if {trace._sort_key(i) for i in re.findall(r"[RN]-\d+\.\d+", r.get("Rule"))} & mine]
+
+    def _blocks(self, traced: list) -> list[tuple[dict, str]]:
+        """The building blocks of the fields the task's trace rows name, every one when the task has no trace row; each
+        with the kind of standard it is held to ("" for none)."""
+        from . import designsections, sources
+        elements = {designsections.normal(r.get("Element")) for r in traced}
+        out = []
+        for row in self.tables["Building blocks"].rows:
+            if traced and designsections.normal(row.get("Field")) not in elements:
+                continue
+            try:
+                package = designsections.parse_package(row.get("Package"))
+                version = "the platform" if package is None else None
+            except ValueError:
+                package, version = None, "the package cell is not ECOSYSTEM:NAME; `bdd design` names the row"
+            if package is not None:
+                declared = self.versions.get((package[0], sources._normal(*package)))
+                version = _version(declared) if declared else "not a dependency yet"
+            standard = designsections.standard_of(row.get("Kind"), row.get("Field"))
+            out.append(({"field": _cell(row.get("Field")), "library": _cell(row.get("Library")),
+                         "package": ":".join(package) if package else "-", "version": version,
+                         "source": _cell(row.get("Source"))}, standard.kind if standard else ""))
+        return out
+
+    def _services(self, texts: list[str]) -> list[dict]:
+        """The outside services of the design the task's rules or scenarios name; every one when they name none."""
+        from . import designsections
+        rows = []
+        for row in self.tables["External services"].rows:
+            key = designsections.service_key(self.entries, row.get("Service"))
+            entry = self.entries.get(key, {})
+            rows.append((_mentions(texts, key, str(entry.get("name", ""))), {
+                "service": _cell(key), "call": _cell(row.get("Call")),
+                **{field_name: _cell(entry.get(field_name, "")) for field_name in ("docs", "mcp", "cli", "plugin")}}))
+        named = [service for hit, service in rows if hit]
+        return named or [service for _, service in rows]
+
+
+def _paths_overlap(a: str, b: str) -> bool:
+    """Could two ``Areas:`` paths name one file? Case is ignored (a file system may ignore it), and a glob counts as its
+    folder before the first wildcard, so two writers are never put on one folder by a spelling."""
+    def prefix(path: str) -> str:
+        cut = min((i for i in (path.find(c) for c in "*?[") if i >= 0), default=-1)
+        return (path if cut < 0 else path[:cut].rsplit("/", 1)[0] + "/").casefold().rstrip("/")
+    x, y = prefix(a), prefix(b)
+    return not x or not y or x == y or x.startswith(y + "/") or y.startswith(x + "/")
+
+
+def plan_groups(found: list[Route], tasks: dict[str, dict]) -> None:
+    """The order the tasks may be built in: a task waits for the tasks it depends on (``Depends on:``) and for every
+    earlier task whose ``Areas:`` overlap its own, and a task with no area paths waits for all and is waited for by all.
+    Tasks of one group wait for none of each other. Dependencies on a later task are honoured; a cycle is broken in
+    the order of tasks.md."""
+    from . import reviewfresh
+    known = [r.task for r in found]
+    areas = {r.task: reviewfresh.area_paths((tasks.get(r.task) or {}).get("areas") or "") for r in found}
+    for r in found:
+        named = trace.TASK_ID.findall((tasks.get(r.task) or {}).get("depends") or "")
+        r.depends_on = [t for t in dict.fromkeys(named) if t in known and t != r.task]
+
+    def overlap(a: str, b: str) -> bool:
+        if not areas[a] or not areas[b]:
+            return True
+        return any(_paths_overlap(x, y) for x in areas[a] for y in areas[b])
+
+    placed: dict[str, int] = {}
+    waiting = list(found)
+    while waiting:
+        ready = next((r for r in waiting if all(d in placed for d in r.depends_on)), waiting[0])
+        waiting.remove(ready)
+        before = [t for t in placed if overlap(t, ready.task)]
+        ready.after = sorted(set(before) | {d for d in ready.depends_on if d in placed}, key=known.index)
+        ready.group = max((placed[t] for t in ready.after), default=0) + 1
+        placed[ready.task] = ready.group
+    for r in found:
+        r.alongside = [o.task for o in found if o.group == r.group and o.task != r.task]
+
+
+def designed_screens(root: Path, config: cfg.Config, feature_id: str) -> dict[str, str]:
+    """The rows of the design's screen inventory (``[design]``) that name the feature: {id: id, screen, file and states}."""
     from . import designfolder
     try:
         inventory = designfolder.files_of(config, designfolder.folder_of(config))["inventory"]
         rows = designfolder.inventory_rows(root / inventory)[0] if (root / inventory).is_file() else []
     except (UsageError, OSError, ValueError):
-        return []
+        return {}
     base = PurePosixPath(inventory).parent
-    return [f"{r.id} {r.screen}: {(base / r.file).as_posix() if r.file else 'no screen file'} ({', '.join(r.states)})"
-            for r in rows if feature_id in r.features]
+    return {r.id: f"{r.id} {r.screen}: {(base / r.file).as_posix() if r.file else 'no screen file'} ({', '.join(r.states)})"
+            for r in rows if feature_id in r.features and r.id}
 
 
 def whole_feature_task(feature_id: str) -> str:
@@ -215,39 +428,160 @@ def _older_than_code(root: Path, rel: str, reviewer: str, gate: str, line: dict,
     return f"{rel} is older than the code it covers: {shown} changed after the {reviewer} finished; {again}"
 
 
-def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False, gate: str = "implement") -> list[str]:
+def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: bool = False, gate: str = "implement",
+                    against: bool = False, found: list[Route] | None = None) -> list[str]:
     """Why the implement gate may not pass yet: a review the routing asks for is missing or has no verdict, or, where the
     hooks run, its content is not what that reviewer wrote to that file (``reviewlog``), or the production files of its
-    task changed after the reviewer finished (``reviewfresh``). ``gate`` only words what to do about a stale report."""
+    task changed after the reviewer finished (``reviewfresh``). ``gate`` only words what to do about a stale report. For a
+    feature built against its design (``against``), a code review must also answer every risk of its task, and a UI
+    review compare every screen row of its task with its design or say why it could not."""
     problems: list[str] = []
     log = reviewlog.recorded(root) if hooks_seen else {}
     finished = finished_agents(root) if hooks_seen else {}
     seals = reviewlog.seals(root) if hooks_seen else {}
-    for route in routes(root, feature_dir, feature_id):
+    for route in found if found is not None else routes(root, feature_dir, feature_id):
         for reviewer in route.reviewers:
             path = review_path(feature_dir, route.task, reviewer)
             rel = path.relative_to(feature_dir).as_posix()
-            if not path.is_file():
+            text = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else None
+            if text is None:
                 problems.append(f"{route.task} has no {reviewer} report ({rel})")
-            elif not VERDICT.search(path.read_text(encoding="utf-8-sig")):
+                continue
+            if not VERDICT.search(text):
                 problems.append(f"{rel} has no 'Verdict: PASS' or 'Verdict: FINDINGS' line")
-            elif hooks_seen and not reviewlog.written_by(root, path, reviewer, log, finished):
+                continue
+            if hooks_seen and not reviewlog.written_by(root, path, reviewer, log, finished):
                 problems.append(f"{rel} is not what the {reviewer} agent wrote: a report counts only as its own reviewer "
                                 "wrote it, unchanged; run the reviewer again")
-            elif hooks_seen:
+                continue
+            if hooks_seen:
                 where = (reviewlog.key(root, path), reviewer)
                 older = _older_than_code(root, rel, reviewer, gate, log[where], seals.get(where),
                                          lambda kind=reviewer: _seen_by(root, feature_dir, kind, seals, log))
-                if older:
-                    problems.append(older)
+                problems += [older] if older else []
+            if against and reviewer == "code-reviewer":
+                problems += risks.review_problems(rel, text, route.risks, root)
+            if against and reviewer == "ui-reviewer":
+                problems += side_by_side_problems(feature_dir, rel, text, route.rows)
     return problems
+
+
+WIDTHS = (375, 1280)
+PNG = b"\x89PNG\r\n\x1a\n"
+EXCUSE_CHARS = 20                      # a reason under Not checked, beyond the row id
+_COMPARED = re.compile(r"(?P<row>[\w.-]+)[ \t]+(?P<width>\d{3,4})[ \t]*px[ \t]*:[ \t]*"
+                       r"(?P<built>[^\s|,]+)[ \t]*[|,][ \t]*(?P<design>[^\s|,]+)", re.IGNORECASE)
+_HEADING = re.compile(r"^#{1,6}[ \t]+(?P<title>[^\n]*)$")
+_SCREENSHOT = re.compile(r"[A-Za-z0-9][\w.-]{0,120}\.png", re.IGNORECASE)
+
+
+def _section_lines(text: str, title: str) -> list[str]:
+    """The lines under the report's heading ``title``, up to the next heading."""
+    lines, inside = [], False
+    for line in text.splitlines():
+        heading = _HEADING.match(line)
+        if heading:
+            inside = heading.group("title").strip().casefold() == title.casefold()
+        elif inside and line.strip():
+            lines.append(line.strip(" -*+\t"))
+    return lines
+
+
+def _png_digest(folder: Path, name: str) -> str | None:
+    """The SHA-256 of ``name`` when it is a picture file of the reviews folder itself (a plain file name ending in .png,
+    no folder, drive or other mark) that starts as a PNG; None otherwise."""
+    if not _SCREENSHOT.fullmatch(name):
+        return None
+    try:
+        data = (folder / name).read_bytes()
+    except (OSError, ValueError):
+        return None
+    return hashlib.sha256(data).hexdigest() if data.startswith(PNG) else None
+
+
+def side_by_side_problems(feature_dir: Path, rel: str, text: str, rows: list[str]) -> list[str]:
+    """Why a UI review does not show its task's screens next to their design: a row with no comparison at each width
+    (``O-SI-01 375 px: built.png | design.png`` under *Side by side*, both PNG files in ``reviews/``, every picture a
+    different one) and no line under *Not checked* that names the row and says why it could not be compared."""
+    from .issues import safe_cell
+    compared = {}
+    for line in _section_lines(text, "Side by side"):
+        found = _COMPARED.fullmatch(line)
+        if found:
+            compared[(found.group("row").casefold(), int(found.group("width")))] = (found.group("built"), found.group("design"))
+    excused = _section_lines(text, "Not checked")
+    problems: list[str] = []
+    seen: dict[str, str] = {}
+    for row in rows:
+        if any(_mentions([line], row) and len(line) - len(row) >= EXCUSE_CHARS for line in excused):
+            continue
+        if not all((row.casefold(), width) in compared for width in WIDTHS):
+            problems.append(f"{rel} neither compares {safe_cell(row)} with its design at "
+                            f"{' and '.join(map(str, WIDTHS))} px nor says under Not checked why it could not")
+            continue
+        for width in WIDTHS:
+            for name in compared[(row.casefold(), width)]:
+                digest = _png_digest(feature_dir / REVIEWS_DIR, name)
+                if digest is None:
+                    problems.append(f"{rel}: the screenshot {safe_cell(name)} of {safe_cell(row)} at {width} px is not a "
+                                    f"PNG file in {REVIEWS_DIR}/")
+                elif digest in seen:
+                    problems.append(f"{rel}: the screenshot {safe_cell(name)} of {safe_cell(row)} at {width} px is the same "
+                                    f"picture as {safe_cell(seen[digest])}; each screen and width has its own")
+                else:
+                    seen[digest] = name
+    return problems
+
+
+def line_problems(feature_dir: Path, feature_id: str) -> list[str]:
+    """For a feature built against its design: the tasks of tasks.md with no ``Design:`` or ``Risks:`` line, and the words
+    of a Risks: line that are not known risks."""
+    from . import designsections
+    from .issues import safe_cell
+    tasks = trace.read_tasks(feature_dir / "tasks.md") or {}
+    missing = unwritten(tasks)
+    problems = [f"{', '.join(missing)} {'has' if len(missing) == 1 else 'have'} no Design: or Risks: line in tasks.md, or an "
+                f"empty one: copy them from `bdd route {feature_id}` (none when it names none)"] if missing else []
+    sections = {s.name.casefold() for s in designsections.SECTIONS} | {"none"}
+    for task_id, task in tasks.items():
+        words = [" ".join(p.strip(" .*_`").split()) for p in re.split(r"[,;]", task.get("design") or "")]
+        unknown = [w for w in words if w and w.casefold() not in sections and not _ROW_ID.fullmatch(w)]
+        problems += [f'{task_id}: the Design: line names "{safe_cell(w)}", which is neither a section of design.md nor an '
+                     "inventory row id" for w in unknown]
+    return problems + [gap.message for gap in trace.risk_gaps(tasks)]
+
+
+_ROW_ID = re.compile(r"[A-Za-z][\w.]*-[\w.-]+")
+
+
+def unwritten(tasks: dict[str, dict]) -> list[str]:
+    """The tasks that have no Design: or no Risks: line, or an empty one (a task list written before them)."""
+    return [t for t, task in tasks.items() if not (task["design"] or "").strip() or not (task["risks"] or "").strip()]
 
 
 def describe(route: Route) -> str:
     lines = [f"{route.task} {route.title}".rstrip(), f"  writer: {route.writer}", f"  reviewers: {', '.join(route.reviewers)}",
              f"  cards: {', '.join(route.cards) or '(the language card only)'}"]
     lines += [f"  because: {'; '.join(route.because)}"] if route.because else []
-    return "\n".join(lines + ([f"  design: {'; '.join(route.design)}"] if route.design else []))
+    design = "; ".join(part for part in (", ".join(route.design), ", ".join(route.rows)) if part)
+    lines += [f"  design: {design}"] if design else []
+    lines += [f"  screens: {'; '.join(route.screens)}"] if route.screens else []
+    lines.append(f"  risks: {', '.join(route.risks) or 'none'}")
+    lines += [f"  blocks: {'; '.join(_block(b) for b in route.blocks)}"] if route.blocks else []
+    lines += [f"  services: {'; '.join(_service(s) for s in route.services)}"] if route.services else []
+    order = f"  runs in: group {route.group}"
+    order += f", after {', '.join(route.after)}" if route.after else ""
+    order += f", with {', '.join(route.alongside)}" if route.alongside else ""
+    return "\n".join(lines + [order])
+
+
+def _block(block: dict) -> str:
+    return f"{block['field']}: {block['library']} ({block['package']} {block['version']}), {block['source']}"
+
+
+def _service(service: dict) -> str:
+    where = ", ".join(f"{k} {service[k]}" for k in ("docs", "mcp", "cli", "plugin") if service.get(k))
+    return f"{service['service']} ({service['call']}): {where or 'not in .bdd/sources.toml'}"
 
 
 def run(argv: list[str]) -> int:
@@ -258,12 +592,17 @@ def run(argv: list[str]) -> int:
     try:
         from .statecmd import project_root
         root = project_root()
-        found = routes(root, store.find_feature_dir(root, args.feature), args.feature)
+        feature_dir = store.find_feature_dir(root, args.feature)
+        found = routes(root, feature_dir, args.feature)
     except (UsageError, StoreError, cfg.ConfigError, vocabulary.VocabularyError) as exc:
         print(f"bdd route: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps([asdict(r) for r in found], indent=2))
-    else:
-        print("\n".join(describe(r) for r in found) or f"{args.feature}: tasks.md names no task")
+        return 0
+    print("\n".join(describe(r) for r in found) or f"{args.feature}: tasks.md names no task")
+    missing = unwritten(trace.read_tasks(feature_dir / "tasks.md") or {})
+    if missing:
+        print(f"note: tasks.md has no Design: or Risks: line for {', '.join(missing)}; the ones above are derived "
+              "from the rules, the steps and the design")
     return 0

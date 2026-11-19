@@ -22,6 +22,11 @@ Doing this on the draft finds the missing rule before tests and code depend on i
 4. For every blocking cause, add or change a rule and at least one example; for every tracked one, write the
    assumption in the brief. Show the person the list with the rules.
 5. Keep it short: ten minutes of thought and at most ten causes.
+6. In the tasks phase, run it again per task against the known risks, the failures that late audits keep finding in
+   code that passed its scenarios: concurrent writes (two sign-ins linking one account at once), retries and
+   idempotency, rate limits, unmapped storage errors (a database error shown raw), authorisation, personal data, time
+   zones and large lists. `bdd route` names the ones the rules, steps and design raise; write any it missed on the
+   task's `Risks:` line, and the code reviewer answers each one.
 
 ## Worked example
 
@@ -36,3 +41,5 @@ their address (tracked); the carrier ships twice (blocking: charge once); the pr
 - Fixing a blocking cause in the prose only. It needs a rule and an example, or the tests will not catch it.
 - Marking everything blocking to be safe, which stops the feature from ever being approved.
 - Skipping it for small features. A one-rule change still gets a two-minute version.
+- Dropping a known risk from a task because it "does not apply". Keep it on the `Risks:` line; the code reviewer
+  writes `not applicable` with the reason, which costs one line and shows someone looked.
