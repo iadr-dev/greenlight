@@ -460,6 +460,19 @@
       "phase": "verify"
     },
     {
+      "apply_when": "a feature stores, shows or asks for a phone number, a country, money, a time zone, an address, an email, a URL, a date or duration, a language, or a file",
+      "id": "standard-values",
+      "kind": "practice",
+      "output": "a Building blocks row per field of design.md that names the field's standard, the library or platform API that handles it, and its documentation",
+      "pairs_with": [
+        "api-design",
+        "database-schema",
+        "accessibility"
+      ],
+      "path": "practices/standard-values.md",
+      "phase": "system-map"
+    },
+    {
       "apply_when": "a request carries more than a handful of rules, several kinds of users, or more than one independent outcome",
       "id": "story-splitting",
       "kind": "practice",
