@@ -377,6 +377,28 @@ class ReviewLineTest(unittest.TestCase):
                     if problem:
                         self.assertIn(problem, found[0])
 
+    def test_a_place_outside_the_project_is_refused_before_any_file_is_touched(self):
+        from pathlib import Path
+        from unittest import mock
+
+        def touched(*_args, **_kwargs):
+            raise AssertionError("the file system was asked")
+        root = Path("project-that-is-never-read")
+        for path in ("\\\\attacker\\share\\x", "//host/share/x", "C:\\x", "\\\\?\\C:\\x", "../x", "src/../../x", "/etc/passwd",
+                     "src/a\x00.py", "%2e%2e/x"):
+            with self.subTest(path=path), mock.patch.object(Path, "resolve", touched), \
+                    mock.patch.object(Path, "is_file", touched), mock.patch.object(Path, "read_text", touched), \
+                    mock.patch.object(Path, "exists", touched), mock.patch.object(Path, "stat", touched):
+                self.assertIn("is not a file of the project", risks._place_problem(root, path, 1))
+
+    def test_a_project_path_still_counts(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "src").mkdir()
+            (Path(tmp) / "src" / "app.py").write_text("x\n" * 12, encoding="utf-8")
+            self.assertIsNone(risks._place_problem(Path(tmp), "src/app.py", 12))
+
     def test_a_line_of_spaces_does_not_take_long(self):
         import time
         started = time.perf_counter()

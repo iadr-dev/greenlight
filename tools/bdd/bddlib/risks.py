@@ -151,15 +151,20 @@ def answers(text: str) -> dict[str, str]:
     return found
 
 
+# A path relative to the project, with forward slashes: no drive, root, backslash, percent sign or control character.
+_PROJECT_PATH = re.compile(r"[\w.@+-]+(?:/[\w.@+-]+){0,30}")
+
+
 def _place_problem(root: Path, path: str, line: int) -> str | None:
     """Why ``path:line`` is not a line of a file of the project, or None."""
     from .issues import safe_cell
-    try:
-        target = (root / path).resolve()
-        target.relative_to(root.resolve())
-        count = len(target.read_text(encoding="utf-8", errors="replace").splitlines()) if target.is_file() else 0
-    except (OSError, ValueError):
-        count = 0
+    count = 0
+    if _PROJECT_PATH.fullmatch(path) and ".." not in path.split("/"):     # judged on the text before any file is touched
+        try:
+            target = root / path
+            count = len(target.read_text(encoding="utf-8", errors="replace").splitlines()) if target.is_file() else 0
+        except (OSError, ValueError):
+            count = 0
     if count == 0:
         return f"{safe_cell(path)} is not a file of the project"
     return None if 1 <= line <= count else f"{safe_cell(path)} has no line {line}"
