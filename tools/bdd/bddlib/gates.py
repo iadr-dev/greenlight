@@ -165,6 +165,9 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
         problems += designreview.problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")))
     if gate in ("tasks", "implement") and technical:
         problems += designsections.install_problems(root, feature_dir)
+    against = bool(data.get(route.MARKER))                      # a feature from before keeps the gates it had
+    if gate in ("tasks", "implement") and against:
+        problems += route.line_problems(feature_dir, data["feature"])
     if gate in ("implement", "verify"):
         problems += lock_problems(root, feature_dir, data["feature"])
         problems += [f"integrity violation #{v['id']} is open: {tripwire.describe(v)}" for v in tripwire.open_violations(root)]
@@ -174,10 +177,14 @@ def gate_problems(root: Path, feature_dir: Path, data: dict, gate: str, raw: byt
             raw = runner.latest_bytes(root, data["feature"]) if cfg.load(root).runs else None
             problems += run_problems(root, data["feature"], "verify", raw)
     if gate in ("implement", "verify") and data.get("kind") != "adopt":      # the code of an adoption already exists: not judged
+        found = route.routes(root, feature_dir, data["feature"])
         problems += quality.problems(root, data["feature"])
-        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")), gate=gate)
+        if gate == "implement" and against:
+            problems += quality.task_problems(root, data["feature"], [r.task for r in found])
+        problems += route.review_problems(root, feature_dir, data["feature"], hooks_seen=bool(data.get("hooks_seen")), gate=gate,
+                                          against=against, found=found)
         if gate == "implement":
-            problems += docsrecord.problems(root, feature_dir, data["feature"])
+            problems += docsrecord.problems(root, feature_dir, data["feature"], found)
     if gate == "verify":
         if data.get("kind") != "adopt":             # an adopted feature has no red to measure a change from
             problems += mutation.problems(root, data["feature"])

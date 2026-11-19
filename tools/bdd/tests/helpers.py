@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bddlib import approvals, claudepaths, designreview, designsections, docsrecord, enforcement, gates, lockfile, route, state
+from bddlib import approvals, claudepaths, designreview, designsections, docsrecord, enforcement, gates, lockfile, route, state, trace
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 RULES = "# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n"
@@ -74,6 +74,7 @@ class ProjectCase(unittest.TestCase):
             self.write_technical_design()
         if name == "tasks" and result == "pass" and reviews:
             self.write_design_reviews()
+            self.write_task_lines()
         if name == "implement" and result == "pass" and reviews:
             self.write_reviews()
             self.write_docs()
@@ -120,13 +121,36 @@ class ProjectCase(unittest.TestCase):
         for found in route.routes(self.root, self.feature_dir, "FEAT-007"):
             docsrecord.add(self.root, self.feature_dir, "FEAT-007", found.task, None, None, None, "this test calls no library")
 
+    def write_task_lines(self) -> None:
+        """The Design: and Risks: lines `bdd route` derives, under each task of tasks.md that has none, as the orchestrator
+        copies them before the tasks gate."""
+        path = self.feature_dir / "tasks.md"
+        if not path.is_file():
+            return
+        found = {r.task: r for r in route.routes(self.root, self.feature_dir, "FEAT-007")}
+        missing = set(route.unwritten(trace.read_tasks(path) or {}))
+        lines = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            lines.append(line)
+            task = trace.TASK_LINE.match(line)
+            if task and task.group(1) in missing and task.group(1) in found:
+                r = found[task.group(1)]
+                lines += [f"Design: {', '.join(r.design) or 'Architecture'}", f"Risks: {', '.join(r.risks) or 'none'}"]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
     def write_reviews(self, verdict: str = "PASS") -> None:
-        """A report from every reviewer the routing names, as the orchestrator leaves them before the implement gate."""
+        """A report from every reviewer the routing names, as the orchestrator leaves them before the implement gate: the
+        code reviewer answers each risk of its task, the UI reviewer says it had no browser to compare the screens in."""
         for found in route.routes(self.root, self.feature_dir, "FEAT-007"):
             for reviewer in found.reviewers:
                 path = route.review_path(self.feature_dir, found.task, reviewer)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(f"# {reviewer}: {found.task}\n\nVerdict: {verdict}\n", encoding="utf-8", newline="\n")
+                extra = ""
+                if reviewer == "code-reviewer":
+                    extra = "".join(f"- Risk {risk}: not applicable: this test has no such code\n" for risk in found.risks)
+                if reviewer == "ui-reviewer":
+                    extra = "## Not checked\n" + "".join(f"- {row}: no browser in this test\n" for row in found.rows)
+                path.write_text(f"# {reviewer}: {found.task}\n\nVerdict: {verdict}\n\n{extra}", encoding="utf-8", newline="\n")
 
     # -- transcripts ---------------------------------------------------------------------
     def transcript(self, *entries: dict, name: str = "session.jsonl") -> Path:

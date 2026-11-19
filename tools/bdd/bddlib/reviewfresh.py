@@ -75,7 +75,7 @@ def judge(root: Path, feature_dir: Path, task_id: str) -> dict:
         raise Unjudged("no red was recorded for this feature")
     changed = _changed_since_red(root, red["commit"])
     tasks = trace.read_tasks(feature_dir / "tasks.md") or {}
-    areas = area_paths((tasks.get(task_id) or {}).get("areas", ""))
+    areas = area_paths((tasks.get(task_id) or {}).get("areas") or "")
     named = [f for f in changed if any(_inside(f, a) for a in areas)]
     if named:
         return {"red": red["commit"], "areas": areas, "files": _hashes(root, named)}
