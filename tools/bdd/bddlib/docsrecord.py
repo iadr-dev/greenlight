@@ -2,13 +2,14 @@
 
     bdd docs FEAT-n --task T-n.m --library NAME --version V --source URL_OR_FILE
     bdd docs FEAT-n --task T-n.m --none "why this task calls no library"
-    bdd docs FEAT-n --service NAME --source URL_OR_FILE | --mcp SERVER --query TEXT | --cli COMMAND
+    bdd docs FEAT-n --service NAME --source URL_OR_FILE | --mcp SERVER --query TEXT | --cli COMMAND [--task T-n.m]
     bdd docs FEAT-n [--list]
 
 ``--service`` records the evidence for an outside call of the technical design (``designsections``) before any task
 exists: the service's official page, a documentation lookup through an MCP server, or a run of its command-line tool.
 When ``.bdd/sources.toml`` lists the service, the page must be on its official site and the server and the tool the ones
-it names.
+it names. With ``--task`` it is the evidence a writer checked the task's own calls to the service against; it does not
+stand in for the task's record of the libraries it calls.
 
 A writer is told to read the current documentation of every library it calls instead of recalling it. It cannot run this
 command (it reports, the orchestrator records); the report's "documentation consulted" lines become records here. A record
@@ -141,19 +142,22 @@ def _program(command: str) -> str:
 
 
 def add_evidence(root: Path, feature_dir: Path, service: str, source: str | None, mcp: str | None, query: str | None,
-                 cli: str | None) -> dict:
-    """Record what the design's call to ``service`` was checked against: its official page (or a file of the installed
-    package), a lookup through an MCP server, or a run of the vendor's command-line tool. ``.bdd/sources.toml`` names the
-    service's official site, server and tool when it lists the service; then the evidence has to come from them."""
+                 cli: str | None, task: str | None = None) -> dict:
+    """Record what a call to ``service`` was checked against: its official page (or a file of the installed package), a
+    lookup through an MCP server, or a run of the vendor's command-line tool; for the design, or with ``task`` for the code
+    of that task. ``.bdd/sources.toml`` names the service's official site, server and tool when it lists the service; then
+    the evidence has to come from them."""
     from . import designsections, sources
     if sum(x is not None for x in (source, mcp, cli)) != 1:
         raise UsageError("evidence is one of --source URL_OR_FILE, --mcp SERVER --query TEXT, or --cli COMMAND")
+    if task is not None and not TASK.fullmatch(task):
+        raise UsageError(f"--task names a task id such as T-007.1, not {task!r}")
     services = {key.casefold(): value for key, value in sources.load(root)[0].items()}
     key = designsections.service_key(services, service)
     if not key:
         raise UsageError("--service needs the name of the service, as .bdd/sources.toml names it")
     entry_of = services.get(key, {})
-    entry: dict = {"service": key}
+    entry: dict = {"service": key, **({"task": task} if task else {})}
     if source is not None:
         problem = source_problem(root, source)
         if problem:
@@ -186,22 +190,23 @@ def add_evidence(root: Path, feature_dir: Path, service: str, source: str | None
     return entry
 
 
-def problems(root: Path, feature_dir: Path, feature_id: str) -> list[str]:
-    """Why the implement gate may not pass: a task with no record of the documentation read, and no reason for having none."""
+def problems(root: Path, feature_dir: Path, feature_id: str, found: list | None = None) -> list[str]:
+    """Why the implement gate may not pass: a task with no record of the documentation read, and no reason for having none.
+    Evidence for an outside service (``--service``) is not a record of the libraries the task calls."""
     try:
-        have = {e.get("task") for e in entries(feature_dir)}
+        have = {e.get("task") for e in entries(feature_dir) if not e.get("service")}
     except StoreError as exc:
         return [str(exc)]
+    found = found if found is not None else route.routes(root, feature_dir, feature_id)
     return [f"{r.task} has no documentation record: `bdd docs {feature_id} --task {r.task} --library NAME --version V "
-            "--source URL` for each library it calls, or `--none \"reason\"`" for r in route.routes(root, feature_dir, feature_id)
-            if r.task not in have]
+            "--source URL` for each library it calls, or `--none \"reason\"`" for r in found if r.task not in have]
 
 
 def describe(entry: dict) -> str:
     if entry.get("service"):
         how = {"page": entry.get("source"), "mcp": f"{entry.get('server')}: {entry.get('query')}",
                "cli": f"ran {entry.get('command')}"}.get(str(entry.get("kind")), "")
-        return f"design  {entry['service']}  {how}"
+        return f"{entry.get('task') or 'design'}  {entry['service']}  {how}"
     if entry.get("kind") == "none":
         return f"{entry['task']}  no library: {entry.get('reason', '')}"
     return f"{entry['task']}  {entry.get('library')} {entry.get('version')}  {entry.get('source')}"
@@ -226,10 +231,11 @@ def run(argv: list[str]) -> int:
         root = project_root()
         feature_dir = store.find_feature_dir(root, args.feature)
         if args.service is not None:
-            if args.task or args.library or args.version or args.none is not None:
-                raise UsageError("--service records the design's evidence; it takes --source, --mcp with --query, or --cli")
-            entry = add_evidence(root, feature_dir, args.service, args.source, args.mcp, args.query, args.cli)
-            print(f"recorded: design evidence for {entry['service']}")
+            if args.library or args.version or args.none is not None:
+                raise UsageError("--service records the evidence for a call to a service; it takes --source, --mcp with "
+                                 "--query, or --cli, and --task for the task that makes the call")
+            entry = add_evidence(root, feature_dir, args.service, args.source, args.mcp, args.query, args.cli, args.task)
+            print(f"recorded: {entry.get('task') or 'design'} evidence for {entry['service']}")
             return 0
         if args.list or not args.task:
             found = entries(feature_dir)

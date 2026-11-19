@@ -311,6 +311,16 @@ class EvidenceTest(SectionsCase):
         self.assertEqual(self.add(mcp="context7", query="supabase-js update")["kind"], "mcp")
         self.assertEqual(self.add(cli="npx supabase gen types")["kind"], "cli")
 
+    def test_evidence_for_a_task_is_kept_with_the_task_and_is_not_its_library_record(self):
+        entry = docsrecord.add_evidence(self.root, self.feature_dir, "Supabase", None, "supabase", "update a row", None, "T-007.1")
+        self.assertEqual((entry["task"], entry["kind"]), ("T-007.1", "mcp"))
+        self.assertEqual(docsrecord.describe(entry), "T-007.1  supabase  supabase: update a row")
+        self.assertIn("supabase", designsections.context(self.root, self.feature_dir, "FEAT-007").evidence)
+        self.assertTrue(any("T-007.0 has no documentation record" in p or "T-007.1 has no documentation record" in p
+                            for p in docsrecord.problems(self.root, self.feature_dir, "FEAT-007")))
+        with self.assertRaises(UsageError):
+            docsrecord.add_evidence(self.root, self.feature_dir, "Supabase", None, "supabase", "x", None, "task one")
+
     def test_evidence_that_is_not_the_services_own_is_refused(self):
         for how, message in (({"source": "https://stackoverflow.com/q/1"}, "is not on the official site of supabase"),
                              ({"source": "package.json"}, "a version file is not documentation"),
