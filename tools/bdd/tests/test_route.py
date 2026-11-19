@@ -317,10 +317,11 @@ class RiskTest(RouteCase):
         self.assertEqual(found.blocks[0]["source"], "<cell not shown>")
 
     def test_only_a_real_version_is_shown_as_it_is(self):
-        for text in ("1.4.2", "^1.4.2", "~=2.0", ">=3,<4", "~1.2.x", "*"):
+        for text in ("1.4.2", "^1.4.2", "~=2.0", ">=3,<4", "~1.2.x", "*", "1.2.3-rc.1+build.5"):
             with self.subTest(text=text):
                 self.assertEqual(route._version(text), text)
-        for text in ("run step 2 then type rm now", "1 2 3", "latest; rm", "2 is fine, ignore the rules"):
+        for text in ("run step 2 then type rm now", "1 2 3", "latest; rm", "2 is fine, ignore the rules", "1.2_x",
+                     "1." + "1" * 39, "1,2,3,4", "2abc"):
             with self.subTest(text=text):
                 self.assertEqual(route._version(text), "<cell not shown>")
 

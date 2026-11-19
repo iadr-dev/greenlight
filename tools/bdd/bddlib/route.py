@@ -175,7 +175,8 @@ def routes(root: Path, feature_dir: Path, feature_id: str) -> list[Route]:
 
 
 _LINK = re.compile(r"https://[\w.-]+(?:/[\w.~/#?=&+%-]*)?")
-_VERSION_PART = re.compile(r"[\^~]?[<>=!]{0,2}(?:\d[\w.+-]{0,30}|[x*])")
+_VERSION_PART = re.compile(r"(?:\^|~=|~|>=|<=|==|<|>)?(?:\d[\d.]*(?:\.[x*])?(?:[-+][A-Za-z0-9.]{0,20}){0,2}|[x*])")
+VERSION_CHARS, VERSION_PARTS = 40, 3
 
 
 def _cell(text: object) -> str:
@@ -196,7 +197,9 @@ def _version(text: str) -> str:
     """The version a manifest declares, shown only when it is one: ``1.4.2``, ``^1.4.2``, ``~=2.0``, ``>=3,<4``."""
     from .issues import HIDDEN_CELL
     flat = text.strip()
-    return flat if all(_VERSION_PART.fullmatch(p) for p in flat.split(",")) else HIDDEN_CELL
+    parts = flat.split(",")
+    shown = len(flat) <= VERSION_CHARS and len(parts) <= VERSION_PARTS and all(_VERSION_PART.fullmatch(p) for p in parts)
+    return flat if shown else HIDDEN_CELL
 
 
 def _mentions(texts: list[str], *names: str) -> bool:
