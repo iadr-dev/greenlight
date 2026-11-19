@@ -8,6 +8,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 
 - `brief.md` with the discover gate passed.
 - `templates/rules.md`, `.bdd/glossary.md`.
+- When the product has an approved design: the feature's screen rows (`bdd design FEAT-n --screens`) and their screen
+  files.
 
 ## Steps
 
@@ -17,10 +19,15 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
    person did not ask for is a deferred question in the brief, not a rule. Each rule states what must be true, in
    the person's language. A rule that names a screen, a table or a
    URL is a design: rewrite it.
-3. Add new domain terms to `.bdd/glossary.md`.
-4. Read `pre-mortem` and run it on the draft: imagine the feature failed, rank the causes as blocking, tracked
+3. When the product has an approved design, run `bdd design FEAT-n --screens` and read the screen files it names.
+   Every field, state and action of those rows becomes a rule, is covered by a rule the examples will show, or is a
+   question for the person in the brief. A field nobody asked for is not dropped in silence: the system analyst traces
+   every one of them to a rule before code (`design.md`, *Design trace*). In the Fieldly run the design listed a tax ID,
+   an invoice footer and bank details, the rules named none of them, and the API built other fields.
+4. Add new domain terms to `.bdd/glossary.md`.
+5. Read `pre-mortem` and run it on the draft: imagine the feature failed, rank the causes as blocking, tracked
    or noise. Add or change a rule for every blocking cause and record every tracked one as an assumption.
-5. Show the person the rule list compactly, with the assumptions and the pre-mortem result.
+6. Show the person the rule list compactly, with the assumptions and the pre-mortem result.
 
 ## Output files
 

@@ -16,7 +16,10 @@ For a change of one rule that touches one behaviour. The gates are the same; the
    boundary-value and negative-cases cards. `bdd lint` and `bdd trace FEAT-n` must be clean. The person still
    approves the examples, which locks them.
 3. Bind and run: `bdd run FEAT-n`, `bdd classify FEAT-n --expect red`, lock the bound files and record the bind
-   gate with `--record-red`. Skip `system.md` and `tasks.md`: pass those gates with `--detail quick=true`.
+   gate with `--record-red`. Skip `system.md` and `tasks.md`: pass those gates with `--detail quick=true`. The
+   technical design is not skipped: `design.md` has its fourteen tables (a section the change does not touch holds one
+   `n/a` row with the reason), and the code-reviewer and the security-reviewer review it before the tasks gate, as
+   `phases/tasks.md` says.
 4. Implement, `bdd run FEAT-n`; then the reviews `bdd route FEAT-n` names for the whole feature (task `T-n.0`, since
    the quick path has no `tasks.md`); then the documentation record (`bdd docs FEAT-n --task T-n.0 --library NAME --version V --source URL_OR_FILE`, or
    `--none "reason"`); then `bdd gate FEAT-n implement --result pass`.
@@ -24,8 +27,8 @@ For a change of one rule that touches one behaviour. The gates are the same; the
 
 ## What does not change
 
-Human approvals of the rules and the examples, the red gate, the locks and the guard are never skipped on the
-quick path.
+Human approvals of the rules and the examples, the red gate, the locks, the technical design and its review, and the
+guard are never skipped on the quick path.
 
 ## Pitfalls
 

@@ -7,6 +7,8 @@ Recording is the orchestrator's job: it runs `bdd state init`, `bdd gate`, `bdd 
 ## Inputs
 
 - The person's request, word for word.
+- When the product has an approved design: the screen rows that name the feature (`bdd design FEAT-n --screens`, with
+  their states and fields) and their screen files. The person approved these screens; the brief covers what they show.
 - `.bdd/glossary.md` and any related documents or code the analyst may read (read-only).
 - `templates/brief.md`.
 
