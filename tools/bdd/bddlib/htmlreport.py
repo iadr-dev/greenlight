@@ -253,6 +253,14 @@ def evidence(facts: dict) -> list[str]:
             f"<h3>Locks</h3><p>{lock_badge(locks)} {esc(', '.join(locks['scopes']))}</p>"]
     if locks["problems"]:
         body.append(bullets([esc(p) for p in locks["problems"]]))
+    technical = facts.get("technical_design")
+    if technical:
+        gaps = technical["gaps"]
+        state_badge = badge("complete", GOOD) if gaps == 0 else badge(f"{gaps} gap(s)" if isinstance(gaps, int) else gaps, BAD)
+        reviews = [[esc(r), badge(v, GOOD if v == "PASS" else BAD if v in ("FINDINGS", "stale") else WARN)]
+                   for r, v in technical["reviews"].items()]
+        body += [f"<h3>Technical design</h3><p>{state_badge} <code>bdd design</code> on design.md</p>",
+                 table(["Design review", "Verdict"], reviews)]
     if facts["changes"]:
         body.append(f"<p>Approved work was changed {esc(facts['changes'])} time(s) through the change flow.</p>")
     acknowledged = facts.get("integrity") or []

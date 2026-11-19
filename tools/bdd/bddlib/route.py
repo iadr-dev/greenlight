@@ -154,7 +154,7 @@ def review_path(feature_dir: Path, task_id: str, reviewer: str) -> Path:
     return feature_dir / REVIEWS_DIR / f"{task_id}-{reviewer}.md"
 
 
-def _finished_agents(root: Path) -> dict[str, str]:
+def finished_agents(root: Path) -> dict[str, str]:
     """{agent id: agent type} for every agent the plugin's SubagentStop hook saw finish in this project."""
     from . import agentcost                                 # light at hook time: only the gate needs it
     return {str(e["agent_id"]): str(e.get("agent", "")) for e in agentcost.read_entries(root)}
@@ -221,7 +221,7 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
     task changed after the reviewer finished (``reviewfresh``). ``gate`` only words what to do about a stale report."""
     problems: list[str] = []
     log = reviewlog.recorded(root) if hooks_seen else {}
-    finished = _finished_agents(root) if hooks_seen else {}
+    finished = finished_agents(root) if hooks_seen else {}
     seals = reviewlog.seals(root) if hooks_seen else {}
     for route in routes(root, feature_dir, feature_id):
         for reviewer in route.reviewers:

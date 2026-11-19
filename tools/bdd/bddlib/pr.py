@@ -16,7 +16,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import agentcost, approvals, classify, enforcement, gates, lockfile, mutation, quality, runner, state, store, trace
+from . import agentcost, approvals, classify, design, designreview, designsections, enforcement, gates, lockfile, mutation, quality, runner, state, store, trace
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import guarded, project_root
@@ -233,6 +233,17 @@ def locks_of(root: Path, feature_dir: Path, feature_id: str) -> dict:
     return {"scopes": scopes, "intact": bool(scopes) and not problems, "problems": problems}
 
 
+def technical_design_of(root: Path, feature_dir: Path, data: dict) -> dict | None:
+    """For a feature held to the technical design: how many gaps `bdd design` finds now, and each design review."""
+    if not data.get(designsections.MARKER):
+        return None
+    try:
+        gaps = len(design.check(root, feature_dir, data["feature"]))
+    except (UsageError, StoreError, OSError) as exc:
+        gaps = str(exc)
+    return {"gaps": gaps, "reviews": designreview.verdicts(feature_dir)}
+
+
 def collect(root: Path, feature_dir: Path) -> dict:
     data = state.load(feature_dir)
     feature_id = data["feature"]
@@ -250,6 +261,7 @@ def collect(root: Path, feature_dir: Path) -> dict:
         "approvals": approvals_of(root, data), "locks": locks_of(root, feature_dir, feature_id),
         "runs": evidence_runs(root, data), "checks": checks_of(root, feature_id),
         "design": (feature_dir / "design.md").is_file(),
+        "technical_design": technical_design_of(root, feature_dir, data),
         "assumptions": [{"id": a["id"], "text": a["text"], "rationale": a["rationale"]} for a in data["assumptions"]],
         "changes": len(data.get("changes", [])),
         "audit": audit_of(feature_dir),
@@ -384,6 +396,10 @@ def render_evidence(facts: dict) -> list[str]:
 
 def render_tail(facts: dict) -> list[str]:
     out = ["A design view (`design.md`) accompanies this feature.", ""] if facts["design"] else []
+    technical = facts.get("technical_design")
+    if technical:
+        reviews = ", ".join(f"{reviewer} {verdict}" for reviewer, verdict in technical["reviews"].items())
+        out += [f"Technical design: {technical['gaps']} gap(s) by `bdd design`; design reviews: {reviews}.", ""]
     if facts["assumptions"]:
         out += ["## Assumptions", ""]
         out += [f"- **{a['id']}** {cell(a['text'])} _(because {cell(a['rationale'])})_" for a in facts["assumptions"]] + [""]

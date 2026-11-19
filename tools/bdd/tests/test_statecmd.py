@@ -8,7 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bddlib import approvals, docsrecord, lockcmd, route, state, statecmd, store
+from bddlib import approvals, designreview, docsrecord, lockcmd, route, state, statecmd, store
+
+from tests.helpers import TECHNICAL_DESIGN
 
 SPEC = "@FEAT-007\nFeature: Discounts\n  @R-7.1 @EX-7.1.1\n  Scenario: S\n    Then the request succeeds\n"
 
@@ -97,12 +99,20 @@ class StateCommandTest(unittest.TestCase):
         feature_dir = store.find_feature_dir(self.root, "FEAT-007")
         rules = feature_dir / "rules.md"
         rules.write_text("# Rules\n\nR-007.1 Orders of 1000 or more get 10% off.\n", encoding="utf-8", newline="\n")
+        (feature_dir / "design.md").write_text(TECHNICAL_DESIGN, encoding="utf-8", newline="\n")
         self.gate("discover", "--result", "pass")
         approvals.record(self.root, feature_dir, "rules", "approve", "self-reported")
         self.gate("test-design", "--result", "pass")
         approvals.record(self.root, feature_dir, "examples", "approve", "self-reported")
         for name in gates_to_pass:
             self.assertEqual(self.gate(name, "--result", "pass")[0], 0, name)
+
+    def write_design_reviews(self) -> None:
+        feature_dir = store.find_feature_dir(self.root, "FEAT-007")
+        for reviewer in designreview.needed(self.root, feature_dir, "FEAT-007"):
+            path = designreview.review_path(feature_dir, reviewer)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"Design: {designreview.digest(feature_dir)}\nVerdict: PASS\n", encoding="utf-8", newline="\n")
 
     def test_implement_gate_is_refused_until_locks_are_intact(self):
         self.init()
@@ -112,7 +122,8 @@ class StateCommandTest(unittest.TestCase):
         self.approve_through("system-map", "refine")
         self.run_cmd(lockcmd.run_lock, "FEAT-007", "--scope", "bind", "steps")
         self.gate("bind", "--result", "pass")
-        self.gate("tasks", "--result", "pass")
+        self.write_design_reviews()
+        self.assertEqual(self.gate("tasks", "--result", "pass")[0], 0)
         self.step.write_text("def then_ok():\n    pass\n", encoding="utf-8", newline="\n")
         self.assertEqual(self.gate("implement", "--result", "pass")[0], 2)
         self.step.write_text("def then_ok():\n    assert True\n", encoding="utf-8", newline="\n")

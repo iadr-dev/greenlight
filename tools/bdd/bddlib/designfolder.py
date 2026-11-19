@@ -5,7 +5,7 @@ The design folder is the folder of ``[design] system`` (or ``inventory``) in ``.
     design/PRODUCT.md        who uses the product, their jobs, the platforms
     design/DESIGN.md         the design system and the design contract
     design/tokens.json       the design tokens; the screens use them through a stylesheet named tokens*.css
-    design/inventory.md      the screen inventory: | ID | Screen | States | Feature | File |
+    design/inventory.md      the screen inventory: | ID | Screen | States | Feature | File | (Fields, when listed)
     design/flows.html        the flows between the screens
     design/screens/*.html    the screens, every state of a row in an element marked
                              <section data-screen="S-OR-01" data-state="empty">
@@ -46,7 +46,8 @@ ARCHITECTURE_SECTIONS = ("Stack per surface", "Layers", "Hosting and environment
                          "Security baseline and threat model", "Observability", "CI and delivery")
 PRODUCT_SECTIONS = {"users": ("user",), "jobs": ("job", "purpose"), "platforms": ("platform",)}
 INVENTORY_COLUMNS = {"id": ("id",), "screen": ("screen", "name", "page", "message"), "states": ("states", "key states"),
-                     "feature": ("feature", "features", "bdd"), "file": ("file", "screen file", "comp")}
+                     "feature": ("feature", "features", "bdd"), "file": ("file", "screen file", "comp"),
+                     "fields": ("fields", "contents", "elements")}
 _SKIP_DIRS = {"__pycache__", "node_modules"}
 _LINK = re.compile(r"\]\(([^)\s]+)")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -62,6 +63,7 @@ class Row:
     file: str                    # as the row writes it, relative to the inventory's folder; "" when it names none
     section: str
     line: int
+    fields: tuple[str, ...] = ()  # what the screen shows or asks for, when the inventory has a Fields column
 
 
 @dataclass
@@ -193,7 +195,7 @@ def inventory_rows(path: Path) -> tuple[list[Row], int]:
                 index = at[key]
                 return row[index] if index is not None and index < len(row) else ""
             rows.append(Row(productmap.plain(cell("id")), productmap.plain(cell("screen")), split_states(cell("states")),
-                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line))
+                            productmap.ids_in(cell("feature")), file_of(cell("file")), section, line, split_states(cell("fields"))))
     return rows, count
 
 

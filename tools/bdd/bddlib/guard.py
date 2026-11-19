@@ -402,7 +402,8 @@ def agent_name(payload: dict) -> str | None:
     return name if name in AGENT_WRITES else FOREIGN_AGENT
 
 
-REVIEW_FILE = re.compile(r"t-\d+\.\d+-(?P<reviewer>[a-z-]+)\.md")
+REVIEW_FILE = re.compile(r"(?:t-\d+\.\d+|design)-(?P<reviewer>[a-z-]+)\.md")
+DESIGN_REVIEW_FILE = f"design-{roles.DESIGN_REVIEWER}.md"
 
 
 def _parts(project: Project, path: Path) -> tuple[str, ...]:
@@ -414,8 +415,11 @@ def _parts(project: Project, path: Path) -> tuple[str, ...]:
 
 def review_owner(project: Project, path: Path) -> str | None:
     """For a file in a feature's ``reviews/`` folder, the reviewer that alone may write it (an empty string when the name
-    is not a review report, which nobody may write); None for any other file."""
+    is not a review report, which nobody may write); None for any other file. The product design's review in
+    ``.bdd/design-reviews/`` is the ui-reviewer's alone."""
     parts = _parts(project, path)
+    if len(parts) >= 3 and parts[0] == cfg.BDD_DIR and parts[1] == roles.DESIGN_REVIEWS_DIR:
+        return roles.DESIGN_REVIEWER if len(parts) == 3 and parts[2].casefold() == DESIGN_REVIEW_FILE else ""
     if len(parts) < 5 or parts[0] != cfg.BDD_DIR or parts[1] != "features" or parts[3] != roles.REVIEWS_DIR:
         return None
     match = REVIEW_FILE.fullmatch(parts[-1].casefold()) if len(parts) == 5 else None
@@ -423,11 +427,12 @@ def review_owner(project: Project, path: Path) -> str | None:
 
 
 def in_reviews(project: Project, cwd: Path | None) -> bool:
-    """Is the working directory of the call a feature's reviews/ folder (or below it)?"""
+    """Is the working directory of the call a feature's reviews/ folder, or the product design's (or below either)?"""
     if cwd is None:
         return False
     key, base = path_key(cwd), path_key(project.root / cfg.BDD_DIR / "features")
-    return key.startswith(base + "/") and f"/{roles.REVIEWS_DIR}" in key[len(base):]
+    design = path_key(project.root / cfg.BDD_DIR / roles.DESIGN_REVIEWS_DIR)
+    return (key.startswith(base + "/") and f"/{roles.REVIEWS_DIR}" in key[len(base):]) or key == design or key.startswith(design + "/")
 
 
 def is_tasks_file(project: Project, path: Path) -> bool:
@@ -453,7 +458,8 @@ def record_review(project: Project, payload: dict, target: Path, agent: str | No
     tool_input = payload.get("tool_input") or {}
     if payload.get("tool_name") != "Write" or not isinstance(tool_input.get("content"), str):
         return f"greenlight: write the whole review report with the Write tool ({project.relative(target)})."
-    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"), feature_phase(project, target))
+    phase = "design" if _parts(project, target)[1] == roles.DESIGN_REVIEWS_DIR else feature_phase(project, target)
+    reviewlog.record(project.root, target, owner, tool_input["content"], payload.get("agent_id"), phase)
     return None
 
 
@@ -758,8 +764,10 @@ def check_bash(project: Project, command: str, agent: str | None = None, cwd: Pa
                                    "(Claude Code hook settings or the plugin itself)")
     for reading in shell_readings(scrubbed):
         text = reading.casefold()
-        names_report = re.search(r"(?<![\w.-])t-\d+\.\d+-(?:" + "|".join(roles.REVIEWERS) + r")\.md(?![\w-])", text)
-        if names_report or (names_segment(text, cfg.BDD_DIR) and names_segment(text, roles.REVIEWS_DIR)) or in_reviews(project, cwd):
+        names_report = re.search(r"(?<![\w.-])(?:t-\d+\.\d+|design)-(?:" + "|".join(roles.REVIEWERS) + r")\.md(?![\w-])", text)
+        folders = (roles.REVIEWS_DIR, roles.DESIGN_REVIEWS_DIR)
+        if (names_report or (names_segment(text, cfg.BDD_DIR) and any(names_segment(text, f) for f in folders))
+                or in_reviews(project, cwd)):
             return ("greenlight: review reports are written only by each reviewer with its file tool, never from the "
                     "shell. (This shell command looks like it writes into a reviews/ folder.)")
         if agent and re.search(r"(?<![\w.-])tasks\.md(?![\w-])", text):

@@ -3,10 +3,10 @@ import io
 import os
 import unittest
 
-from bddlib import cli, design, gates
+from bddlib import cli, design, gates, lockfile
 from bddlib.errors import UsageError
 
-from tests.helpers import ProjectCase
+from tests.helpers import TECHNICAL_DESIGN, ProjectCase
 
 SYSTEM = "## Interfaces\n\n| Logical name | Kind | Where |\n|---|---|---|\n| place order | API operation | POST /orders |\n"
 GOOD = "# Design\n\n```mermaid\nflowchart LR\n  %% interface: Place Order\n  a[Client] -->|POST /orders| b[(Orders)]\n```\n"
@@ -71,23 +71,44 @@ class DesignCommandTest(ProjectCase):
             os.chdir(here)
 
     def test_the_command_reports_and_sets_the_exit_code(self):
+        self.make_old_feature()
         code, out = self.run_cli("design", "FEAT-007")
         self.assertEqual(code, 1)
         self.assertIn("D1", out)
         (self.feature_dir / "design.md").write_text(block("flowchart LR\n  a --> b"), encoding="utf-8", newline="\n")
-        self.assertEqual(self.run_cli("design", "FEAT-007")[0], 0)
+        self.assertEqual(self.run_cli("design", "FEAT-007"), (0, "FEAT-007: design view is fine\n"))
         self.assertEqual(self.run_cli("design", "FEAT-999")[0], 2)
+
+    def test_a_new_feature_is_checked_for_its_technical_design_and_shown_its_digest(self):
+        (self.feature_dir / "design.md").write_text(block("flowchart LR\n  a --> b"), encoding="utf-8", newline="\n")
+        code, out = self.run_cli("design", "FEAT-007")
+        self.assertEqual(code, 1)
+        self.assertIn("Design trace: the section is missing", out)
+        path = self.write_technical_design(TECHNICAL_DESIGN)
+        code, out = self.run_cli("design", "FEAT-007")
+        self.assertEqual(code, 0, out)
+        self.assertIn("FEAT-007: design is fine", out)
+        self.assertIn(f"Design: {lockfile.file_digest(path)}", out)
 
 
 class DesignGateTest(ProjectCase):
-    def test_the_system_map_gate_refuses_a_broken_view_but_not_a_missing_one(self):
+    def test_a_feature_from_before_refuses_a_broken_view_but_not_a_missing_one(self):
+        self.make_old_feature()
         self.walk_to("examples")
         (self.feature_dir / "design.md").write_text(block("flowchart LR\n  a[x --> b"), encoding="utf-8", newline="\n")
         with self.assertRaises(UsageError) as cm:
-            self.gate("system-map")
+            self.gate("system-map", reviews=False)
         self.assertIn("D4", str(cm.exception))
-        (self.feature_dir / "design.md").write_text(block("flowchart LR\n  a --> b"), encoding="utf-8", newline="\n")
-        self.assertEqual(self.gate("system-map")["gates"]["system-map"]["result"], "pass")
+        (self.feature_dir / "design.md").unlink()
+        self.assertEqual(self.gate("system-map", reviews=False)["gates"]["system-map"]["result"], "pass")
+
+    def test_a_new_feature_needs_its_technical_design_at_the_system_map(self):
+        self.walk_to("examples")
+        with self.assertRaises(UsageError) as cm:
+            self.gate("system-map", reviews=False)
+        self.assertIn("there is no design.md", str(cm.exception))
+        self.write_technical_design()
+        self.assertEqual(self.gate("system-map", reviews=False)["gates"]["system-map"]["result"], "pass")
 
 
 if __name__ == "__main__":
