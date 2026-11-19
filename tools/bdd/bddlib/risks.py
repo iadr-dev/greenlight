@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 MIN_REASON = 8
 
@@ -134,9 +135,9 @@ def from_design(tables: dict, server: bool, block_kinds: list[str]) -> set[str]:
     return found
 
 
-_ANSWER = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?Risk[ \t]+(?P<name>[^:\n]+):(?P<answer>[^\n]*)$",
+_ANSWER = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?\**Risk[ \t]+(?P<name>[^:\s][^:\n]*):(?P<answer>[^\n]*)$",
                      re.IGNORECASE | re.MULTILINE)
-_HANDLED = re.compile(r"handled in [^\s:]+:\d+\b", re.IGNORECASE)
+_HANDLED = re.compile(r"handled in (?P<path>[^\s:]+):(?P<line>\d+)\b", re.IGNORECASE)
 _NOT_APPLICABLE = re.compile(r"not applicable\s*:\s*(?P<reason>.*)", re.IGNORECASE)
 
 
@@ -150,20 +151,38 @@ def answers(text: str) -> dict[str, str]:
     return found
 
 
-def review_problems(rel: str, text: str, risks: list[str]) -> list[str]:
-    """Why a code review does not answer the risks of its task: a risk with no line, one marked missing, or an answer that
-    is neither a place in the code nor a reason it does not apply."""
+def _place_problem(root: Path, path: str, line: int) -> str | None:
+    """Why ``path:line`` is not a line of a file of the project, or None."""
+    from .issues import safe_cell
+    try:
+        target = (root / path).resolve()
+        target.relative_to(root.resolve())
+        count = len(target.read_text(encoding="utf-8", errors="replace").splitlines()) if target.is_file() else 0
+    except (OSError, ValueError):
+        count = 0
+    if count == 0:
+        return f"{safe_cell(path)} is not a file of the project"
+    return None if 1 <= line <= count else f"{safe_cell(path)} has no line {line}"
+
+
+def review_problems(rel: str, text: str, risks: list[str], root: Path | None = None) -> list[str]:
+    """Why a code review does not answer the risks of its task: a risk with no line, one marked missing, an answer that is
+    neither a place in the code nor a reason it does not apply, or (with ``root``) a place that is not a line of a file."""
     given = answers(text)
     problems = []
     for risk in risks:
         answer = given.get(risk)
         reason = _NOT_APPLICABLE.match(answer or "")
-        if answer is None:
+        handled = _HANDLED.match(answer or "")
+        place = _place_problem(root, handled.group("path"), int(handled.group("line"))) if handled and root else None
+        if place:
+            problems.append(f'{rel}: the line for the risk "{risk}" names a place that does not exist: {place}')
+        elif answer is None:
             problems.append(f'{rel} has no line for the risk "{risk}": the code-reviewer writes "Risk {risk}: handled in '
                             'FILE:LINE", "not applicable: REASON" or "missing"')
         elif answer.casefold().startswith("missing"):
             problems.append(f'{rel} says the risk "{risk}" is missing: the writer handles it, then the code-reviewer runs again')
-        elif not (_HANDLED.match(answer) or (reason and len(reason.group("reason").strip()) >= MIN_REASON)):
+        elif not (handled or (reason and len(reason.group("reason").strip()) >= MIN_REASON)):
             problems.append(f'{rel}: the line for the risk "{risk}" names neither a place (handled in FILE:LINE) nor a reason '
                             "it does not apply (not applicable: REASON)")
     return problems

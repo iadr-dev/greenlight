@@ -326,11 +326,13 @@ class RiskTest(RouteCase):
                 self.assertEqual(route._version(text), "<cell not shown>")
 
     def test_a_task_list_without_the_lines_is_named_once(self):
-        self.tasks("## T-007.1 Banner\nCovers: EX-007.1.1\n\n## T-007.2 Sign in\nCovers: EX-007.2.1\nDesign: Architecture\n"
-                   "Risks: none\n")
+        self.tasks("## T-007.1 Banner\nCovers: EX-007.1.1\nDesign:\nRisks:\n\n## T-007.2 Sign in\nCovers: EX-007.2.1\n"
+                   "Design: Architecture, Securty and privacy; O-1\nRisks: none\n")
         self.assertEqual(route.line_problems(self.feature_dir, "FEAT-007"),
-                         ["T-007.1 has no Design: or Risks: line in tasks.md: copy them from `bdd route FEAT-007` "
-                          "(Risks: none when it names none)"])
+                         ["T-007.1 has no Design: or Risks: line in tasks.md, or an empty one: copy them from `bdd route "
+                          "FEAT-007` (none when it names none)",
+                          'T-007.2: the Design: line names "Securty and privacy", which is neither a section of design.md '
+                          "nor an inventory row id"])
 
 
 class RiskWordsTest(unittest.TestCase):
@@ -358,6 +360,28 @@ class ReviewLineTest(unittest.TestCase):
         text = ("Verdict: PASS\n\n## Risks\n- Risk concurrent writes: handled in src/auth/signin.ts:14\n"
                 "* Risk rate limits: handled in src/api/limits.ts:3\nRisk Authorization: not applicable: no session is changed\n")
         self.assertEqual(risks.review_problems("r.md", text, self.RISKS), [])
+        bold = "- **Risk concurrent writes**: handled in a.py:1\n**Risk rate limits:** handled in a.py:2\n"
+        self.assertEqual(list(risks.answers(bold)), ["concurrent writes", "rate limits"])
+
+    def test_a_place_must_be_a_line_of_a_file_of_the_project(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("one\ntwo\n", encoding="utf-8")
+            for place, problem in (("a.py:2", None), ("a.py:3", "a.py has no line 3"), ("x.py:1", "x.py is not a file"),
+                                   ("../a.py:1", "is not a file of the project")):
+                with self.subTest(place=place):
+                    found = risks.review_problems("r.md", f"Risk rate limits: handled in {place}\n", ["rate limits"], root)
+                    self.assertEqual(bool(found), problem is not None)
+                    if problem:
+                        self.assertIn(problem, found[0])
+
+    def test_a_line_of_spaces_does_not_take_long(self):
+        import time
+        started = time.perf_counter()
+        risks.answers("Risk" + " " * 40000 + "\n")
+        self.assertLess(time.perf_counter() - started, 0.5)
 
     def test_a_missing_line_a_missing_risk_and_an_answer_without_a_place_are_refused(self):
         text = ("- Risk concurrent writes: missing\n- Risk authorisation: not applicable: no\n"
@@ -386,6 +410,7 @@ class AgainstDesignGateTest(RouteCase):
         return route.review_problems(self.root, self.feature_dir, "FEAT-007", against=True)
 
     def code_review(self, body: str) -> None:
+        self.write("a.ts", "one\ntwo\n")
         route.review_path(self.feature_dir, "T-007.2", "code-reviewer").write_text(f"Verdict: PASS\n\n{body}", encoding="utf-8")
 
     def test_the_helper_reviews_answer_every_risk_and_the_gate_passes(self):
@@ -414,20 +439,28 @@ class AgainstDesignGateTest(RouteCase):
         self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, "## Not checked\n- O-1: chrome-devtools-mcp is not "
                                                                             "installed\n", rows), [])
         reviews = self.feature_dir / "reviews"
-        for name in ("b375.png", "d375.png", "b1280.png"):
-            (reviews / name).write_bytes(route.PNG + b"rest")
+        self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, "## Not checked\n- O-1 xxxxxxxx\n", rows), refused,
+                         "a reason is more than a few characters")
+        reviews = self.feature_dir / "reviews"
+        for n, name in enumerate(("b375.png", "d375.png", "b1280.png")):
+            (reviews / name).write_bytes(route.PNG + bytes([n]))
         (reviews / "d1280.png").write_text("not a picture", encoding="utf-8")
         text = "## Side by side\n- O-1 375 px: b375.png | d375.png\n- O-1 1280 px: b1280.png | d1280.png\n"
         self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, text, rows),
                          [f"{rel}: the screenshot d1280.png of O-1 at 1280 px is not a PNG file in reviews/"])
-        (reviews / "d1280.png").write_bytes(route.PNG)
+        (reviews / "d1280.png").write_bytes(route.PNG + b"x")
         self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, text, rows), [])
         for name in ("../b375.png", "C:b375.png", "sub/b375.png", "b375.png\x00"):
             with self.subTest(name=name):
                 self.assertEqual(len(route.side_by_side_problems(self.feature_dir, rel, text.replace("b375.png", name), rows)), 1)
-        self.assertIn("names one screenshot for the built screen and the design",
+        self.assertIn("is the same picture as b375.png",
                       route.side_by_side_problems(self.feature_dir, rel, text.replace("d375.png", "b375.png"), rows)[0])
+        (reviews / "copy.png").write_bytes(route.PNG + bytes([0]))
+        self.assertIn("is the same picture as b375.png",
+                      route.side_by_side_problems(self.feature_dir, rel, text.replace("d375.png", "copy.png"), rows)[0])
         self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, "- O-1 375 px: b375.png | d375.png\n", rows), refused)
+        self.assertEqual(route.side_by_side_problems(self.feature_dir, rel, text.replace("## Side by side", "## Must fix"), rows),
+                         refused, "a comparison counts only under Side by side")
 
 
 class GroupTest(RouteCase):
@@ -448,6 +481,12 @@ class GroupTest(RouteCase):
         found = self.plan("## T-007.1 A\nCovers: EX-007.1.1\nDepends on: T-007.2\n\n## T-007.2 B\nCovers: EX-007.2.1\nAreas: src/b/\n")
         self.assertEqual({t: (r.group, r.after) for t, r in found.items()},
                          {"T-007.1": (2, ["T-007.2"]), "T-007.2": (1, [])})
+
+    def test_areas_that_differ_in_case_or_meet_in_a_glob_overlap(self):
+        for a, b in (("src/Auth/", "src/auth/x.ts"), ("src/a/*.ts", "src/*/b.ts"), ("*.ts", "lib/")):
+            with self.subTest(a=a, b=b):
+                self.assertTrue(route._paths_overlap(a, b))
+        self.assertFalse(route._paths_overlap("src/a/", "src/b/x.ts"))
 
     def test_a_cycle_is_broken_in_the_order_of_tasks_md(self):
         found = self.plan("## T-007.1 A\nCovers: EX-007.1.1\nAreas: a/\nDepends on: T-007.2\n\n"

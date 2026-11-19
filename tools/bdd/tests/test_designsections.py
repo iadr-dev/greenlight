@@ -312,14 +312,15 @@ class EvidenceTest(SectionsCase):
         self.assertEqual(self.add(cli="npx supabase gen types")["kind"], "cli")
 
     def test_evidence_for_a_task_is_kept_with_the_task_and_is_not_its_library_record(self):
+        self.write(".bdd/features/FEAT-007-order-discounts/tasks.md", "## T-007.1 One\nCovers: EX-7.1.1\n")
         entry = docsrecord.add_evidence(self.root, self.feature_dir, "Supabase", None, "supabase", "update a row", None, "T-007.1")
         self.assertEqual((entry["task"], entry["kind"]), ("T-007.1", "mcp"))
         self.assertEqual(docsrecord.describe(entry), "T-007.1  supabase  supabase: update a row")
         self.assertIn("supabase", designsections.context(self.root, self.feature_dir, "FEAT-007").evidence)
-        self.assertTrue(any("T-007.0 has no documentation record" in p or "T-007.1 has no documentation record" in p
-                            for p in docsrecord.problems(self.root, self.feature_dir, "FEAT-007")))
-        with self.assertRaises(UsageError):
-            docsrecord.add_evidence(self.root, self.feature_dir, "Supabase", None, "supabase", "x", None, "task one")
+        self.assertIn("T-007.1 has no documentation record", " ".join(docsrecord.problems(self.root, self.feature_dir, "FEAT-007")))
+        for task in ("task one", "T-9.9"):
+            with self.subTest(task=task), self.assertRaises(UsageError):
+                docsrecord.add_evidence(self.root, self.feature_dir, "Supabase", None, "supabase", "x", None, task)
 
     def test_evidence_that_is_not_the_services_own_is_refused(self):
         for how, message in (({"source": "https://stackoverflow.com/q/1"}, "is not on the official site of supabase"),

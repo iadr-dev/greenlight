@@ -23,9 +23,10 @@ interpreter, and the project's ``.bdd/standards.md``. The implement and verify g
 only when checks are configured; without them nothing changes. A feature of kind ``adopt`` is not held to it: the code
 it describes already exists and is not judged.
 
-``bdd check FEAT-n --task T-n.m`` is the run after a task: the architecture checker among the checks catches a layer
-reached past while the next task could still build on it. The result is recorded for the task as well, and the implement
-gate of a feature built against its design (``route.MARKER``) waits for a passing run of every task's own.
+``bdd check FEAT-n --task T-n.m`` is the run the playbook asks for after each task: the architecture checker among the
+checks finds a layer reached past before the next task builds on it. The result is recorded for the task as well, and the
+implement gate of a feature built against its design (``route.MARKER``) waits for a passing run recorded for every task.
+The gate cannot tell when a task's run was made, only that it passed.
 """
 from __future__ import annotations
 
@@ -131,12 +132,14 @@ def run_checks(root: Path, feature_id: str, task: str | None = None) -> dict:
     results = [run_check(root, check, scrub) for check in rules.checks]
     runner.runs_dir(root, feature_id).mkdir(parents=True, exist_ok=True)
     passed = all(r["passed"] for r in results)
-    tasks = _earlier_tasks(root, feature_id)
-    if task is not None:
-        tasks[task] = {"at": store.utc_now(), "passed": passed, "failed": [r["name"] for r in results if not r["passed"]]}
-    record = {"schema": runner.SCHEMA, "feature": feature_id, "at": store.utc_now(), "checks": results,
-              "passed": passed, "tasks": tasks, **current_marks(root, feature_id, rules)}
-    store.write_json(result_path(root, feature_id), record)
+    marks = current_marks(root, feature_id, rules)
+    with store.file_lock(result_path(root, feature_id)):        # two tasks' runs that end together keep both entries
+        tasks = _earlier_tasks(root, feature_id)
+        if task is not None:
+            tasks[task] = {"at": store.utc_now(), "passed": passed, "failed": [r["name"] for r in results if not r["passed"]]}
+        record = {"schema": runner.SCHEMA, "feature": feature_id, "at": store.utc_now(), "checks": results,
+                  "passed": passed, "tasks": tasks, **marks}
+        store.write_json(result_path(root, feature_id), record)
     return {**record, "task": task}
 
 
@@ -175,10 +178,10 @@ def problems(root: Path, feature_id: str) -> list[str]:
 
 
 def task_problems(root: Path, feature_id: str, tasks: list[str]) -> list[str]:
-    """For a feature built against its design: each task needs a passing run of the checks of its own, made after it was
-    written (``bdd check FEAT-n --task T-n.m``). The checks run over the whole project, so the feature's result (in
-    ``problems``) is what proves the code as it is now; this one proves the checks ran after every task, while the next
-    task could still be built on code that passed them."""
+    """For a feature built against its design: each task needs a passing run of the checks recorded for it
+    (``bdd check FEAT-n --task T-n.m``). The checks run over the whole project, so the feature's result (in ``problems``)
+    is what proves the code as it is now. This one is a record per task: the gate cannot tell when it was made, so the
+    orchestrator's playbook, not the gate, puts it after each task."""
     if cfg.load(root).quality is None:
         return []
     try:

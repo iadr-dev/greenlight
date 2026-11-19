@@ -100,10 +100,10 @@ Verdict: PASS | FINDINGS
 
 The code-reviewer writes *Risks*, one line per risk `bdd route` names for the task; the ui-reviewer writes *Side by
 side*, each screen row of the task at both widths. For a feature started with this version, the implement gate refuses a code review that has no `Risk <name>:` line for
-a risk of its task or says one is `missing`, and an answer that names neither a `file:line` nor a reason. It refuses a
-UI review that neither lists each screen row of the task at 375 and 1280 px, with both screenshots saved as PNG files in
-`reviews/`, nor names the row under *Not checked* with the reason it could not be compared (no browser tool, the
-application not running).
+a risk of its task or says one is `missing`, an answer that names neither a `file:line` nor a reason, and a `file:line`
+that is not a line of a file of the project. It refuses a UI review that neither lists each screen row of the task at
+375 and 1280 px under *Side by side*, with every screenshot a different PNG file in `reviews/`, nor names the row under
+*Not checked* with the reason it could not be compared (no browser tool, the application not running), in a sentence.
 
 Only the reviewer itself writes its report: the guard refuses the writers, the orchestrator, other agents and any shell
 command, and where the hooks run the gate accepts a report only with exactly the content its reviewer last wrote, in the implement phase (the reviewer writes the whole report with the Write tool; if a report is changed afterwards, or an old one put back, the reviewer runs again). `FINDINGS` when *Must fix* is not empty. The must-fix items go back to the task's writer; the reviewer then runs again

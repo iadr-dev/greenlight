@@ -29,6 +29,7 @@ compares each of its rows with the design at 375 and 1280 px or says why it coul
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -197,7 +198,7 @@ def _version(text: str) -> str:
     """The version a manifest declares, shown only when it is one: ``1.4.2``, ``^1.4.2``, ``~=2.0``, ``>=3,<4``."""
     from .issues import HIDDEN_CELL
     flat = text.strip()
-    parts = flat.split(",")
+    parts = [p.strip() for p in flat.split(",")]
     shown = len(flat) <= VERSION_CHARS and len(parts) <= VERSION_PARTS and all(_VERSION_PART.fullmatch(p) for p in parts)
     return flat if shown else HIDDEN_CELL
 
@@ -216,7 +217,11 @@ class DesignFacts:
     @classmethod
     def read(cls, root: Path, feature_dir: Path) -> "DesignFacts":
         from . import designsections, sources
-        tables = designsections.read(feature_dir)
+        try:
+            tables = designsections.read(feature_dir)
+        except UnicodeDecodeError as exc:
+            raise UsageError(f"{designsections.DESIGN_FILE} of {feature_dir.name} is not UTF-8 text ({exc.reason}); save it "
+                             "as UTF-8") from exc
         if tables is None:
             return cls(None, {}, {})
         entries = {key.casefold(): value for key, value in sources.load(root)[0].items()}
@@ -274,10 +279,12 @@ class DesignFacts:
                 continue
             try:
                 package = designsections.parse_package(row.get("Package"))
+                version = "the platform" if package is None else None
             except ValueError:
-                package = None
-            declared = self.versions.get((package[0], sources._normal(*package))) if package else None
-            version = "the platform" if package is None else _version(declared) if declared else "not a dependency yet"
+                package, version = None, "the package cell is not ECOSYSTEM:NAME; `bdd design` names the row"
+            if package is not None:
+                declared = self.versions.get((package[0], sources._normal(*package)))
+                version = _version(declared) if declared else "not a dependency yet"
             standard = designsections.standard_of(row.get("Kind"), row.get("Field"))
             out.append(({"field": _cell(row.get("Field")), "library": _cell(row.get("Library")),
                          "package": ":".join(package) if package else "-", "version": version,
@@ -298,6 +305,16 @@ class DesignFacts:
         return named or [service for _, service in rows]
 
 
+def _paths_overlap(a: str, b: str) -> bool:
+    """Could two ``Areas:`` paths name one file? Case is ignored (a file system may ignore it), and a glob counts as its
+    folder before the first wildcard, so two writers are never put on one folder by a spelling."""
+    def prefix(path: str) -> str:
+        cut = min((i for i in (path.find(c) for c in "*?[") if i >= 0), default=-1)
+        return (path if cut < 0 else path[:cut].rsplit("/", 1)[0] + "/").casefold().rstrip("/")
+    x, y = prefix(a), prefix(b)
+    return not x or not y or x == y or x.startswith(y + "/") or y.startswith(x + "/")
+
+
 def plan_groups(found: list[Route], tasks: dict[str, dict]) -> None:
     """The order the tasks may be built in: a task waits for the tasks it depends on (``Depends on:``) and for every
     earlier task whose ``Areas:`` overlap its own, and a task with no area paths waits for all and is waited for by all.
@@ -313,7 +330,7 @@ def plan_groups(found: list[Route], tasks: dict[str, dict]) -> None:
     def overlap(a: str, b: str) -> bool:
         if not areas[a] or not areas[b]:
             return True
-        return any(reviewfresh._inside(x, y) or reviewfresh._inside(y, x) for x in areas[a] for y in areas[b])
+        return any(_paths_overlap(x, y) for x in areas[a] for y in areas[b])
 
     placed: dict[str, int] = {}
     waiting = list(found)
@@ -443,7 +460,7 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
                                          lambda kind=reviewer: _seen_by(root, feature_dir, kind, seals, log))
                 problems += [older] if older else []
             if against and reviewer == "code-reviewer":
-                problems += risks.review_problems(rel, text, route.risks)
+                problems += risks.review_problems(rel, text, route.risks, root)
             if against and reviewer == "ui-reviewer":
                 problems += side_by_side_problems(feature_dir, rel, text, route.rows)
     return problems
@@ -451,8 +468,9 @@ def review_problems(root: Path, feature_dir: Path, feature_id: str, hooks_seen: 
 
 WIDTHS = (375, 1280)
 PNG = b"\x89PNG\r\n\x1a\n"
-_COMPARED = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?(?P<row>[\w.-]+)[ \t]+(?P<width>\d{3,4})[ \t]*px[ \t]*:[ \t]*"
-                       r"(?P<built>[^\s|,]+)[ \t]*[|,][ \t]*(?P<design>[^\s|,]+)[ \t]*$", re.IGNORECASE | re.MULTILINE)
+EXCUSE_CHARS = 20                      # a reason under Not checked, beyond the row id
+_COMPARED = re.compile(r"(?P<row>[\w.-]+)[ \t]+(?P<width>\d{3,4})[ \t]*px[ \t]*:[ \t]*"
+                       r"(?P<built>[^\s|,]+)[ \t]*[|,][ \t]*(?P<design>[^\s|,]+)", re.IGNORECASE)
 _HEADING = re.compile(r"^#{1,6}[ \t]+(?P<title>[^\n]*)$")
 _SCREENSHOT = re.compile(r"[A-Za-z0-9][\w.-]{0,120}\.png", re.IGNORECASE)
 
@@ -469,58 +487,76 @@ def _section_lines(text: str, title: str) -> list[str]:
     return lines
 
 
-def _is_png(folder: Path, name: str) -> bool:
-    """Is ``name`` a picture file of the reviews folder itself (a plain file name ending in .png, no folder, drive or
-    other mark) that starts as a PNG?"""
+def _png_digest(folder: Path, name: str) -> str | None:
+    """The SHA-256 of ``name`` when it is a picture file of the reviews folder itself (a plain file name ending in .png,
+    no folder, drive or other mark) that starts as a PNG; None otherwise."""
     if not _SCREENSHOT.fullmatch(name):
-        return False
+        return None
     try:
-        with (folder / name).open("rb") as handle:
-            return handle.read(len(PNG)) == PNG
+        data = (folder / name).read_bytes()
     except (OSError, ValueError):
-        return False
+        return None
+    return hashlib.sha256(data).hexdigest() if data.startswith(PNG) else None
 
 
 def side_by_side_problems(feature_dir: Path, rel: str, text: str, rows: list[str]) -> list[str]:
     """Why a UI review does not show its task's screens next to their design: a row with no comparison at each width
-    (``O-SI-01 375 px: built.png | design.png`` under *Side by side*, both PNG files in ``reviews/``) and no line under
-    *Not checked* that names the row and says why it could not be compared."""
+    (``O-SI-01 375 px: built.png | design.png`` under *Side by side*, both PNG files in ``reviews/``, every picture a
+    different one) and no line under *Not checked* that names the row and says why it could not be compared."""
     from .issues import safe_cell
-    compared = {(m.group("row").casefold(), int(m.group("width"))): (m.group("built"), m.group("design"))
-                for m in _COMPARED.finditer(text)}
+    compared = {}
+    for line in _section_lines(text, "Side by side"):
+        found = _COMPARED.fullmatch(line)
+        if found:
+            compared[(found.group("row").casefold(), int(found.group("width")))] = (found.group("built"), found.group("design"))
     excused = _section_lines(text, "Not checked")
-    problems = []
+    problems: list[str] = []
+    seen: dict[str, str] = {}
     for row in rows:
-        if any(_mentions([line], row) and len(line) - len(row) >= risks.MIN_REASON for line in excused):
+        if any(_mentions([line], row) and len(line) - len(row) >= EXCUSE_CHARS for line in excused):
             continue
         if not all((row.casefold(), width) in compared for width in WIDTHS):
             problems.append(f"{rel} neither compares {safe_cell(row)} with its design at "
                             f"{' and '.join(map(str, WIDTHS))} px nor says under Not checked why it could not")
             continue
         for width in WIDTHS:
-            built, designed = compared[(row.casefold(), width)]
-            if built.casefold() == designed.casefold():
-                problems.append(f"{rel}: {safe_cell(row)} at {width} px names one screenshot for the built screen and the "
-                                "design; save one of each")
-                continue
-            problems += [f"{rel}: the screenshot {safe_cell(name)} of {safe_cell(row)} at {width} px is not a PNG file in "
-                         f"{REVIEWS_DIR}/" for name in (built, designed) if not _is_png(feature_dir / REVIEWS_DIR, name)]
+            for name in compared[(row.casefold(), width)]:
+                digest = _png_digest(feature_dir / REVIEWS_DIR, name)
+                if digest is None:
+                    problems.append(f"{rel}: the screenshot {safe_cell(name)} of {safe_cell(row)} at {width} px is not a "
+                                    f"PNG file in {REVIEWS_DIR}/")
+                elif digest in seen:
+                    problems.append(f"{rel}: the screenshot {safe_cell(name)} of {safe_cell(row)} at {width} px is the same "
+                                    f"picture as {safe_cell(seen[digest])}; each screen and width has its own")
+                else:
+                    seen[digest] = name
     return problems
 
 
 def line_problems(feature_dir: Path, feature_id: str) -> list[str]:
     """For a feature built against its design: the tasks of tasks.md with no ``Design:`` or ``Risks:`` line, and the words
     of a Risks: line that are not known risks."""
+    from . import designsections
+    from .issues import safe_cell
     tasks = trace.read_tasks(feature_dir / "tasks.md") or {}
     missing = unwritten(tasks)
-    problems = [f"{', '.join(missing)} {'has' if len(missing) == 1 else 'have'} no Design: or Risks: line in tasks.md: copy "
-                f"them from `bdd route {feature_id}` (Risks: none when it names none)"] if missing else []
+    problems = [f"{', '.join(missing)} {'has' if len(missing) == 1 else 'have'} no Design: or Risks: line in tasks.md, or an "
+                f"empty one: copy them from `bdd route {feature_id}` (none when it names none)"] if missing else []
+    sections = {s.name.casefold() for s in designsections.SECTIONS} | {"none"}
+    for task_id, task in tasks.items():
+        words = [" ".join(p.strip(" .*_`").split()) for p in re.split(r"[,;]", task.get("design") or "")]
+        unknown = [w for w in words if w and w.casefold() not in sections and not _ROW_ID.fullmatch(w)]
+        problems += [f'{task_id}: the Design: line names "{safe_cell(w)}", which is neither a section of design.md nor an '
+                     "inventory row id" for w in unknown]
     return problems + [gap.message for gap in trace.risk_gaps(tasks)]
 
 
+_ROW_ID = re.compile(r"[A-Za-z][\w.]*-[\w.-]+")
+
+
 def unwritten(tasks: dict[str, dict]) -> list[str]:
-    """The tasks that have no Design: or no Risks: line (a task list written before them)."""
-    return [t for t, task in tasks.items() if task["design"] is None or task["risks"] is None]
+    """The tasks that have no Design: or no Risks: line, or an empty one (a task list written before them)."""
+    return [t for t, task in tasks.items() if not (task["design"] or "").strip() or not (task["risks"] or "").strip()]
 
 
 def describe(route: Route) -> str:

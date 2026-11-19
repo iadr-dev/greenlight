@@ -21,7 +21,9 @@ For a change of one rule that touches one behaviour. The gates are the same; the
    `n/a` row with the reason), and the code-reviewer and the security-reviewer review it before the tasks gate, as
    `phases/tasks.md` says.
 4. Implement, `bdd run FEAT-n`; then the reviews `bdd route FEAT-n` names for the whole feature (task `T-n.0`, since
-   the quick path has no `tasks.md`); then the documentation record (`bdd docs FEAT-n --task T-n.0 --library NAME --version V --source URL_OR_FILE`, or
+   the quick path has no `tasks.md`). The code review answers each risk the route names for `T-n.0` with a
+   `Risk <name>:` line, and a UI review compares the screens or says why it could not (`phases/implement.md`, *Reviews*).
+   When quality checks are configured, run `bdd check FEAT-n --task T-n.0`. Then the documentation record (`bdd docs FEAT-n --task T-n.0 --library NAME --version V --source URL_OR_FILE`, or
    `--none "reason"`); then `bdd gate FEAT-n implement --result pass`.
 5. Verify with the checklist items that apply and a short `report.md`.
 

@@ -150,8 +150,12 @@ def add_evidence(root: Path, feature_dir: Path, service: str, source: str | None
     from . import designsections, sources
     if sum(x is not None for x in (source, mcp, cli)) != 1:
         raise UsageError("evidence is one of --source URL_OR_FILE, --mcp SERVER --query TEXT, or --cli COMMAND")
-    if task is not None and not TASK.fullmatch(task):
-        raise UsageError(f"--task names a task id such as T-007.1, not {task!r}")
+    if task is not None:
+        from . import state
+        feature_id = state.load(feature_dir)["feature"]
+        known = {r.task for r in route.routes(root, feature_dir, feature_id)}
+        if not TASK.fullmatch(task) or task not in known:
+            raise UsageError(f"{task} is not a task of {feature_id}; the tasks are {', '.join(sorted(known)) or '(none)'}")
     services = {key.casefold(): value for key, value in sources.load(root)[0].items()}
     key = designsections.service_key(services, service)
     if not key:
