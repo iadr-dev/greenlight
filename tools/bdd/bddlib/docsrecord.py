@@ -23,6 +23,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import config as cfg
 from . import route, store
@@ -94,12 +95,41 @@ DOC_SERVERS = ("context7", "microsoft-docs", "microsoft-learn")   # documentatio
 RUNNERS = ("npx", "bunx", "pnpm dlx", "yarn dlx", "npm exec")
 
 
-def _site(url: str) -> str:
-    """The registrable part of an address's host: ``supabase.com`` for ``https://docs.supabase.com/x``."""
-    host = re.sub(r"^https?://", "", url).split("/", 1)[0].split(":", 1)[0].casefold()
+_UNSAFE_ADDRESS = re.compile(r"[\s\\@%\x00-\x1f\x7f]")
+
+
+def hostname(url: str) -> str | None:
+    """The host a browser opens for an https address, lower-cased, IDNA-encoded and without a trailing dot; None for an
+    address that is not plainly one host: userinfo, a backslash, an escape, white space or a control character, a port
+    other than 443, or no host at all."""
+    if _UNSAFE_ADDRESS.search(url):
+        return None
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+        host = (parts.hostname or "").rstrip(".")
+        host = host.encode("idna").decode("ascii") if host else ""
+    except (ValueError, UnicodeError):
+        return None
+    if parts.scheme != "https" or not host or parts.username is not None or port not in (None, 443):
+        return None
+    return host
+
+
+def site_of(host: str) -> str:
+    """The registrable part of a host: ``supabase.com`` for ``docs.supabase.com``, ``example.co.uk`` for a host below it."""
     labels = host.split(".")
     keep = 3 if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in ("co", "com", "org", "net", "ac", "gov", "edu") else 2
     return ".".join(labels[-keep:])
+
+
+def on_site(url: str, docs: str) -> bool:
+    """Is ``url`` an address on the official site of the documentation ``docs`` (the site, or a host below it)?"""
+    host, official = hostname(url), hostname(docs)
+    if host is None or official is None:
+        return False
+    site = site_of(official)
+    return host == site or host.endswith("." + site)
 
 
 def _program(command: str) -> str:
@@ -129,7 +159,10 @@ def add_evidence(root: Path, feature_dir: Path, service: str, source: str | None
         if problem:
             raise UsageError(problem)
         docs = str(entry_of.get("docs", ""))
-        if docs and source.startswith("https://") and _site(source) != _site(docs):
+        address = re.match(r"[a-z]+://", source, re.IGNORECASE) is not None
+        if address and hostname(source) is None:
+            raise UsageError(f"{source} is not an https address of one host (no user name, port, escape or backslash)")
+        if address and docs and not on_site(source, docs):
             raise UsageError(f"{source} is not on the official site of {key} ({docs}): give its official page, an MCP lookup "
                              "(--mcp) or a CLI run (--cli)")
         entry.update(kind="page", source=source.strip())

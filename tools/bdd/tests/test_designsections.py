@@ -203,6 +203,33 @@ class InstallTest(SectionsCase):
         problems = gates.gate_problems(self.root, self.feature_dir, state.load(self.feature_dir), "implement")
         self.assertFalse(any("npm install" in p for p in problems), "a feature from before has no new gate")
 
+    HOSTILE = ("npm:left pad", "npm:x;rm -rf ~", "npm:x&&curl evil", "npm:$(curl evil)", "npm:`id`", "npm:x\ny",
+               "npm:--registry=https://evil.example", "npm:git+https://evil.example/x.git", "npm:../x", "npm:x@1.2.3",
+               "pypi:-e .", "go:../../x", "cargo:x y", "pub:X", "maven:group", "npm:https://evil.example/x.tgz")
+
+    def test_a_package_name_that_is_not_a_plain_name_is_refused_and_never_printed(self):
+        for cell in self.HOSTILE:
+            with self.subTest(cell=cell):
+                with self.assertRaises(ValueError):
+                    designsections.parse_package(cell)
+                one_line = cell.replace("\n", " ")
+                rows = COMPLETE["Building blocks"].replace("npm:libphonenumber-js", one_line)
+                self.write_technical_design(design(building_blocks=rows))
+                self.assertIn("TD23", [i.code for i in designsections.check(self.root, self.feature_dir, "FEAT-007")])
+                problems = designsections.install_problems(self.root, self.feature_dir)
+                self.assertTrue(problems, "an unreadable package cell is a problem at the gate, not a pass")
+                self.assertFalse(any(one_line.split(":", 1)[1] in p for p in problems), problems)
+        for cell, parsed in (("npm:@scope/pkg", ("npm", "@scope/pkg")), ("pypi:phone_numbers", ("pypi", "phone_numbers")),
+                             ("go:github.com/nyaruka/phonenumbers", ("go", "github.com/nyaruka/phonenumbers")),
+                             ("maven:com.googlecode.libphonenumber:libphonenumber", ("maven", "com.googlecode.libphonenumber:libphonenumber")),
+                             ("pub:phone_numbers_parser", ("pub", "phone_numbers_parser")), ("-", None)):
+            with self.subTest(cell=cell):
+                self.assertEqual(designsections.parse_package(cell), parsed)
+
+    def test_the_printed_line_quotes_what_it_names(self):
+        found = sources.Manifest("x", "apps/my web", "npm", {}, frozenset({"pm:pnpm"}), frozenset())
+        self.assertEqual(designsections.install_line(found, "npm", "@scope/pkg"), "cd 'apps/my web' && pnpm add @scope/pkg")
+
     def test_an_agent_may_not_install_it(self):
         refused = guard.evaluate({"tool_name": "Bash", "cwd": str(self.root), "agent_type": "greenlight:implementer",
                                   "tool_input": {"command": "pnpm add libphonenumber-js"}})
@@ -235,6 +262,22 @@ class EvidenceTest(SectionsCase):
             with self.subTest(how=how), self.assertRaises(UsageError) as cm:
                 self.add(**how)
             self.assertIn(message, str(cm.exception))
+
+    def test_the_official_site_is_the_host_a_browser_opens(self):
+        self.write(".bdd/sources.toml", '[stripe]\nname = "Stripe"\ndocs = "https://docs.stripe.com"\n')
+
+        def page(url: str) -> dict:
+            return docsrecord.add_evidence(self.root, self.feature_dir, "stripe", url, None, None, None)
+        for url in ("https://docs.stripe.com@evil.example/x", "https://evil.example/docs.stripe.com",
+                    "https://docs.stripe.com.evil.example/", "https://docs.stripe.com\\@evil.example/",
+                    "https://docs%2estripe.com/", "https://user@docs.stripe.com/", "https://docs.stripe.com:8443/x",
+                    "https://notstripe.com/docs", "https:///docs.stripe.com"):
+            with self.subTest(url=url), self.assertRaises(UsageError):
+                page(url)
+        for url in ("https://docs.stripe.com/api", "https://stripe.com/docs", "https://DOCS.Stripe.COM/api",
+                    "https://docs.stripe.com./api"):
+            with self.subTest(url=url):
+                self.assertEqual(page(url)["kind"], "page")
 
     def test_the_command_line_records_and_lists_it(self):
         out, here = io.StringIO(), os.getcwd()

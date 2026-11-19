@@ -21,6 +21,7 @@ the project, with the one line the person types to add it: an agent never instal
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -122,7 +123,8 @@ class Table:
 
 
 def plain(cell: str) -> str:
-    return productmap.plain(cell)
+    """A cell without the emphasis or code marks around it; marks inside are kept (``phone_numbers`` is a package name)."""
+    return re.sub(r"^[*_`]+|[*_`]+$", "", cell.strip()).strip()
 
 
 def normal(text: str) -> str:
@@ -307,14 +309,31 @@ def _squash(text: str) -> str:
     return re.sub(r"[\s.\-_:]", "", text.casefold())
 
 
+# The name of a package as each registry spells it, and nothing else: the name becomes a line the person is asked to type,
+# so a version, a path, an address, an option or a shell character is refused before it can be printed.
+PACKAGE_NAMES = {
+    "npm": re.compile(r"(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*"),
+    "pypi": re.compile(r"[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?"),
+    "go": re.compile(r"[A-Za-z0-9][\w./~-]*"),
+    "cargo": re.compile(r"[A-Za-z0-9_][\w-]*"),
+    "pub": re.compile(r"[a-z][a-z0-9_]*"),
+    "nuget": re.compile(r"[A-Za-z0-9][\w.-]*"),
+    "maven": re.compile(r"[A-Za-z0-9][\w.-]*:[A-Za-z0-9][\w.-]*"),
+    "gem": re.compile(r"[A-Za-z0-9][\w.-]*"),
+}
+
+
 def parse_package(cell: str) -> tuple[str, str] | None:
-    """``npm:libphonenumber-js`` as (ecosystem, name); None for ``-`` (a platform API)."""
+    """``npm:libphonenumber-js`` as (ecosystem, name); None for ``-`` (a platform API). Raises ValueError for anything that
+    is not an ecosystem and a plain package name of it."""
     if _blank(cell, MISSING | {"platform"}):
         return None
     ecosystem, _, name = plain(cell).partition(":")
-    if ecosystem.strip().casefold() not in sources.ECOSYSTEMS or not name.strip():
+    ecosystem = ecosystem.casefold()
+    pattern = PACKAGE_NAMES.get(ecosystem)
+    if pattern is None or not pattern.fullmatch(name) or ".." in name:
         raise ValueError(cell)
-    return ecosystem.strip().casefold(), name.strip()
+    return ecosystem, name
 
 
 def _blocks(tables: dict[str, Table], ctx: Context, out: Findings) -> None:
@@ -462,6 +481,7 @@ def install_line(manifest: sources.Manifest | None, ecosystem: str, name: str) -
     """The one line that adds the package to the project, from the tools its manifest shows."""
     flags, files = (manifest.flags, manifest.files) if manifest else (frozenset(), frozenset())
     deps = manifest.deps if manifest else {}
+    name = shlex.quote(name)
     if ecosystem == "npm":
         manager = next((f.removeprefix("pm:") for f in sorted(flags) if f.startswith("pm:")), "")
         manager = manager or next((m for m, lock in (("pnpm", "pnpm-lock.yaml"), ("yarn", "yarn.lock"), ("bun", "bun.lockb"),
@@ -477,7 +497,7 @@ def install_line(manifest: sources.Manifest | None, ecosystem: str, name: str) -
     else:
         line = _ADD[ecosystem].format(name=name)
     folder = manifest.folder if manifest else ""
-    return f"cd {folder} && {line}" if folder else line
+    return f"cd {shlex.quote(folder)} && {line}" if folder else line
 
 
 def install_problems(root: Path, feature_dir: Path) -> list[str]:
@@ -491,7 +511,9 @@ def install_problems(root: Path, feature_dir: Path) -> list[str]:
         try:
             package = parse_package(row.get("Package"))
         except ValueError:
-            continue                                         # `bdd design` reports the cell
+            problems.append(f'the package of the building block "{row.get("Field")}" is not ECOSYSTEM:NAME with a plain '
+                            "package name, so no install line is printed for it; `bdd design` names the row")
+            continue
         if package is None:
             continue
         ecosystem, name = package
