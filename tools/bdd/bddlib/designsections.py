@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from . import config as cfg
 from . import designfolder, docsrecord, productmap, sources, trace
 from .errors import StoreError, UsageError
-from .issues import ERROR, Issue
+from .issues import ERROR, Issue, safe_cell
 
 DESIGN_FILE = "design.md"
 MARKER = "technical_design"            # in state.json: the feature was started with the technical design
@@ -243,7 +243,7 @@ def _screen_of(cell: str, screens: list[designfolder.Row]) -> str:
 
 def _label(key: str, screens: list[designfolder.Row]) -> str:
     row = next((r for r in screens if r.id == key), None)
-    return f"{row.id} ({row.screen})" if row else f'"{key}"'
+    return f"{safe_cell(row.id)} ({safe_cell(row.screen)})" if row else f'"{safe_cell(key)}"'
 
 
 def _structure(tables: dict[str, Table], out: Findings) -> None:
@@ -261,7 +261,7 @@ def _structure(tables: dict[str, Table], out: Findings) -> None:
             first = row.get(table.section.columns[0].name) or row.get(table.section.columns[1].name)
             for column in table.section.columns:
                 if column.required and _blank(row.get(column.name)):
-                    out.add(row.line, "TD4", name, f'row "{first}" has nothing under "{column.name}"; fill it in')
+                    out.add(row.line, "TD4", name, f'row "{safe_cell(first)}" has nothing under "{column.name}"; fill it in')
 
 
 def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
@@ -270,7 +270,7 @@ def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
     rows = table.rows
     for screen in ctx.screens:
         traced = [r for r in rows if _mentions(r.get("Screen"), screen.id)]
-        label = f"{screen.id} ({screen.screen})"
+        label = _label(screen.id, ctx.screens)
         if not traced:
             out.add(table.line, "TD10", "Design trace", f"design row {label} is not traced; add a row for each element "
                                                        "of the screen with its rule, API field and component")
@@ -278,18 +278,18 @@ def _trace(tables: dict[str, Table], ctx: Context, out: Findings) -> list[str]:
         elements = {normal(r.get("Element")) for r in traced}
         for name in screen.fields:
             if normal(name) not in elements:
-                out.add(table.line, "TD11", "Design trace", f'design row {label} lists the field "{name}", which no row '
+                out.add(table.line, "TD11", "Design trace", f'design row {label} lists the field "{safe_cell(name)}", which no row '
                                                            "traces; add it, or change the design with the person")
     for row in rows:
         element = row.get("Element")
         named = re.findall(r"[RN]-\d+\.\d+", row.get("Rule"))
         unknown = [r for r in named if r not in ctx.rules]
         if not named or unknown:
-            what = ", ".join(unknown) if unknown else row.get("Rule") or "nothing"
-            out.add(row.line, "TD12", "Design trace", f'"{element}" names {what}, which is not a rule of rules.md; name the '
+            what = ", ".join(unknown) if unknown else safe_cell(row.get("Rule")) if row.get("Rule") else "nothing"
+            out.add(row.line, "TD12", "Design trace", f'"{safe_cell(element)}" names {what}, which is not a rule of rules.md; name the '
                                                       "rule it serves")
         if _blank(row.get("API field")) and _blank(row.get("Component")):
-            out.add(row.line, "TD13", "Design trace", f'"{element}" names neither an API field nor a component')
+            out.add(row.line, "TD13", "Design trace", f'"{safe_cell(element)}" names neither an API field nor a component')
     keys = [_screen_of(r.get("Screen"), ctx.screens) for r in rows if not _blank(r.get("Screen"))]
     return list(dict.fromkeys(keys + [s.id for s in ctx.screens]))
 
@@ -342,22 +342,22 @@ def _blocks(tables: dict[str, Table], ctx: Context, out: Findings) -> None:
     for row in tables["Design trace"].rows:
         element = row.get("Element")
         if not _blank(row.get("API field")) and normal(element) not in blocks:
-            out.add(table.line or row.line, "TD20", "Building blocks", f'field "{element}" has no building block; add a row '
+            out.add(table.line or row.line, "TD20", "Building blocks", f'field "{safe_cell(element)}" has no building block; add a row '
                                                                        f"with its kind, standard, library and documentation ({CARD})")
     for row in table.rows:
         name = row.get("Field")
         standard = standard_of(row.get("Kind"), name)
         if standard is not None and _squash(standard.token) not in _squash(row.get("Standard")):
-            out.add(row.line, "TD21", "Building blocks", f'"{name}" is {standard.what}: its standard is {standard.token} '
+            out.add(row.line, "TD21", "Building blocks", f'"{safe_cell(name)}" is {standard.what}: its standard is {standard.token} '
                                                          f"({CARD})")
         source = row.get("Source")
         problem = None if _blank(source) else docsrecord.source_problem(ctx.root, source)
         if problem:
-            out.add(row.line, "TD22", "Building blocks", f'"{name}": {problem}')
+            out.add(row.line, "TD22", "Building blocks", f'"{safe_cell(name)}": {problem}')
         try:
             parse_package(row.get("Package"))
         except ValueError:
-            out.add(row.line, "TD23", "Building blocks", f'"{name}": write the package as ECOSYSTEM:NAME '
+            out.add(row.line, "TD23", "Building blocks", f'"{safe_cell(name)}": write the package as ECOSYSTEM:NAME '
                                                          f"({', '.join(sources.ECOSYSTEMS)}), or - for a platform API")
 
 
@@ -366,8 +366,8 @@ def _services(tables: dict[str, Table], ctx: Context, out: Findings) -> None:
         service = row.get("Service")
         if service_key(ctx.services, service) not in ctx.evidence:
             out.add(row.line, "TD30", "External services",
-                    f"the call to {service} has no evidence on record; the orchestrator records the official page, an MCP "
-                    f"lookup or a CLI run with `bdd docs {ctx.feature_id} --service {normal(service)} --source URL` "
+                    f"the call to {safe_cell(service)} has no evidence on record; the orchestrator records the official page, an MCP "
+                    f"lookup or a CLI run with `bdd docs {ctx.feature_id} --service NAME --source URL` "
                     "(or --mcp SERVER --query TEXT, or --cli COMMAND)")
 
 
@@ -387,11 +387,11 @@ def _places(tables: dict[str, Table], ctx: Context, out: Findings) -> None:
     for row in tables["Architecture"].rows:
         layer = normal(row.get("Layer"))
         if ctx.layers is not None and layer and layer not in ctx.layers:
-            out.add(row.line, "TD40", "Architecture", f'"{row.get("Piece")}" is in the layer "{row.get("Layer")}", which the '
+            out.add(row.line, "TD40", "Architecture", f'"{safe_cell(row.get("Piece"))}" is in the layer "{safe_cell(row.get("Layer"))}", which the '
                                                       f"Layers section of {designfolder.ARCHITECTURE} does not have")
     for row in tables["Patterns"].rows:
         if _example_file(ctx.root, row.get("Example file")) is None:
-            out.add(row.line, "TD50", "Patterns", f'the example file {row.get("Example file")} of "{row.get("Pattern")}" is '
+            out.add(row.line, "TD50", "Patterns", f'the example file {safe_cell(row.get("Example file"))} of "{safe_cell(row.get("Pattern"))}" is '
                                                   "not a file of the project; name a file that shows the pattern")
 
 
@@ -401,24 +401,24 @@ def _data_and_security(tables: dict[str, Table], out: Findings) -> None:
     for row in data.rows:
         kind, name = normal(row.get("Kind")), row.get("Name")
         if kind not in DATA_KINDS:
-            out.add(row.line, "TD60", "Data and performance", f'"{name}" has the kind "{row.get("Kind")}"; the kinds are '
+            out.add(row.line, "TD60", "Data and performance", f'"{safe_cell(name)}" has the kind "{safe_cell(row.get("Kind"))}"; the kinds are '
                                                               + ", ".join(DATA_KINDS))
         elif kind == "query" and _blank(row.get("Index"), MISSING):
-            out.add(row.line, "TD61", "Data and performance", f'query "{name}" has no index; name the index it uses, or '
+            out.add(row.line, "TD61", "Data and performance", f'query "{safe_cell(name)}" has no index; name the index it uses, or '
                                                               "the one this feature adds")
         elif kind == "operation" and _blank(row.get("Budget"), MISSING):
-            out.add(row.line, "TD62", "Data and performance", f'operation "{name}" has no budget, such as p95 under 300 ms')
+            out.add(row.line, "TD62", "Data and performance", f'operation "{safe_cell(name)}" has no budget, such as p95 under 300 ms')
         elif kind == "migration" and _blank(row.get("Rollback"), MISSING):
-            out.add(row.line, "TD63", "Data and performance", f'migration "{name}" has no rollback; say how it is undone')
+            out.add(row.line, "TD63", "Data and performance", f'migration "{safe_cell(name)}" has no rollback; say how it is undone')
     operations = [normal(r.get("Name")) for r in data.rows if normal(r.get("Kind")) == "operation"]
     kinds = [(normal(r.get("Kind")), normal(r.get("Subject"))) for r in security.rows]
     for endpoint in endpoints:
         wanted = normal(endpoint)
         if not any(wanted in name for name in operations):
-            out.add(data.line, "TD64", "Data and performance", f"operation {endpoint} has no budget; add a row operation | "
-                                                               f"{endpoint} | ... with its budget")
+            out.add(data.line, "TD64", "Data and performance", f"operation {safe_cell(endpoint)} has no budget; add an "
+                                                               "operation row for it with its budget")
         if not any(kind.startswith("authori") and wanted in subject for kind, subject in kinds):
-            out.add(security.line, "TD70", "Security and privacy", f"endpoint {endpoint} has no authorisation row; add one "
+            out.add(security.line, "TD70", "Security and privacy", f"endpoint {safe_cell(endpoint)} has no authorisation row; add one "
                                                                    "that says who may call it, on which records, and where "
                                                                    "the server checks it")
     if endpoints and not any(kind == "rate limit" for kind, _ in kinds):
@@ -426,7 +426,7 @@ def _data_and_security(tables: dict[str, Table], out: Findings) -> None:
                                                                "row (one that says none, and why, is a decision too)")
     for row in security.rows:
         if normal(row.get("Kind")) not in SECURITY_KINDS:
-            out.add(row.line, "TD72", "Security and privacy", f'"{row.get("Subject")}" has the kind "{row.get("Kind")}"; '
+            out.add(row.line, "TD72", "Security and privacy", f'"{safe_cell(row.get("Subject"))}" has the kind "{safe_cell(row.get("Kind"))}"; '
                                                               "the kinds are " + ", ".join(SECURITY_KINDS))
 
 
@@ -443,7 +443,7 @@ def _screens(tables: dict[str, Table], ctx: Context, keys: list[str], out: Findi
             listed = {designfolder.state_name(s) for s in designfolder.split_states(row.get("States"))}
             for state in inventory.states:
                 if designfolder.state_name(state) not in listed:
-                    out.add(row.line, "TD81", "State and offline", f'screen {label} does not list its state "{state}"')
+                    out.add(row.line, "TD81", "State and offline", f'screen {label} does not list its state "{safe_cell(state)}"')
         if not any(_screen_of(r.get("Screen"), ctx.screens) == key for r in access.rows):
             out.add(access.line, "TD82", "Accessibility and language", f"screen {label} has no row; add its labels and "
                                                                        "focus, contrast and text size, strings and locale")
@@ -493,7 +493,7 @@ def install_line(manifest: sources.Manifest | None, ecosystem: str, name: str) -
     elif ecosystem == "pub":
         line = f"{'flutter' if 'flutter' in deps else 'dart'} pub add {name}"
     elif ecosystem == "maven":
-        return f"add {name} to {manifest.path if manifest else 'the build file'} (the build tool has no add command)"
+        return f"add {name} to {safe_cell(manifest.path) if manifest else 'the build file'} (the build tool has no add command)"
     else:
         line = _ADD[ecosystem].format(name=name)
     folder = manifest.folder if manifest else ""
@@ -511,8 +511,8 @@ def install_problems(root: Path, feature_dir: Path) -> list[str]:
         try:
             package = parse_package(row.get("Package"))
         except ValueError:
-            problems.append(f'the package of the building block "{row.get("Field")}" is not ECOSYSTEM:NAME with a plain '
-                            "package name, so no install line is printed for it; `bdd design` names the row")
+            problems.append(f"the package of the building block on line {row.line} of design.md is not ECOSYSTEM:NAME with a "
+                            "plain package name, so no install line is printed for it; `bdd design` names the row")
             continue
         if package is None:
             continue

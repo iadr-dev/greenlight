@@ -36,7 +36,7 @@ from pathlib import Path, PurePosixPath
 from . import config as cfg
 from . import productmap
 from .errors import UsageError
-from .issues import ERROR, Issue
+from .issues import ERROR, Issue, safe_cell
 
 DEFAULT_FOLDER = "design"
 GALLERY = "gallery.html"
@@ -267,24 +267,24 @@ def check_rows(design: Design, inventory: str, known: set[str]) -> list[Issue]:
         if not row.screen or not row.states or not row.features:
             missing = [what for what, value in (("a screen name", row.screen), ("its states", row.states),
                                                 ("a feature id", row.features)) if not value]
-            issues.append(Issue(*where, "IN2", f"{row.id or 'a row'} needs " + ", ".join(missing)))
+            issues.append(Issue(*where, "IN2", f"{safe_cell(row.id) if row.id else 'a row'} needs " + ", ".join(missing)))
         if row.id in seen:
-            issues.append(Issue(*where, "IN3", f"{row.id} is used for two rows"))
+            issues.append(Issue(*where, "IN3", f"{safe_cell(row.id)} is used for two rows"))
         seen.add(row.id)
         for feature in row.features:
             if known and feature not in known:
-                issues.append(Issue(*where, "IN4", f"{row.id} names {feature}, which the product map ({PRODUCT_MAP}) does not list"))
+                issues.append(Issue(*where, "IN4", f"{safe_cell(row.id)} names {feature}, which the product map ({PRODUCT_MAP}) does not list"))
         if not row.file:
-            issues.append(Issue(*where, "IN5", f"{row.id} names no screen file; every row is drawn in a screen file"))
+            issues.append(Issue(*where, "IN5", f"{safe_cell(row.id)} names no screen file; every row is drawn in a screen file"))
             continue
         rel = (base / row.file).as_posix()
         screen = design.screens.get(_normal(rel))
         if screen is None:
-            issues.append(Issue(*where, "IN6", f"{row.id} names {row.file}, which is not a file in the design folder"))
+            issues.append(Issue(*where, "IN6", f"{safe_cell(row.id)} names {safe_cell(row.file)}, which is not a file in the design folder"))
             continue
         for state in row.states:
             if (row.id, state_name(state)) not in screen.shown:
-                issues.append(Issue(*where, "SC1", f'{row.id} lists the state {state}, but {row.file} shows no '
+                issues.append(Issue(*where, "SC1", f'{safe_cell(row.id)} lists the state {safe_cell(state)}, but {safe_cell(row.file)} shows no '
                                                    f'data-state="{state_name(state)}" for it'))
     return issues
 
@@ -299,7 +299,7 @@ def check_screens(design: Design) -> list[Issue]:
             target = (PurePosixPath(rel).parent / href.split("?")[0].split("#")[0]).as_posix()
             linked.append(PurePosixPath(target).name)
             if not (design.root / target).is_file() or not inside(design.root, design.folder, design.root / target):
-                issues.append(Issue(rel, 1, ERROR, "SC3", f"it links {href}, which is not a file in the design folder"))
+                issues.append(Issue(rel, 1, ERROR, "SC3", f"it links {safe_cell(href)}, which is not a file in the design folder"))
         if not screen.names_tokens and not any(name.casefold().startswith("tokens") for name in linked):
             issues.append(Issue(rel, 1, ERROR, "SC2", "it does not use the design tokens: link the stylesheet made from "
                                                       "tokens.json (tokens.css)"))

@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .issues import ERROR, Issue
+from .issues import ERROR, Issue, safe_cell
 
 FILE = "product.md"
 FEATURE_ID = re.compile(r"FEAT-\d+")
@@ -110,7 +110,7 @@ def read(path: Path) -> tuple[list[Feature], list[Issue]]:
     seen: set[str] = set()
     for f in features:
         if not FEATURE_ID.fullmatch(f.id):
-            issues.append(Issue(shown, f.line, ERROR, "PM2", f"'{f.id}' is not a feature id (FEAT-<number>)"))
+            issues.append(Issue(shown, f.line, ERROR, "PM2", f"'{safe_cell(f.id)}' is not a feature id (FEAT-<number>)"))
         elif f.id in seen:
             issues.append(Issue(shown, f.line, ERROR, "PM2", f"{f.id} is listed twice"))
         seen.add(f.id)
@@ -125,12 +125,12 @@ def read(path: Path) -> tuple[list[Feature], list[Issue]]:
                for fid, path_ in cycles(known)]
     for f in features:
         if not f.order.isdigit():
-            issues.append(Issue(shown, f.line, ERROR, "PM6", f"{f.id} has no build order (a whole number, 1 first)"))
+            issues.append(Issue(shown, f.line, ERROR, "PM6", f"{safe_cell(f.id)} has no build order (a whole number, 1 first)"))
             continue
         for dep in f.depends:
             other = known.get(dep)
             if other is not None and other.order.isdigit() and int(other.order) >= int(f.order):
-                issues.append(Issue(shown, f.line, ERROR, "PM6", f"{f.id} is built at order {f.order}, but it depends on "
+                issues.append(Issue(shown, f.line, ERROR, "PM6", f"{f.id} is built at order {safe_cell(f.order)}, but it depends on "
                                                                  f"{dep}, built at order {other.order}"))
     return features, issues
 
