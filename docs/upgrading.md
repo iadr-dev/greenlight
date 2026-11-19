@@ -36,6 +36,7 @@ may be asked for something it was not asked for before. Nothing here needs an ed
 | The feature is in | What the new version asks | What you do |
 |---|---|---|
 | discover, specify, test design | The test-design gate asks for the edge example of a `boundary-value` rule (`T009`) | Add the example, or the one-line reason, to `test-design.md` |
+| any phase, started before the technical design | Nothing new: the feature's state has no `technical_design` marker, so its system-map, tasks and implement gates are the ones it had | Nothing. A feature you start now writes the fourteen tables of `design.md` and gets the design review |
 | examples, refine | `bdd lint` refuses two record tables of one entity with different columns (`L026`) | Fix the tables, or list the entity under `[lint] projected_records` in `.bdd/config.toml`; see [record tables](vocabulary.md#record-tables) |
 | bind | `bdd classify` makes the red invalid when an `@existing` scenario failed in it | Remove the tag from the scenario that does not work yet; once the examples are approved, use `/greenlight:change` |
 | implement | The gate refuses a review that has no record of the code it read | Nothing: the feature skill runs each task's reviewer once more, and the new report is sealed |

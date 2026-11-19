@@ -215,6 +215,56 @@ guard refuses every agent and the orchestrator, a file added to the folder inclu
 inventory rows of a UI task. `/greenlight:change` reopens it (`bdd change --reopen design`), which releases the lock and
 revokes the approval. A project that never starts the stage has no design gate.
 
+The design review is the ui-reviewer's own: the guard lets only the ui-reviewer write
+`.bdd/design-reviews/design-ui-reviewer.md` and records what it wrote, and where the hooks run the approval counts the
+report only when its content is still that and Claude Code reported the agent as finished. Without hooks (soft mode)
+the report is read as it is, and `bdd status` says the review is not checked.
+
+## The technical design
+
+In the system-map phase the system-analyst writes, below the Mermaid views of `design.md`, the technical design of the
+feature: fourteen sections, each one table (`templates/design.md`).
+
+| Section | What it decides |
+|---|---|
+| Design trace | each element of each screen row that names the feature (`bdd design FEAT-n --screens` lists them, with their fields) to its rule, API field and component |
+| Building blocks | each field's standard, library or platform API, package and documentation (card `standard-values`) |
+| External services | each SDK or API call, its quota, cost and failure behaviour, with evidence from what `.bdd/sources.toml` names |
+| Architecture | where each new piece lives in the layers of `.bdd/architecture.md` |
+| Patterns | the project's patterns to copy, each with a file that shows it |
+| API contract | each endpoint's request, response, version and what older clients get |
+| Data and performance | tables, migrations and their rollback, an index per query, a budget per operation |
+| Security and privacy | an authorisation row per endpoint, validation, secrets, personal data and its retention, rate limits |
+| Errors and resilience | every failure, what the person sees, retries and idempotency |
+| State and offline | each screen's states, what is cached, offline and reconnect |
+| Accessibility and language | labels, focus, contrast, text size, strings and locale formats per screen |
+| Observability | the logs, metrics and traces that show it works, without personal data |
+| Configuration and delivery | settings and secrets per environment, flags, the order of migrations on deploy |
+| Test strategy | which levels test what beyond the scenarios |
+
+A section that does not apply holds one row, `n/a` and the reason. `bdd design FEAT-n` checks the sections and the
+system-map gate runs the same checks: it refuses a screen row that is not traced, a field with no building block, a
+phone, country, currency, time zone, language or date without its standard, a source that cannot be opened or is a
+version file, an outside call with no evidence recorded with `bdd docs FEAT-n --service`, a layer the architecture
+lacks, a pattern whose example file does not exist, a query without an index, an operation without a budget, a
+migration without a rollback, an endpoint without an authorisation row, endpoints with no rate limit decided, a screen
+without its states or its accessibility row, and an empty section without a reason. Each message names the section and
+the row.
+
+The evidence for an outside call is the service's official page (on the site `.bdd/sources.toml` names), a lookup
+through its MCP server or a documentation server (context7, microsoft-docs) when one is installed, or a run of its
+command-line tool. The orchestrator records it from the analyst's report.
+
+Before the tasks are written, the code-reviewer (architecture, patterns, API, data, performance), the security-reviewer
+(threats, authorisation, races, rate limits, personal data) and, when the design shows a screen, the ui-reviewer (the
+trace against the screens and the tokens) review `design.md` in parallel and write `reviews/design-<reviewer>.md` with
+the design's digest. The tasks gate waits for a `PASS` from each on the design as it is now; must-fix items go back to
+the system-analyst. Where the hooks run, a report counts only as its reviewer wrote it. The tasks and implement gates
+name each building block that is not a dependency of the project with the one line the person types to add it; an agent
+never installs a package.
+
+A feature started before this version has no `technical_design` marker in its state and keeps the gates it had.
+
 ## Agents
 
 Twelve agents do the work: two designers for the product and design stage (ux-designer and ui-designer), then
