@@ -10,7 +10,8 @@ Sources (each is optional, because a feature is traced while it is still being b
   the next task are the scenarios it owns.
 
 A gap is a link that is missing or points at something that does not exist (``T009``, a boundary rule with an edge
-missing from ``test-design.md``, is reported until the test-design gate has passed). Only artifacts that exist
+missing from ``test-design.md``, is reported until the test-design gate has passed; ``T010`` is a word on a task's
+``Risks:`` line that is not one of the known risks of ``risks``). Only artifacts that exist
 are compared, so a feature that has no ``tasks.md`` yet is not reported as having unowned scenarios.
 """
 from __future__ import annotations
@@ -28,7 +29,16 @@ RULE_LINE = re.compile(_LEAD + r"([RN]-\d+\.\d+)" + _TAIL)
 EXAMPLE_LINE = re.compile(_LEAD + r"(EX-\d+\.\d+\.\d+)" + _TAIL)
 TASK_LINE = re.compile(_LEAD + r"(T-\d+\.\d+)" + _TAIL)
 EXAMPLE_ID = re.compile(r"EX-\d+\.\d+\.\d+")
-AREAS_LINE = re.compile(r"^\s*(?:[-*]\s+)?\**Areas\**\s*:\**\s*(.*)$", re.IGNORECASE)
+TASK_ID = re.compile(r"T-\d+\.\d+")
+
+
+def _field(name: str) -> re.Pattern:
+    return re.compile(rf"^\s*(?:[-*]\s+)?\**{name}\**\s*:\**\s*(.*)$", re.IGNORECASE)
+
+
+AREAS_LINE = _field("Areas")
+# The lines of a task that tasks.md may hold besides its examples: the key in read_tasks -> the line.
+TASK_FIELDS = {"areas": AREAS_LINE, "design": _field("Design"), "risks": _field("Risks"), "depends": _field("Depends on")}
 
 
 @dataclass
@@ -50,8 +60,8 @@ def read_ids(path: Path, pattern: re.Pattern) -> dict[str, str] | None:
 
 
 def read_tasks(path: Path) -> dict[str, dict] | None:
-    """{task id: {"title", "examples": [ids], "areas": text of its Areas line}}; a task owns the example ids written up
-    to the next task."""
+    """{task id: {"title", "examples": [ids], "areas", "design", "risks", "depends"}}: the text of the first line of each
+    kind (``TASK_FIELDS``), None when the task has no such line. A task owns the example ids written up to the next task."""
     if not path.is_file():
         return None
     tasks: dict[str, dict] = {}
@@ -59,12 +69,14 @@ def read_tasks(path: Path) -> dict[str, dict] | None:
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         match = TASK_LINE.match(line)
         if match:
-            current = tasks.setdefault(match.group(1), {"title": match.group(2).strip(), "examples": [], "areas": ""})
+            current = tasks.setdefault(match.group(1), {"title": match.group(2).strip(), "examples": [],
+                                                        **{key: None for key in TASK_FIELDS}})
         if current is not None:
             current["examples"] += [e for e in EXAMPLE_ID.findall(line) if e not in current["examples"]]
-            areas = AREAS_LINE.match(line)
-            if areas and not current["areas"]:
-                current["areas"] = areas.group(1).strip()
+            for key, pattern in TASK_FIELDS.items():
+                found = pattern.match(line)
+                if found and current[key] is None:
+                    current[key] = found.group(1).strip()
     return tasks
 
 
@@ -142,11 +154,24 @@ def build(root: Path, feature_dir: Path, feature_id: str, members: tuple = ()) -
 
     gaps += find_gaps(rules, designed, tasks, scenarios, by_example, owners, matrix)
     gaps += edge_gaps(feature_dir)
+    gaps += risk_gaps(tasks or {})
     return {"feature": feature_id, "rules": matrix, "gaps": [vars(g) for g in gaps],
             "sources": {"rules.md": rules is not None, "test-design.md": designed is not None,
                         "tasks.md": tasks is not None, "scenarios": len(scenarios)},
             "totals": {"rules": len(matrix), "examples": len(example_ids), "scenarios": len(scenarios),
                        "tasks": len(tasks or {})}}
+
+
+def risk_gaps(tasks: dict[str, dict]) -> list[Gap]:
+    """T010: a word on a task's ``Risks:`` line that is not a risk of the fixed list, once for all the tasks that name it."""
+    from . import risks
+    from .issues import safe_cell
+    named: dict[str, list[str]] = {}
+    for task_id, task in tasks.items():
+        for word in risks.parse_line(task.get("risks") or "")[1]:
+            named.setdefault(word, []).append(task_id)
+    return [Gap("T010", f'tasks.md names the risk "{safe_cell(word)}" ({", ".join(ids)}), which is not one greenlight knows; '
+                        f"the risks are: {', '.join(risks.NAMES)}") for word, ids in named.items()]
 
 
 def edge_gaps(feature_dir: Path) -> list[Gap]:
