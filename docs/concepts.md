@@ -185,11 +185,42 @@ under a hook, and whatever an agent could have written (a session file, a log) p
   Claude Code guard's Codex-state check. Rely on the tripwire, your deny rules
   and CI (`bdd approve --check`, `bdd lock --check --require`) for those.
 
+## The product and design stage
+
+A person who has only a product spec starts with `/greenlight:init --product spec.md`. Before any feature, the stage
+(`phases/design.md`) writes, once for the whole product:
+
+- `design/PRODUCT.md`: the users, their jobs and the platforms, with what the spec leaves open;
+- `.bdd/product.md`: the feature map, every feature with its id (`FEAT-001`), a one-line description, what it depends on
+  and its build order;
+- `.bdd/architecture.md`: the stack per surface, the layers, hosting and environments, authentication, the data store,
+  the security baseline and threat model, observability, CI and delivery (from `templates/architecture.md`);
+- the design folder: `DESIGN.md` with the design contract, `tokens.json` and `tokens.css`, the screen inventory
+  (`inventory.md`, one row per screen with its id, states, feature and file), `flows.html`, and `screens/*.html`, every
+  state of every row in an element marked `data-screen="<id>" data-state="<state>"`.
+
+`bdd gallery --check` checks that every row has a screen, its states and a feature of the map, that every screen file
+named exists and shows every state of its rows, that the screens use the tokens, that the map's dependencies and build
+order agree, and that every section of the architecture is filled in. The `ui-reviewer` reviews the design (real
+product evidence, the design contract, every state, tokens and accessibility, two widths) and its report names the
+design's digest. `bdd gallery` writes `design/gallery.html`: one page with every screen and state grouped by feature,
+the flows and the gaps, which opens without a network and runs no script.
+
+The person approves by typing `/greenlight:approve design`, verified against the session transcript like every
+approval, and refused while a check finds a gap, while the review names another version, or while the page is not the
+one `bdd gallery` builds now. `bdd approve design --summary` shows what is approved, and after a change only what
+changed. The approval locks the design folder, the feature map and the architecture (`.bdd/design.lock.json`): the
+guard refuses every agent and the orchestrator, a file added to the folder included. `bdd status` prints
+`design: approved, locked`, each feature's discover gate waits for the approved design, and `bdd route` names the
+inventory rows of a UI task. `/greenlight:change` reopens it (`bdd change --reopen design`), which releases the lock and
+revokes the approval. A project that never starts the stage has no design gate.
+
 ## Agents
 
-Ten agents do the phase work: product-analyst, qa-designer, system-analyst, step-engineer, two writers of production
-code (implementer, and ui-engineer for screens), three reviewers (code-reviewer, ui-reviewer, security-reviewer) and
-spec-auditor. Each has an explicit tool list and write permissions (the writers cannot touch tests, the reviewers write
+Twelve agents do the work: two designers for the product and design stage (ux-designer and ui-designer), then
+product-analyst, qa-designer, system-analyst, step-engineer, two writers of production code (implementer, and
+ui-engineer for screens), three reviewers (code-reviewer, ui-reviewer, which also reviews the product design,
+security-reviewer) and spec-auditor. Each has an explicit tool list and write permissions (the writers cannot touch tests, the reviewers write
 only their report under `.bdd/`, the auditor cannot write at all). An agent that is not one of greenlight's (a built-in
 one, your own, another plugin's) may write production code and `.bdd/` data but never the feature files or the steps.
 They read files, never chat history, and report instead of recording; the orchestrator (`/greenlight:feature`) records
