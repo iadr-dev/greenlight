@@ -125,7 +125,7 @@ def artifacts(root: Path, folder: str) -> list[str]:
     if base.is_dir():
         for path in base.rglob("*"):
             parts = path.relative_to(base).parts
-            if path.is_file() and not any(p.startswith(".") or p in _SKIP_DIRS for p in parts) and parts != (GALLERY,):
+            if path.is_file() and not any(p.startswith(".") or p in _SKIP_DIRS for p in parts) and [p.casefold() for p in parts] != [GALLERY]:
                 found.append(path.relative_to(root).as_posix())
     found += [rel for rel in (PRODUCT_MAP, ARCHITECTURE) if (root / rel).is_file()]
     return sorted(found)
@@ -138,7 +138,7 @@ def covers(folder: str, rel: str) -> bool:
     if not rel.startswith(folder + "/"):
         return False
     parts = rel[len(folder) + 1:].split("/")
-    return parts != [GALLERY] and not any(p.startswith(".") or p in _SKIP_DIRS for p in parts)
+    return [p.casefold() for p in parts] != [GALLERY] and not any(p.startswith(".") or p in _SKIP_DIRS for p in parts)
 
 
 # -- reading --------------------------------------------------------------------------------------------------------

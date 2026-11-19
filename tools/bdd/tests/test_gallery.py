@@ -70,7 +70,7 @@ class GalleryTest(DesignCase):
         shown = next(f["srcdoc"] for f in page.frames if "home.html" in f["title"])
         self.assertEqual(len(re.findall(r'data-state="', shown)), 7, "every state of every row is in the frame")
         self.assertIn("--primary: #137547", shown, "the tokens stylesheet is inlined")
-        self.assertIn(("a", "screens/home.html"), page.addresses, "each screen links its file, relative to the page")
+        self.assertFalse([a for a in page.addresses if a[0] == "a" and not a[1].startswith("#")], "links stay inside the page")
 
     def test_the_page_needs_no_network_and_runs_no_script(self):
         self.write("design/screens/home.html", screen(head=(
@@ -100,6 +100,13 @@ class GalleryTest(DesignCase):
         self.assertIn("SC3", out)
         self.assertNotIn("--secret", (self.root / "design" / "gallery.html").read_text(encoding="utf-8"))
 
+    def test_a_hidden_or_generated_file_of_the_design_folder_is_never_shown(self):
+        self.write("design/.x/look.css", "body { --hidden: 1; }\n")
+        self.write("design/screens/home.html", screen(head='<link rel="stylesheet" href="../.x/look.css">'
+                                                           '<link rel="stylesheet" href="../tokens.css">'))
+        self.run_gallery()
+        self.assertNotIn("--hidden", (self.root / "design" / "gallery.html").read_text(encoding="utf-8"))
+
     def test_the_gallery_lists_the_gaps_and_still_shows_the_design(self):
         self.write("design/screens/home.html", screen({"S-IN-01": ("loading", "error", "success"),
                                                        "S-OR-01": ("loading", "error", "success")}))
@@ -122,7 +129,7 @@ class GalleryTest(DesignCase):
                 self.assertEqual(self.run_gallery("--out", out)[0], 2)
         self.assertEqual(self.run_gallery("--out", "review/gallery.html")[0], 0)
         text = (self.root / "review" / "gallery.html").read_text(encoding="utf-8")
-        self.assertIn('href="../design/screens/home.html"', text)
+        self.assertIn("data-row=\"S-OR-01\"", text)
 
     def test_the_same_design_gives_the_same_page(self):
         self.run_gallery()

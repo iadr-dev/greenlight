@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import approvals, approvalsummary, enforcement, state, store
+from . import approvals, approvalsummary, enforcement, lockfile, state, store
 from . import config as cfg
 from .errors import StoreError, UsageError
 from .statecmd import project_root
@@ -132,10 +132,10 @@ def run_design(argv: list[str]) -> int:
         print("note: this approval is self-reported, not verified by a hook.", file=sys.stderr)
         return 0
     data = designstage.load(root)
-    if data is None:
+    if data is None and not lockfile.design_path(root).exists():
         print("design: the design stage has not started; nothing to approve")
         return 0
-    if args.verify:
+    if args.verify and data is not None:
         print(f"design: verified {designstage.verify(root)} approval(s)")
         for a in designstage.load(root)["approvals"]:
             if a["grade"] == "hook":

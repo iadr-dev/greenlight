@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import approvals, approvalsummary, config as cfg, designfolder, lockfile, store
@@ -35,6 +36,7 @@ DIGEST = re.compile(r"^\s*Design:\s*([0-9a-f]{64})\s*$", re.MULTILINE)
 VERDICT = re.compile(r"^\s*Verdict:\s*(PASS|FINDINGS)\b", re.IGNORECASE | re.MULTILINE)
 VERIFY_COMMAND = "`bdd approve design --verify`"
 NAME = "The product"
+PROMPT_SKEW = timedelta(minutes=2)          # clocks of the hook and of the transcript may differ a little
 
 
 def path_of(root: Path) -> Path:
@@ -153,7 +155,7 @@ def prerequisites(root: Path) -> tuple[designfolder.Design, dict[str, str], list
     if design.issues:
         problems.append(f"the design checks found {len(design.issues)} gap(s); `bdd gallery --check` lists them")
     page = root / design.folder / designfolder.GALLERY
-    if not page.is_file() or page.read_text(encoding="utf-8") != gallery.build(root, page, design):
+    if not page.is_file() or page.read_text(encoding="utf-8") != gallery.build(root, design):
         problems.append(f"{design.folder}/{designfolder.GALLERY} does not show the design as it is now; `bdd gallery` "
                         "builds it again, and the person looks at it before approving")
     return design, files, problems
@@ -174,6 +176,8 @@ def record(root: Path, decision: str, grade: str, *, session: str | None = None,
     if decision == "approve":
         design, files, problems = prerequisites(root)
         if problems:
+            if prompt_id:
+                keep_refused(root, prompt_id)
             raise UsageError("cannot approve the design: " + "; ".join(problems))
         held = lockfile.read_design(root)
         if lockfile.design_locked(held) and held["files"] != files:
@@ -200,10 +204,40 @@ def record(root: Path, decision: str, grade: str, *, session: str | None = None,
     return entry
 
 
+def keep_refused(root: Path, prompt_id: str) -> None:
+    """Keep the id of a prompt the hook refused for good: an approval recorded later with it never counts."""
+    def mutate(current: dict) -> None:
+        refused = current.setdefault("refused_prompts", [])
+        if prompt_id not in refused:
+            refused.append(prompt_id)
+    store.update_json(path_of(root), "design record", mutate)
+
+
+def _replayed(approval: dict, data: dict) -> str | None:
+    """Why a pending approval borrows a prompt it was not recorded from: one the hook refused, or one Claude Code wrote
+    long before the approval (the hook records within moments of the prompt) or before the stage started."""
+    if approval.get("prompt_id") in data.get("refused_prompts", []):
+        return "this prompt was refused when it was typed, so it cannot approve the design later"
+    try:
+        entries = approvals.prompt_entries(approval["transcript_path"], approval["prompt_id"])
+        stamps = [datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")) for e in entries if e.get("timestamp")]
+        at, started = datetime.fromisoformat(approval["at"]), datetime.fromisoformat(data["started_at"])
+    except (UsageError, KeyError, TypeError, ValueError, OSError):
+        return None
+    if stamps and (min(stamps) < started or at - min(stamps) > approvals.PENDING_TIMEOUT or min(stamps) > at + PROMPT_SKEW):
+        return "the prompt was not typed when this approval was recorded"
+    return None
+
+
 def verify(root: Path) -> int:
     """Decide the pending design approvals the transcript can decide now. Returns how many were decided."""
     data = load(root)
     verdicts = approvals.pending_verdicts(data) if data else {}
+    for approval in data["approvals"] if data else []:
+        if approval["id"] in verdicts and verdicts[approval["id"]][0] in ("human", "headless"):
+            why = _replayed(approval, data)
+            if why:
+                verdicts[approval["id"]] = ("invalid", why)
     if not verdicts:
         return 0
 
@@ -239,6 +273,10 @@ def effective_problems(root: Path, data: dict) -> list[str]:
 def status(root: Path) -> dict:
     """Where the stage stands: ``stage`` is not started, drafted or approved; ``locked``; ``problems`` of an approval."""
     data = load(root)
+    if data is None and lockfile.design_path(root).exists():      # a lock without its record is never "not started"
+        return {"stage": "approved", "locked": lockfile.design_locked(lockfile.read_design(root)), "reopened": None,
+                "problems": [f"the design record ({cfg.BDD_DIR}/{STATE_FILE}) is missing while the design lock exists; "
+                             "restore it from version control"]}
     if data is None:
         return {"stage": "not started", "locked": False, "problems": [], "reopened": None}
     locked = lockfile.design_locked(lockfile.read_design(root))
@@ -271,11 +309,10 @@ def safe_verify(root: Path) -> None:
 
 def gate_problems(root: Path) -> list[str]:
     """Why a feature cannot start yet: once the stage is started, every feature is built against the approved design."""
-    data = load(root)
-    if data is None:
-        return []
     safe_verify(root)
     info = status(root)
+    if info["stage"] == "not started":
+        return []
     if info["stage"] != "approved":
         return ["the product design is not approved yet: the person looks at the gallery (`bdd gallery`) and types "
                 "/greenlight:approve design"]
@@ -316,8 +353,7 @@ def summary_text(root: Path) -> str:
     same = accepted is None or accepted["artifacts"] == files
     summary = approvalsummary.summarise(GATE, reading(root, design, files), accepted, rejected, same, [])
     lines = [approvalsummary.render(summary, NAME)]
-    product = len(design.features)
-    lines.append(f"{product} feature(s) in the product map, {len(design.rows)} screen(s) in the inventory.")
+    lines.append(f"{len(design.features)} feature(s) in the product map, {len(design.rows)} screen(s) in the inventory.")
     review = root / REVIEW
     verdict = VERDICT.search(review.read_text(encoding="utf-8-sig", errors="replace")) if review.is_file() else None
     if verdict:

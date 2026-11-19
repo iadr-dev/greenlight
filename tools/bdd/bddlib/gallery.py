@@ -16,7 +16,6 @@ import argparse
 import base64
 import html
 import mimetypes
-import os
 import re
 import sys
 from pathlib import Path, PurePosixPath
@@ -76,8 +75,9 @@ class Inliner:
         if not ref or _EXTERNAL.match(ref) or ref.startswith("#"):
             return None
         target = self.root / (rel_dir / ref.split("?")[0].split("#")[0]).as_posix()
-        if target.is_file() and designfolder.inside(self.root, self.folder, target) and target.stat().st_size <= MAX_INLINE:
-            return target
+        if (target.is_file() and designfolder.inside(self.root, self.folder, target) and target.stat().st_size <= MAX_INLINE
+                and designfolder.covers(self.folder, target.resolve().relative_to(self.root.resolve()).as_posix())):
+            return target                       # only what the approval covers is shown
         return None
 
     def data_uri(self, path: Path) -> str:
@@ -123,32 +123,31 @@ def frame(document: str, width: int, title: str) -> str:
             f'srcdoc="{esc(document)}"></iframe></div>')
 
 
-def card(row: designfolder.Row, design: designfolder.Design, inventory: str, link_base: Path) -> str:
+def card(row: designfolder.Row, design: designfolder.Design, inventory: str) -> str:
     rel = designfolder._normal((PurePosixPath(inventory).parent / row.file).as_posix()) if row.file else ""
     screen = design.screens.get(rel)
     states = "".join(
         f'<li class="{"ok" if screen and (row.id, designfolder.state_name(s)) in screen.shown else "gap"}">{esc(s)}</li>'
         for s in row.states)
     if screen:
-        where = (f'<a href="{esc(os.path.relpath(design.root / rel, link_base).replace(os.sep, "/"))}">{esc(row.file)}</a> '
-                 f'(<a href="#{anchor(rel)}">shown below</a>)')
+        where = f'<a href="#{anchor(rel)}">{esc(row.file)}</a>'
     else:
         where = f'<span class="gap">{esc(row.file or "no screen file")}</span>'
     return (f'<article class="card" data-row="{esc(row.id)}"><h3>{esc(row.id)} {esc(row.screen)}</h3>'
             f'<p>{esc(row.section)}</p><ul class="states">{states}</ul><p>{where}</p></article>')
 
 
-def build(root: Path, out: Path, design: designfolder.Design) -> str:
+def build(root: Path, design: designfolder.Design) -> str:
+    """The page, from the design alone: the same design always gives the same bytes, whatever the stage's state."""
     files = designfolder.files_of(cfg.load(root), design.folder)
     inliner = Inliner(root, design.folder)
     title = product_name(root, files["product"])
-    status = designstage.status_line(designstage.status(root))
     known = {f.id for f in design.features}
     parts = [f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
              f'<meta http-equiv="Content-Security-Policy" content="{POLICY}">'
              f'<meta name="viewport" content="width=device-width, initial-scale=1">'
              f"<title>{esc(title)}: design gallery</title><style>{STYLE}</style></head><body>",
-             f"<header><h1>{esc(title)}: the design</h1><p>{esc(status)}</p><p>{esc(counts(design))}</p>"
+             f"<header><h1>{esc(title)}: the design</h1><p>{esc(counts(design))}</p>"
              '<nav><a href="#features">Features</a><a href="#flows">Flows</a><a href="#screens">Screens</a>'
              '<a href="#findings">Findings</a></nav></header><main>']
     parts.append('<section id="findings"><h2>Findings</h2>' + (
@@ -162,7 +161,7 @@ def build(root: Path, out: Path, design: designfolder.Design) -> str:
     for key, heading, about in groups:
         rows = [r for r in design.rows if (key in r.features if key != "other" else not set(r.features) & known)]
         parts.append(f'<h2 id="{esc(key)}">{esc(heading)}</h2><p>{esc(about)}</p><div class="cards">'
-                     + "".join(card(r, design, files["inventory"], out.parent) for r in rows) + "</div>")
+                     + "".join(card(r, design, files["inventory"]) for r in rows) + "</div>")
     parts.append("</section>")
     parts.append('<section id="flows"><h2>Flows</h2>')
     if (root / files["flows"]).is_file():
@@ -172,8 +171,7 @@ def build(root: Path, out: Path, design: designfolder.Design) -> str:
     parts.append('</section><section id="screens"><h2>Screens</h2>')
     for rel in design.screens:
         document = inliner.document(rel)
-        link = os.path.relpath(root / rel, out.parent).replace(os.sep, "/")
-        parts.append(f'<h3 id="{anchor(rel)}"><a href="{esc(link)}">{esc(rel)}</a></h3><div class="frames">'
+        parts.append(f'<h3 id="{anchor(rel)}">{esc(rel)}</h3><div class="frames">'
                      + "".join(frame(document, width, rel) for width in WIDTHS) + "</div>")
     parts.append("</section></main></body></html>\n")
     return "".join(parts)
@@ -223,7 +221,7 @@ def run(argv: list[str]) -> int:
             return 1 if findings else 0
         out = output_path(root, design.folder, args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        store.write_text(out, build(root, out, design))
+        store.write_text(out, build(root, design))
     except (UsageError, StoreError, cfg.ConfigError, OSError) as exc:
         print(f"bdd gallery: {exc}", file=sys.stderr)
         return 2

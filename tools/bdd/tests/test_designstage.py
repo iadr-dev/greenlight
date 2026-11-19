@@ -73,6 +73,32 @@ class ApprovalTest(DesignCase):
         self.assertEqual(designstage.load(self.root)["approvals"][0]["origin"], "invalid")
         self.assertIn("was not typed by a person", designstage.status_line(designstage.status(self.root)))
 
+    def test_a_prompt_the_hook_refused_never_approves_later(self):
+        self.start()
+        self.assertIn("NOT recorded", self.hook())                     # no review yet: refused, its prompt id kept
+        self.review()
+        designstage.record(self.root, "approve", "hook", prompt_id="p1", transcript_path="session.jsonl")
+        self.transcript(typed("p1", "design"))
+        designstage.verify(self.root)
+        approval = designstage.load(self.root)["approvals"][0]
+        self.assertEqual((approval["origin"], approval["evidence"]),
+                         ("invalid", "this prompt was refused when it was typed, so it cannot approve the design later"))
+        self.assertNotEqual(designstage.status_line(designstage.status(self.root)), "design: approved, locked")
+
+    def test_a_prompt_typed_long_before_the_approval_was_recorded_does_not_count(self):
+        self.ready()
+        self.hook()
+        self.transcript(typed("p1", "design", timestamp="2020-01-01T00:00:00Z"))
+        designstage.verify(self.root)
+        self.assertEqual(designstage.load(self.root)["approvals"][0]["evidence"],
+                         "the prompt was not typed when this approval was recorded")
+
+    def test_a_deleted_design_record_is_not_read_as_a_stage_never_started(self):
+        self.ready()
+        self.hook()
+        (self.root / ".bdd" / designstage.STATE_FILE).unlink()
+        self.assertIn("the design record (.bdd/design-stage.json) is missing", " ".join(designstage.gate_problems(self.root)))
+
     def test_a_message_with_more_than_the_command_is_not_recorded(self):
         self.ready()
         self.assertIsNone(self.hook("/greenlight:approve design looks great"))
@@ -115,8 +141,7 @@ class ApprovalTest(DesignCase):
     def test_the_same_prompt_cannot_approve_twice(self):
         self.ready()
         self.hook()
-        changecmd_reason = "again"
-        designstage.reopen(self.root, changecmd_reason)
+        designstage.reopen(self.root, "again")
         self.review()
         self.hook()
         self.transcript(typed("p1", "design"))

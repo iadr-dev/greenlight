@@ -78,7 +78,7 @@ class DesignCase(unittest.TestCase):
     def build(self) -> None:
         out = self.root / "design" / "gallery.html"
         from bddlib import designfolder, store
-        store.write_text(out, gallery.build(self.root, out, designfolder.load(self.root)))
+        store.write_text(out, gallery.build(self.root, designfolder.load(self.root)))
 
     def ready(self) -> None:
         self.start()
