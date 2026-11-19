@@ -1,6 +1,7 @@
 name = "generic-junit"
 version = 1
 profiles = ["base", "api", "ui", "cli", "lib", "data"]   # the project's own runner binds whatever instructions it uses
+surfaces = []
 
 [detect]                                          # never suggested by `init`: it is the choice when no other adapter fits
 files = []

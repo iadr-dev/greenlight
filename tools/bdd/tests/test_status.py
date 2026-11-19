@@ -50,6 +50,28 @@ class TableTest(StatusCase):
         self.rules.write_text("# changed\n", encoding="utf-8", newline="\n")
         self.assertIn("rules: approved but not valid", self.run_status()[1])
 
+    def test_unverified_surfaces_and_ignored_tables_are_shown(self):
+        self.write(".bdd/config.toml", '[surfaces]\nweb = "unverified"\nios = "unverified"\napi = "ts-cucumber-js"\n\n[design]\nsystem = 3\n')
+        _, out, _ = self.run_status()
+        self.assertIn("unverified surfaces: web, ios", out)
+        self.assertIn("warning: ", out)
+        data = json.loads(self.run_status("--json")[1])
+        self.assertEqual((data["unverified_surfaces"], len(data["config_warnings"])), (["web", "ios"], 1))
+
+    def test_what_setup_recorded_is_listed_and_a_broken_sources_file_is_a_warning(self):
+        self.write(".bdd/config.toml", '[design]\nsystem = "design/DESIGN.md"\n\n[[adapters]]\nname = "x"\nfeatures = "f"\n'
+                   "[adapters.quality.tsc]\ncommand = 'x'\n[adapters.quality.eslint]\ncommand = 'y'\n")
+        self.write(".bdd/sources.toml", '[stripe]\nname = "Stripe"\n[express]\nignore = true\n[fastify]\nname = "Fastify"\n')
+        _, out, _ = self.run_status()
+        for line in ("sources: stripe, fastify", "quality checks: tsc, eslint", "design: design/DESIGN.md"):
+            self.assertIn(line + "\n", out)
+        data = json.loads(self.run_status("--json")[1])["recorded"]
+        self.assertEqual((data["sources"], data["quality_checks"], data["design"]["system"]), (["stripe", "fastify"], ["tsc", "eslint"], "design/DESIGN.md"))
+        self.write(".bdd/sources.toml", "[stripe\n")
+        code, out, _ = self.run_status()
+        self.assertEqual(code, 0)
+        self.assertIn("warning: .bdd/sources.toml could not be read", out)
+
     def test_json_and_empty_project(self):
         _, out, _ = self.run_status("--json")
         data = json.loads(out)

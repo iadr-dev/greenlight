@@ -51,11 +51,17 @@ class InstalledTest(unittest.TestCase):
             raise subprocess.TimeoutExpired("claude", 1)
         self.assertIsNone(helpers.installed(hangs))
 
-    def test_the_catalog_names_only_plugins_of_the_official_directories(self):
+    def test_the_catalog_names_plugins_of_the_official_directories_and_optional_ones_that_name_their_own_marketplace(self):
         for helper in helpers.CATALOG:
             with self.subTest(helper=helper.name):
-                self.assertRegex(helper.id, r"^[a-z0-9-]+@(claude-plugins-official|anthropic-plugin-directory)$")
+                if helper.marketplace:
+                    self.assertFalse(helper.recommended, "a plugin from another marketplace is never in the install line")
+                    self.assertRegex(helper.marketplace, r"^[\w.-]+/[\w.-]+$")
+                    self.assertEqual(helper.id.split("@", 1)[0], helper.name)
+                else:
+                    self.assertRegex(helper.id, r"^[a-z0-9-]+@(claude-plugins-official|anthropic-plugin-directory)$")
         self.assertEqual(len({h.name for h in helpers.CATALOG}), len(helpers.CATALOG))
+        self.assertEqual({h.name for h in helpers.CATALOG if h.marketplace}, {"impeccable", "pstack", "open-code-review"})
 
 
 class ReportTest(unittest.TestCase):
@@ -111,6 +117,23 @@ class InstallTest(unittest.TestCase):
                                       ["claude", "plugin", "install", "feature-dev@claude-plugins-official"]])
         self.assertIn("installed  context7", out)
 
+    def test_a_helper_from_its_own_marketplace_adds_that_marketplace_first_and_only_when_named(self):
+        code, out = self.run_install(helpers.choose(["impeccable"]))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.calls, [["claude", "plugin", "marketplace", "add", "pbakaus/impeccable"],
+                                      ["claude", "plugin", "install", "impeccable@impeccable"]])
+        self.calls.clear()
+        self.run_install(helpers.missing({}))
+        self.assertFalse(any("marketplace" in call for call in self.calls),
+                         "the default install is the recommended helpers of Anthropic's directories")
+
+    def test_a_marketplace_that_cannot_be_added_stops_that_helper_only(self):
+        code, out = self.run_install(helpers.choose(["impeccable", "context7"]), failing="pbakaus/impeccable")
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED     impeccable: could not add the marketplace pbakaus/impeccable", out)
+        self.assertNotIn(["claude", "plugin", "install", "impeccable@impeccable"], self.calls)
+        self.assertIn(["claude", "plugin", "install", "context7@claude-plugins-official"], self.calls)
+
     def test_a_failure_is_reported_and_the_rest_still_run(self):
         code, out = self.run_install(helpers.choose(["context7", "feature-dev"]), failing="context7")
         self.assertEqual(code, 1)
@@ -138,6 +161,86 @@ class InstallTest(unittest.TestCase):
         self.assertIn("already installed", out.getvalue())
 
 
+class OtherMarketplacesAndVendorsTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name).resolve()
+        (self.root / ".bdd").mkdir()
+        (self.root / ".bdd" / "sources.toml").write_text(
+            '[supabase]\nname = "Supabase"\nplugin = "supabase@claude-plugins-official"\n[stripe]\nname = "Stripe"\n'
+            'plugin = "stripe@claude-plugins-official"\n[fastify]\nname = "Fastify"\n[expo]\nignore = true\nplugin = "expo@x"\n',
+            encoding="utf-8")
+
+    def test_the_report_says_where_an_optional_helper_comes_from_and_the_line_that_adds_it(self):
+        text = helpers.report({}, None)
+        self.assertIn("(optional, from github.com/pbakaus/impeccable)", text)
+        self.assertIn("not Anthropic's", text)
+        self.assertIn("helpers install impeccable --yes", text)
+        installed = {h.id: "1" for h in helpers.CATALOG if h.marketplace}
+        self.assertNotIn("not Anthropic's", helpers.report(installed, None))
+
+    def test_the_install_line_for_the_recommended_helpers_never_includes_them(self):
+        self.assertFalse({h.name for h in helpers.missing({})} & {"impeccable", "pstack", "open-code-review"})
+
+    def test_the_vendor_plugin_of_a_service_the_project_uses_is_suggested_when_it_is_not_installed(self):
+        text = helpers.report({"stripe@claude-plugins-official": "1"}, self.root)
+        self.assertIn("Plugins of the services this project uses", text)
+        self.assertIn("supabase@claude-plugins-official  (Supabase)", text)
+        self.assertNotIn("stripe@claude-plugins-official  (Stripe)", text)
+        self.assertIn("! claude plugin install supabase@claude-plugins-official", text)
+        self.assertNotIn("expo@x", text, "an entry the person marked ignore is not suggested")
+        self.assertNotIn("Fastify", text)
+
+    def test_nothing_is_suggested_when_all_are_installed_or_the_plugin_list_is_unknown(self):
+        both = {"supabase@claude-plugins-official": "1", "stripe@claude-plugins-official": "1"}
+        self.assertNotIn("Plugins of the services", helpers.report(both, self.root))
+        self.assertNotIn("Plugins of the services", helpers.report(None, self.root))
+        self.assertNotIn("Plugins of the services", helpers.report({}, None))
+
+    def write_sources(self, text: str) -> None:
+        (self.root / ".bdd" / "sources.toml").write_text(text, encoding="utf-8")
+
+    def test_an_install_line_is_made_only_of_the_catalogs_own_plugin_ids(self):
+        for bad in ("evil plugin@x", "a;b@x", "a@x; rm -rf ~", "$(id)@x", "a`id`@x", "a\\nb@x", "a@x\\nb", "@x", "a@", "a|b@x", "a&b@x",
+                    "../a@x", "a@x/../b"):
+            with self.subTest(bad=bad):
+                self.write_sources(f'[supabase]\nname = "Supabase"\nplugin = "{bad}"\n[mine]\nname = "Mine"\nplugin = "{bad}"\n')
+                text = helpers.report({}, self.root)
+                self.assertNotIn(bad, text)
+                self.assertNotIn(bad.replace("\\n", "\n"), text)
+                self.assertIn("! claude plugin install supabase@claude-plugins-official", text,
+                              "the service the catalog knows still gets the catalog's own id")
+                self.assertNotIn("Mine", text)
+                self.assertTrue(all(v["plugin"] in ("", "supabase@claude-plugins-official")
+                                    for v in json.loads(helpers.as_json({}, self.root))["vendor"]))
+
+    def test_every_catalog_plugin_id_passes_and_needs_no_quoting(self):
+        import shlex
+        for service in helpers.sources.catalog():
+            if service.plugin:
+                with self.subTest(service=service.id):
+                    self.assertTrue(helpers.PLUGIN_ID.fullmatch(service.plugin))
+                    self.assertEqual(shlex.quote(service.plugin), service.plugin)
+
+    def test_a_plugin_the_project_names_that_greenlight_does_not_list_is_information_and_never_a_command(self):
+        self.write_sources('[mine]\nname = "Mine \\u001b[31mred"\nplugin = "mine@elsewhere"\n'
+                          '[supabase]\nname = "Supabase"\nplugin = "other@elsewhere"\n')
+        text = helpers.report({}, self.root)
+        self.assertIn("Named in .bdd/sources.toml and not offered here", text)
+        self.assertIn("mine@elsewhere (Mine [31mred)", text)
+        self.assertIn("other@elsewhere (Supabase)", text)
+        self.assertNotIn("\\x1b", text)
+        self.assertNotIn("install mine@elsewhere", text)
+        self.assertNotIn("install other@elsewhere", text)
+        self.assertIn("! claude plugin install supabase@claude-plugins-official", text)
+
+    def test_json_lists_the_vendor_plugins_with_whether_they_are_installed(self):
+        data = json.loads(helpers.as_json({"stripe@claude-plugins-official": "1"}, self.root))
+        self.assertEqual([(v["service"], v["installed"]) for v in data["vendor"]], [("Supabase", False), ("Stripe", True)])
+        self.assertEqual(json.loads(helpers.as_json(None, self.root))["vendor"], [])
+
+
 class DeclineTest(unittest.TestCase):
     def test_declining_is_remembered_in_the_project_and_needs_a_project(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -163,7 +266,7 @@ class DoctorTest(unittest.TestCase):
         plugins = {FIRST.id: "1", "impeccable@impeccable": "4", "security-guidance@claude-plugins-official": "2"}
         checks = {c.name: c for c in doctor.check_helpers(plugins, declined=False)}
         self.assertEqual(checks["helpers"].status, "ok")
-        self.assertIn("1 of 8 helper plugins installed", checks["helpers"].detail)
+        self.assertIn(f"2 of {len(helpers.CATALOG)} helper plugins installed", checks["helpers"].detail)
         self.assertIn("context7", checks["helpers"].detail)
         hooks = checks["plugin hooks"].detail
         self.assertIn("impeccable", hooks)

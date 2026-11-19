@@ -41,9 +41,16 @@ request ─▶ rules ─▶ test design ─▶ examples ─▶ system map + desi
   you type one line to accept it (`/greenlight:approve integrity #3 <reason>`).
 - **Your engineering standards are part of the gate.** `.bdd/standards.md` (language and toolchain, clean code,
   architecture, security, API and data rules, deprecation policy) starts as greenlight's defaults and is in force
-  without approval; only you can change it. Once you name your formatter, linter and type checker in
-  `[adapters.quality.NAME]` tables in `.bdd/config.toml` (`bdd init` writes none), `bdd check` runs them and the gates
-  require a passing result. Optional mutation and stability checks (`bdd mutate`, `bdd stability`) test the tests.
+  without approval; only you can change it. `bdd init` writes an `[adapters.quality.NAME]` table in `.bdd/config.toml`
+  for each formatter, linter, type checker and architecture checker your project itself declares (never one it does
+  not), `bdd check` runs them and the gates require a passing result. Optional mutation and stability checks
+  (`bdd mutate`, `bdd stability`) test the tests.
+- **Setup records what the project already has.** From your dependency files `bdd init` writes `.bdd/sources.toml`: each
+  service and framework it recognises (Supabase, Stripe, LINE, Expo, Firebase, Sentry, Cloudflare, AWS, Next.js, Django
+  and more) with its official documentation, its command-line tool and its plugin, so the writers read the
+  vendor's own pages and not a guess. It records your `design/` folder as `[design]` and lists the surfaces you ship (web,
+  iOS, Android, API, command line) with the adapter that verifies each. `bdd status` lists what was recorded and shows
+  a surface no adapter covers as unverified, so nobody mistakes a tested API for tested screens.
 - **Mistakes are caught early, not by the auditor at the end.** `bdd lint` refuses two record tables of one entity with
   different columns. `bdd classify` refuses a red in which a scenario tagged `@existing` fails. The test-design gate asks
   for the edge examples a `boundary-value` rule needs. Where the hooks run, the implement gate refuses a review older
@@ -106,7 +113,8 @@ independent audit, so the report shows what was recorded up to the green run.
 1. **Set up once.** `/greenlight:init` checks the machine, recommends a test adapter for you to confirm, creates
    `.bdd/` and the adapter's `tests/` skeleton, and proves a sample feature runs (install the adapter's test
    requirements first; for Python, `pytest` and `pytest-bdd`). It writes greenlight's default engineering standards to
-   `.bdd/standards.md`; they apply at once, and you may edit them.
+   `.bdd/standards.md`; they apply at once, and you may edit them. It also reads your dependency files and records
+   your sources, quality tools, design folder and surfaces (below); `bdd init --refresh` adds what is new later.
 2. **Ask for a feature.** `/greenlight:feature "what you want"` runs the phases: discover, specify (rules), test design,
    examples (Gherkin scenarios), system map (which also writes the design view, `design.md`), refine, bind, tasks,
    implement and verify. `/greenlight:feature "..." --quick` takes the short path for a change of one rule
@@ -228,10 +236,16 @@ Offered by `bdd helpers` (the id is what `claude plugin list` shows):
 | `feature-dev@claude-plugins-official` | code-reviewer | a read-only review checklist |
 | `figma@claude-plugins-official` (listed as optional, left out of the install line) | ui-engineer | building from a Figma design, when the task names one (needs your Figma login) |
 
-Used when you have installed them yourself, which greenlight never offers: `impeccable@impeccable` (ui-reviewer: its
-`audit` and its finish reviewer's criteria, not the modes that edit code or ask you), `pstack@pstack-claude` (code-reviewer:
-its `thermos` and `interrogate` skills) and `open-code-review@open-code-review` (code-reviewer: the `ocr` command in
-report-only mode).
+Offered as optional, and never in the install line, because each comes from its author's own marketplace and not from
+Anthropic's: `impeccable@impeccable` from `github.com/pbakaus/impeccable` (ui-reviewer: its `audit` and its finish
+reviewer's criteria, not the modes that edit code or ask you), `pstack@pstack-claude` from
+`github.com/michael-denyer/pstack-claude` (code-reviewer: its `thermos` and `interrogate` skills) and
+`open-code-review@open-code-review` from `github.com/alibaba/open-code-review` (code-reviewer: the `ocr` command in
+report-only mode). `bdd helpers` shows where each comes from before it prints the line that adds it, and you type that
+line yourself.
+
+`bdd helpers` also names the vendor plugin of each service in `.bdd/sources.toml` that is not installed (the Supabase,
+Stripe, Expo, Sentry or Cloudflare plugin, for example) with the `claude plugin install` line to type. It only suggests.
 
 Not used inside the pipeline, because their own flows write tests or record approvals: `superpowers` (its TDD and
 subagent-driven development) and `pstack`'s `poteto-mode` and `tdd`. Their hooks still run if you have them installed;
@@ -258,6 +272,7 @@ these lines say `bdd` (see *Running `bdd` yourself*), or ask Claude to run them:
 
 ```text
 bdd init --detect                                 # which adapter fits this repository, and why
+bdd init --refresh                                # record the sources, checks, design folder and surfaces a project gained
 bdd approve FEAT-001 rules --summary              # what you are about to approve, in plain words
 bdd route FEAT-001                                # who writes and who reviews each task, and why
 bdd check FEAT-001                                # your formatter, linter and type checker, once configured

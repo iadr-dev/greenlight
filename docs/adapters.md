@@ -21,6 +21,21 @@ broken test.
 `bdd adapter list` shows what your installed greenlight offers, and `bdd init --detect` says which one fits the
 repository and why. If nothing fits, greenlight says so; it does not pretend.
 
+### Which surfaces an adapter verifies
+
+Each adapter's `adapter.toml` lists the surfaces whose behaviour it can check (`surfaces = [...]`). `bdd init` finds
+the surfaces your project ships (web, iOS, Android, API, command line) and records each in `[surfaces]` of
+`.bdd/config.toml`, set to the adapter you configured that verifies it or to `"unverified"`:
+
+| Surface | Verified by |
+|---|---|
+| API and command line | `python-pytest-bdd`, `go-godog`, `dotnet-reqnroll`, `ts-cucumber-js` (API only for `java-cucumber-spring`) |
+| Web screens | `ts-playwright-bdd` |
+| iOS and Android screens | `dart-flutter-test` (widget tests of a Flutter app, no device), `kotlin-android` (Android only) |
+
+An Expo or React Native app has no adapter for its screens, so `bdd init` records its iOS and Android screens as
+unverified and `bdd status` keeps saying so. `ts-cucumber-js` checks the logic behind those screens, not the screens.
+
 ## The Go and .NET adapters
 
 Both are the language-specific form of the generic-junit contract: the steps for every core instruction, the drivers (a world
@@ -121,8 +136,12 @@ Run commands in a member with `bdd --in web run FEAT-007`, or in all of them wit
 ## Quality checks (optional)
 
 The project's own formatter, linter, type checker and deprecation check are named in `.bdd/config.toml`; greenlight does
-not choose them, and `bdd init` writes none of these tables, so until you add them `bdd check` reports that no quality
-check is configured. One table per check, in the order they should run:
+not choose them. `bdd init` writes a table for each tool the project itself declares (a dependency of its manifest, or the
+toolchain its manifest implies, such as `gofmt` and `go vet` for a Go module) and none for a tool it does not declare; a
+config file alone does not say a Python or Ruby tool is installed. The adapter's own `tests/` folder holds locked files, so
+the checks leave it out where the tool lets them; without any table `bdd check` reports that no quality check is configured. One table per check, in
+the order they should run. Two optional keys help a project that is not at the top: `cwd = "api"` runs the command in
+that folder, and `fail_on_output = true` fails a tool that lists what is wrong and still exits 0, such as `gofmt -l`:
 
 ```toml
 [adapters.quality.format]

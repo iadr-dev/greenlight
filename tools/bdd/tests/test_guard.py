@@ -485,6 +485,12 @@ class EnforcementFilesTest(GuardCase):
                       self.call("Bash", command="echo 'profiles = []' > .bdd/config.toml"))
         self.assertIsNone(self.call("Bash", command="cat .bdd/config.toml"))
 
+    def test_the_sources_record_belongs_to_the_person(self):
+        self.assertIn("managed by the bdd command line", self.call("Write", file_path=str(self.root / ".bdd" / "sources.toml")))
+        self.assertIn("managed by the bdd command line", self.call("Bash", command="echo 'x' > .bdd/sources.toml"))
+        self.assertIsNone(self.call("Bash", command="cat .bdd/sources.toml"))
+        self.assertIsNone(self.call("Write", file_path=str(self.root / "docs" / "sources.toml")))
+
     def test_other_config_toml_files_are_not_affected(self):
         for rel in (".cargo/config.toml", "config.toml", "tools/config.toml"):
             with self.subTest(rel=rel):

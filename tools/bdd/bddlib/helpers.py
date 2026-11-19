@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,7 +22,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config as cfg
-from . import store
+from . import sources, store
 from .errors import StoreError, UsageError
 
 RECORD = "helpers.json"
@@ -36,9 +38,11 @@ class Helper:
     used_by: str
     needs: str = ""
     recommended: bool = True
+    marketplace: str = ""   # GitHub owner/repo of a marketplace that is not Anthropic's; installing adds it first
 
 
-# Only plugins of Anthropic's own directories: installing one never adds a marketplace. They are used in report mode only.
+# Plugins of Anthropic's own directories never add a marketplace. The optional ones that name a ``marketplace`` come from
+# their authors' own, which the person sees before typing the line that adds it. They are used in report mode only.
 CATALOG = (
     Helper("frontend-design@claude-plugins-official", "frontend-design", "a design plan for a new screen", "ui-engineer"),
     Helper("context7@claude-plugins-official", "context7", "the current documentation of a library", "implementer, ui-engineer",
@@ -54,6 +58,12 @@ CATALOG = (
     Helper("feature-dev@claude-plugins-official", "feature-dev", "a read-only code review checklist", "code-reviewer"),
     Helper("figma@claude-plugins-official", "figma", "building a screen from a Figma design", "ui-engineer",
            "a Figma login and a design URL", recommended=False),
+    Helper("impeccable@impeccable", "impeccable", "a design audit and critique of a screen", "ui-reviewer",
+           recommended=False, marketplace="pbakaus/impeccable"),
+    Helper("pstack@pstack-claude", "pstack", "the thermos and interrogate reviews of the code", "code-reviewer",
+           recommended=False, marketplace="michael-denyer/pstack-claude"),
+    Helper("open-code-review@open-code-review", "open-code-review", "a line-by-line review of the changed files with `ocr review`",
+           "code-reviewer", recommended=False, marketplace="alibaba/open-code-review"),
 )
 
 # Installed plugins whose own hooks react to every edit, test files included. They can send an agent in circles; greenlight's
@@ -113,15 +123,77 @@ def install_line() -> str:
     return f'! sh "{wrapper.as_posix()}" helpers install --yes'
 
 
+def optional_note(helper: Helper) -> str:
+    return f"  (optional, from github.com/{helper.marketplace})" if helper.marketplace else "  (optional)"
+
+
 def table(plugins: dict[str, str] | None) -> str:
     width = max(len(h.name) for h in CATALOG)
     rows = []
     for h in CATALOG:
         state = "unknown  " if plugins is None else ("installed" if h.id in plugins else "missing  ")
         extra = f"  [{h.needs}]" if h.needs else ""
-        optional = "" if h.recommended else "  (optional)"
+        optional = "" if h.recommended else optional_note(h)
         rows.append(f"  {state}  {h.name:<{width}}  {h.adds} ({h.used_by}){extra}{optional}")
     return "\n".join(rows)
+
+
+def own_marketplace_lines(plugins: dict[str, str] | None) -> list[str]:
+    """The line to type for each optional helper that comes from its author's marketplace and is not installed."""
+    wrapper = Path(__file__).resolve().parents[1] / "bdd"
+    return [f'  ! sh "{wrapper.as_posix()}" helpers install {h.name} --yes      (adds github.com/{h.marketplace}, then {h.name})'
+            for h in CATALOG if h.marketplace and h.id not in (plugins or {})]
+
+
+PLUGIN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def printable(text: str) -> str:
+    """Text read from a project file, safe to show: no control characters or escape sequences, and short."""
+    return "".join(ch for ch in text if ch.isprintable())[:60]
+
+
+@dataclass(frozen=True)
+class VendorPlugin:
+    """The plugin of a service the project uses. ``plugin`` comes only from greenlight's own catalog and is the only thing an
+    install line is made of; ``declared`` is what the project's own sources.toml says, shown as information and never run."""
+    service: str
+    plugin: str
+    installed: bool
+    declared: str = ""
+
+
+def vendor_plugins(root: Path | None, plugins: dict[str, str] | None) -> list[VendorPlugin]:
+    """The vendor plugins of the services in .bdd/sources.toml. Nothing is claimed when the plugin list could not be read."""
+    if root is None or plugins is None:
+        return []
+    known = {s.id: s for s in sources.catalog()}
+    found = []
+    for key, entry in sources.load(root)[0].items():
+        named = entry.get("plugin")
+        declared = named if isinstance(named, str) and PLUGIN_ID.fullmatch(named) else ""
+        service = known.get(key)
+        if service and PLUGIN_ID.fullmatch(service.plugin):
+            found.append(VendorPlugin(service.name, service.plugin, service.plugin in plugins,
+                                      declared if declared != service.plugin else ""))
+        elif declared:
+            found.append(VendorPlugin(printable(str(entry.get("name", key))), "", declared in plugins, declared))
+    return found
+
+
+def vendor_lines(found: list[VendorPlugin]) -> list[str]:
+    absent = [v for v in found if v.plugin and not v.installed]
+    named = [v for v in found if v.declared and v.declared != v.plugin and v.declared not in {w.plugin for w in found}]
+    lines = []
+    if absent:
+        lines += ["Plugins of the services this project uses (from .bdd/sources.toml), not installed:"]
+        lines += [f"  {v.plugin}  ({v.service})" for v in absent]
+        lines += ["To add one, type its line yourself (the leading ! runs it in your own shell); greenlight never installs it:"]
+        lines += [f"  ! claude plugin install {shlex.quote(v.plugin)}" for v in absent]
+    if named:
+        lines += ["Named in .bdd/sources.toml and not offered here, because only plugins greenlight lists get an install line: "
+                  + ", ".join(f"{v.declared} ({v.service})" for v in named)]
+    return lines
 
 
 def report(plugins: dict[str, str] | None, root: Path | None) -> str:
@@ -138,6 +210,13 @@ def report(plugins: dict[str, str] | None, root: Path | None) -> str:
                   "Not now: nothing happens. Do not ask again: bdd helpers --decline"]
     elif plugins is not None:
         lines.append("Every recommended helper is installed.")
+    own = own_marketplace_lines(plugins)
+    if own:
+        lines += ["", "Optional helpers come from their authors' own marketplaces, not Anthropic's. Type one of these yourself to add it:",
+                  *own]
+    vendor = vendor_lines(vendor_plugins(root, plugins))
+    if vendor:
+        lines += ["", *vendor]
     if root is not None and declined(root):
         lines.append("(You chose not to be asked again in this project.)")
     return "\n".join(lines)
@@ -146,7 +225,8 @@ def report(plugins: dict[str, str] | None, root: Path | None) -> str:
 def as_json(plugins: dict[str, str] | None, root: Path | None) -> str:
     rows = [{**asdict(h), "installed": None if plugins is None else h.id in plugins,
              "version": (plugins or {}).get(h.id)} for h in CATALOG]
-    return json.dumps({"claude_found": plugins is not None, "declined": declined(root), "helpers": rows,
+    vendor = [asdict(v) for v in vendor_plugins(root, plugins)]
+    return json.dumps({"claude_found": plugins is not None, "declined": declined(root), "helpers": rows, "vendor": vendor,
                        "install": install_line() if missing(plugins) else None}, indent=2)
 
 
@@ -165,14 +245,28 @@ def run_install(chosen: list[Helper], run=subprocess.run) -> int:
     failed = 0
     for helper in chosen:
         try:
-            done = run([program, "plugin", "install", helper.id], capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL)
+            if helper.marketplace:
+                add_marketplace(program, helper.marketplace, run)
+            done = claude(run, program, "plugin", "install", helper.id)
             ok, said = done.returncode == 0, (done.stdout or done.stderr or "").strip().splitlines()
         except (OSError, subprocess.SubprocessError) as exc:
             ok, said = False, [str(exc)]
         failed += not ok
         print(f"{'installed' if ok else 'FAILED   '}  {helper.name}" + (f": {said[-1]}" if said else ""))
     return 1 if failed else 0
+
+
+def claude(run, program: str, *words: str):
+    return run([program, *words], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL)
+
+
+def add_marketplace(program: str, marketplace: str, run) -> None:
+    """Add the marketplace a helper comes from. Only reached for a helper the person named, with --yes."""
+    added = claude(run, program, "plugin", "marketplace", "add", marketplace)
+    if added.returncode != 0:
+        said = ((added.stderr or added.stdout or "").strip().splitlines() or ["no message"])[-1]
+        raise OSError(f"could not add the marketplace {marketplace}: {said}")
 
 
 def run(argv: list[str]) -> int:

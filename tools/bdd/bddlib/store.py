@@ -79,8 +79,12 @@ def _replace(source: str, target: Path, attempts: int = 20) -> None:
 
 def write_json(path: Path, data: dict) -> None:
     """Atomically write ``data`` as UTF-8 JSON with LF endings."""
+    write_text(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def write_text(path: Path, text: str) -> None:
+    """Atomically write ``text`` as UTF-8 with LF endings."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
